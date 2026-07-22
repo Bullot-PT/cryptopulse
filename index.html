@@ -522,6 +522,7 @@ async function loadPolymarket() {
       /* lead outcome = highest-priced */
       let li = 0;
       prices.forEach((p, i) => { if (p > prices[li]) li = i; });
+      if (prices[li] > 0.985) continue; /* skip effectively-decided markets */
       const pct = prices[li] * 100;
       const multi = (ev.markets || []).length > 1;
       const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
