@@ -174,6 +174,35 @@
   .pm-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
   .pm-meta { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; }
 
+  /* ---------- sentiment tags ---------- */
+  .sent { font-size: 10.5px; font-weight: 650; margin-left: auto; white-space: nowrap; }
+  .sent-pos { color: var(--up); }
+  .sent-neg { color: var(--down); }
+  .sent-neu { color: var(--muted); }
+
+  /* ---------- social posts ---------- */
+  .post-item { padding: 11px 14px; border-bottom: 1px solid var(--grid); display: block; }
+  .post-item:last-child { border-bottom: none; }
+  .post-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .post-avatar { width: 20px; height: 20px; border-radius: 50%; background: var(--surface-2); flex: 0 0 auto; }
+  .post-author { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .post-handle { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .post-time { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .post-text { font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* ---------- coin listings ---------- */
+  .listing-row {
+    display: grid; grid-template-columns: 26px minmax(0,1fr) auto;
+    gap: 10px; align-items: center;
+    padding: 9px 14px; border-bottom: 1px solid var(--grid);
+  }
+  .listing-row:last-child { border-bottom: none; }
+  .chain-badge {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    color: var(--muted); background: var(--surface-2); border-radius: 4px; padding: 1px 5px;
+  }
+
   /* ---------- sec filings ---------- */
   .sec-item { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: block; }
   .sec-item:last-child { border-bottom: none; }
@@ -210,10 +239,22 @@
         <div class="panel-body" id="newsBody"><div class="empty">Loading headlines…</div></div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="social">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🐦 Social <span class="sub" id="socialSub">Bluesky · AI sentiment</span></div>
+        <div class="panel-body" id="socialBody"><div class="empty">Loading posts…</div></div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="prices">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">💰 Prices <span class="sub" id="pricesSub"></span></div>
         <div class="panel-body" id="pricesBody"><div class="empty">Loading prices…</div></div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="listings">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🪙 Coin Listings <span class="sub">DexScreener · newest tokens</span></div>
+        <div class="panel-body" id="listingsBody"><div class="empty">Loading listings…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="fng">
@@ -246,6 +287,8 @@
 <footer>
   Live data: <a href="https://www.coingecko.com" target="_blank" rel="noopener">CoinGecko</a> ·
   Cointelegraph / CoinDesk / Decrypt / The Block (RSS) ·
+  <a href="https://bsky.app" target="_blank" rel="noopener">Bluesky</a> ·
+  <a href="https://dexscreener.com" target="_blank" rel="noopener">DexScreener</a> ·
   <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">Alternative.me</a> ·
   <a href="https://polymarket.com" target="_blank" rel="noopener">Polymarket</a> ·
   <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany" target="_blank" rel="noopener">SEC EDGAR</a>.
@@ -261,12 +304,14 @@
 /* ---------------- customizable layout (drag + resize, saved locally) ---------------- */
 const LAYOUT_KEY = "cryptopulse-layout-v1";
 const DEFAULT_LAYOUT = [
-  {id: "news",       x: 0, y: 0, w: 3, h: 7, minW: 2, minH: 2},
-  {id: "prices",     x: 3, y: 0, w: 3, h: 7, minW: 2, minH: 2},
-  {id: "fng",        x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2},
-  {id: "trending",   x: 6, y: 2, w: 3, h: 5, minW: 2, minH: 2},
-  {id: "polymarket", x: 9, y: 0, w: 3, h: 4, minW: 2, minH: 2},
-  {id: "sec",        x: 9, y: 4, w: 3, h: 3, minW: 2, minH: 2}
+  {id: "news",       x: 0, y: 0, w: 3, h: 8, minW: 2, minH: 2},
+  {id: "social",     x: 3, y: 0, w: 3, h: 4, minW: 2, minH: 2},
+  {id: "prices",     x: 3, y: 4, w: 3, h: 4, minW: 2, minH: 2},
+  {id: "listings",   x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2},
+  {id: "polymarket", x: 6, y: 3, w: 3, h: 5, minW: 2, minH: 2},
+  {id: "fng",        x: 9, y: 0, w: 3, h: 2, minW: 2, minH: 2},
+  {id: "trending",   x: 9, y: 2, w: 3, h: 3, minW: 2, minH: 2},
+  {id: "sec",        x: 9, y: 5, w: 3, h: 3, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -297,7 +342,13 @@ function initGrid() {
     columnOpts: {breakpointForWindow: true, breakpoints: [{w: 700, c: 1}, {w: 1150, c: 6}]}
   });
   const saved = layoutStore.get();
-  applyLayout(Array.isArray(saved) && saved.length ? saved : DEFAULT_LAYOUT);
+  if (Array.isArray(saved) && saved.length) {
+    /* merge: keep the user's saved positions, place any newly added panels from defaults */
+    const savedIds = new Set(saved.map(it => it.id));
+    applyLayout(saved.concat(DEFAULT_LAYOUT.filter(d => !savedIds.has(d.id))));
+  } else {
+    applyLayout(DEFAULT_LAYOUT);
+  }
   grid.on("change", () => {
     const items = grid.engine.nodes.map(n => ({
       id: n.el.getAttribute("gs-id"), x: n.x, y: n.y, w: n.w, h: n.h
@@ -354,6 +405,25 @@ async function fetchJSON(url, {timeout = 12000} = {}) {
 }
 
 function setError(el, msg) { el.innerHTML = '<div class="error">' + esc(msg) + "</div>"; }
+
+/* ---------------- sentiment engine (lexicon + negation, runs in-page) ---------------- */
+const SENT_POS = {surge:2,surges:2,surged:2,soar:2,soars:2,soared:2,rally:2,rallies:2,ath:2,breakout:2,bullish:2,skyrocket:2,skyrockets:2,jump:1,jumps:1,jumped:1,gain:1,gains:1,rise:1,rises:1,rising:1,rose:1,record:1,growth:1,adoption:1,approve:1,approved:1,approval:1,win:1,wins:1,boost:1,boosts:1,profit:1,profits:1,rebound:1,recovery:1,recover:1,recovers:1,partnership:1,upgrade:1,milestone:1,optimistic:1,positive:1,beat:1,beats:1,inflow:1,inflows:1,green:1,success:1,successful:1,expand:1,expands:1,expansion:1,accumulate:1,accumulation:1,breakthrough:1,outperform:1,outperforms:1,strong:1,strength:1};
+const SENT_NEG = {crash:2,crashes:2,crashed:2,plunge:2,plunges:2,plunged:2,dump:2,dumps:2,collapse:2,collapses:2,hack:2,hacked:2,exploit:2,exploited:2,scam:2,scams:2,fraud:2,bankrupt:2,bankruptcy:2,liquidation:2,liquidations:2,bearish:2,panic:2,stolen:2,theft:2,breach:2,rug:2,drop:1,drops:1,dropped:1,fall:1,falls:1,fell:1,falling:1,decline:1,declines:1,declined:1,loss:1,losses:1,ban:1,bans:1,banned:1,lawsuit:1,sue:1,sues:1,sued:1,charges:1,charged:1,fine:1,fined:1,penalty:1,selloff:1,outflow:1,outflows:1,fear:1,warning:1,warn:1,warns:1,risk:1,risks:1,slump:1,slumps:1,tumble:1,tumbles:1,sink:1,sinks:1,red:1,layoff:1,layoffs:1,downturn:1,negative:1,miss:1,misses:1,crackdown:1,seize:1,seizure:1,forfeiture:1,arrest:1,arrested:1,jail:1,guilty:1,vanish:1,concern:1,concerns:1,worries:1,worry:1,threat:1,threats:1,delay:1,delayed:1,halt:1,halts:1,reject:1,rejected:1,rejection:1,weak:1,weakness:1,volatile:1,volatility:1};
+const SENT_NEGATORS = new Set(["not","no","never","without","hardly","barely","won't","don't","doesn't","isn't","aren't","wasn't","didn't","can't","cannot"]);
+function sentiment(text) {
+  const words = String(text || "").toLowerCase().replace(/[^a-z'\- ]/g, " ").split(/\s+/).filter(Boolean);
+  let score = 0;
+  for (let i = 0; i < words.length; i++) {
+    let w = SENT_POS[words[i]] ? SENT_POS[words[i]] : (SENT_NEG[words[i]] ? -SENT_NEG[words[i]] : 0);
+    if (!w) continue;
+    for (let j = Math.max(0, i - 2); j < i; j++) if (SENT_NEGATORS.has(words[j])) { w = -w; break; }
+    score += w;
+  }
+  if (score > 0)  return {cls: "sent sent-pos", label: "↑ Positive"};
+  if (score < 0)  return {cls: "sent sent-neg", label: "↓ Negative"};
+  return {cls: "sent sent-neu", label: "− Neutral"};
+}
+function sentSpan(text) { const s = sentiment(text); return '<span class="' + s.cls + '">' + s.label + "</span>"; }
 
 let lastOk = null;
 function markUpdated() { lastOk = Date.now(); $("updatedAt").textContent = "updated just now"; }
@@ -450,7 +520,8 @@ async function loadNews() {
       const desc = stripHTML(n.description).slice(0, 220);
       return '<a class="news-item" style="display:block" href="' + esc(n.link) + '" target="_blank" rel="noopener">' +
         '<div class="news-meta"><span class="news-source">' + esc(n._src) + "</span>" +
-        '<span data-ts="' + n._ts + '">' + timeAgo(n._ts) + "</span></div>" +
+        '<span data-ts="' + n._ts + '">' + timeAgo(n._ts) + "</span>" +
+        sentSpan(n.title + " " + desc) + "</div>" +
         '<div class="news-title">' + esc(n.title) + "</div>" +
         (desc ? '<div class="news-body">' + esc(desc) + "</div>" : "") +
       "</a>";
@@ -460,6 +531,84 @@ async function loadNews() {
   } catch (e) {
     if (!body.querySelector(".news-item"))
       setError(body, "News feed unavailable right now — retrying automatically.");
+  }
+}
+
+/* ---------------- social (Bluesky public search + sentiment) ---------------- */
+async function loadSocial() {
+  const body = $("socialBody");
+  try {
+    const queries = ["bitcoin", "crypto", "ethereum"];
+    const results = await Promise.allSettled(queries.map(q =>
+      fetchJSON("https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=" + encodeURIComponent(q) + "&limit=15&sort=latest&lang=en")
+    ));
+    const seen = new Set();
+    const posts = results.filter(r => r.status === "fulfilled").flatMap(r => r.value.posts || [])
+      .filter(p => { if (!p.uri || seen.has(p.uri)) return false; seen.add(p.uri); return true; })
+      .map(p => ({...p, _ts: Date.parse(p.record && p.record.createdAt || p.indexedAt) || 0}))
+      .filter(p => p._ts > 0 && p.record && p.record.text)
+      .sort((a, b) => b._ts - a._ts)
+      .slice(0, 25);
+    if (!posts.length) throw new Error("empty");
+    body.innerHTML = posts.map(p => {
+      const rkey = p.uri.split("/").pop();
+      const url = "https://bsky.app/profile/" + encodeURIComponent(p.author.handle) + "/post/" + rkey;
+      const name = p.author.displayName || p.author.handle;
+      return '<a class="post-item" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<div class="post-head">' +
+        '<img class="post-avatar" src="' + esc(p.author.avatar || "") + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+        '<span class="post-author">' + esc(name) + '</span>' +
+        '<span class="post-handle">@' + esc(p.author.handle) + "</span>" +
+        '<span class="post-time" data-ts="' + p._ts + '">' + timeAgo(p._ts) + "</span>" +
+        sentSpan(p.record.text) + "</div>" +
+        '<div class="post-text">' + esc(p.record.text) + "</div>" +
+      "</a>";
+    }).join("");
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".post-item"))
+      setError(body, "Social feed unavailable right now — retrying automatically.");
+  }
+}
+
+/* ---------------- coin listings (DexScreener newest token profiles) ---------------- */
+async function loadListings() {
+  const body = $("listingsBody");
+  try {
+    const profiles = (await fetchJSON("https://api.dexscreener.com/token-profiles/latest/v1") || [])
+      .filter(p => p.tokenAddress && p.chainId).slice(0, 15);
+    if (!profiles.length) throw new Error("empty");
+    let pairMap = {};
+    try {
+      const pr = await fetchJSON("https://api.dexscreener.com/latest/dex/tokens/" +
+        profiles.map(p => p.tokenAddress).join(","));
+      (pr.pairs || []).forEach(pair => {
+        const key = (pair.baseToken && pair.baseToken.address || "").toLowerCase();
+        if (!key) return;
+        const liq = pair.liquidity && pair.liquidity.usd || 0;
+        if (!pairMap[key] || liq > (pairMap[key].liquidity && pairMap[key].liquidity.usd || 0)) pairMap[key] = pair;
+      });
+    } catch (e) { /* pairs are enrichment only */ }
+    body.innerHTML = profiles.map(p => {
+      const pair = pairMap[p.tokenAddress.toLowerCase()];
+      const sym = pair && pair.baseToken.symbol || p.tokenAddress.slice(0, 6) + "…";
+      const name = pair && pair.baseToken.name || (p.description || "").slice(0, 40) || "New token";
+      const price = pair && parseFloat(pair.priceUsd);
+      const chg = pair && pair.priceChange && pair.priceChange.h24;
+      return '<a class="listing-row" href="' + esc(p.url) + '" target="_blank" rel="noopener">' +
+        '<img class="coin-icon" src="' + esc(p.icon || "") + '" alt="" loading="lazy" ' +
+          "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc(sym[0].toUpperCase()) + "</div>'\">" +
+        '<div class="coin-name"><div class="n">' + esc(sym) + ' <span class="chain-badge">' + esc(p.chainId) + '</span></div>' +
+        '<div class="s" style="text-transform:none">' + esc(name) + "</div></div>" +
+        '<div class="price-val">' +
+          (price ? '<div class="p">' + fmtPrice(price) + "</div>" : "") +
+          (chg != null ? chgSpan(parseFloat(chg)) : "") + "</div>" +
+      "</a>";
+    }).join("");
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".listing-row"))
+      setError(body, "Listings feed unavailable right now — retrying automatically.");
   }
 }
 
@@ -620,7 +769,9 @@ async function loadPolymarket() {
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
 
-loadPrices(); loadNews(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC();
+loadPrices(); loadNews(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadSocial(); loadListings();
+every(loadSocial,   120_000, 130_000);  /* every 2 min */
+every(loadListings, 300_000, 310_000);  /* every 5 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadNews,     180_000, 180_000);  /* every 3 min */
