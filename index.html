@@ -823,12 +823,33 @@ function oiPopSVG(points) {
   "</svg>";
 }
 let perpPopCoin = null, perpPopRow = null, perpHideTimer = null;
-function renderPerpPop() {
+/* server-side history collected 24/7 by the repo's GitHub Action (data/oi-history.json) */
+let oiHist = {t: 0, data: null};
+async function getOiHistory() {
+  if (oiHist.data && Date.now() - oiHist.t < 240_000) return oiHist.data;
+  try {
+    const j = await fetchJSON("data/oi-history.json?b=" + Math.floor(Date.now() / 240_000), {timeout: 15000});
+    oiHist = {t: Date.now(), data: j.samples || []};
+  } catch (e) { oiHist = {t: Date.now(), data: oiHist.data || []}; }
+  return oiHist.data;
+}
+async function renderPerpPop() {
   const r = hyperRows.find(x => x.coin === perpPopCoin);
   if (!r || !perpPopRow) return;
   const store = oiCoinStore.load();
   const e = store[r.coin] || {f: [], c: []};
-  const series = (perpOiView === "1d" ? e.f : e.c).map(x => x[1]);
+  const now = Date.now();
+  const windowMs = perpOiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
+  const bucket = perpOiView === "1d" ? 4 * 60_000 : 40 * 60_000;
+  const remote = (await getOiHistory())
+    .filter(s => s.t > now - windowMs && s.coins && s.coins[r.coin])
+    .map(s => [s.t, s.coins[r.coin]]);
+  if (perpPopCoin !== r.coin) return; /* hover moved while fetching */
+  const local = (perpOiView === "1d" ? e.f : e.c).filter(x => x[0] > now - windowMs);
+  const merged = remote.concat(local).sort((a, b) => a[0] - b[0]);
+  const series = [];
+  let lastT = 0;
+  merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
   const label = perpOiView === "1d" ? "OI today" : "OI last 7d";
   pricePop.innerHTML =
     '<div class="pp-head"><span class="pp-name">' + esc(r.coin) + "</span>" +
@@ -841,9 +862,9 @@ function renderPerpPop() {
     '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · " +
       (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + "% funding</span></div>" +
     (series.length > 1 ? oiPopSVG(series) +
-      '<div class="pp-hint">open-interest high / low of the window marked</div>' :
-      '<div class="empty" style="padding:22px 0">Collecting live OI samples — this chart fills while the dashboard runs' +
-      (perpOiView === "7d" ? " (7D needs a few days of samples)" : "") + ".</div>");
+      '<div class="pp-hint">open-interest high / low of the window marked · sampled 24/7</div>' :
+      '<div class="empty" style="padding:22px 0">OI history is being collected (24/7 by the repo bot + live while open) — check back soon' +
+      (perpOiView === "7d" ? "; 7D fills over the coming days" : "") + ".</div>");
   const sl = document.getElementById("perpOiSlider");
   if (sl) sl.addEventListener("input", () => {
     perpOiView = sl.value === "1" ? "7d" : "1d";
