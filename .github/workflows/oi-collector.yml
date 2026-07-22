@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Sample Hyperliquid open interest
+      - name: Sample Hyperliquid + global exchange OI
         run: |
           cat > /tmp/collect.mjs <<'EOS'
           import fs from 'fs';
@@ -32,15 +32,30 @@ jobs:
             if (oi > 0) { coins[u.name] = Math.round(oi); total += oi; }
           });
           const top = Object.fromEntries(Object.entries(coins).sort((a, b) => b[1] - a[1]).slice(0, 60));
+          let agg = 0, ex = {};
+          try {
+            const [gxr, spr] = await Promise.all([
+              fetch('https://api.coingecko.com/api/v3/derivatives/exchanges?per_page=100&page=1').then(r => r.json()),
+              fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(r => r.json())
+            ]);
+            const btcPx = spr.bitcoin.usd;
+            gxr.forEach(e => {
+              const oi = (parseFloat(e.open_interest_btc) || 0) * btcPx;
+              if (oi > 0) { agg += oi; ex[(e.name || '').replace(' (Futures)', '')] = Math.round(oi); }
+            });
+          } catch (e) { console.log('gx fetch failed', e.message); }
+          const exTop = Object.fromEntries(Object.entries(ex).sort((a, b) => b[1] - a[1]).slice(0, 12));
           const path = 'data/oi-history.json';
           let hist = {samples: []};
           try { hist = JSON.parse(fs.readFileSync(path, 'utf8')); } catch (e) {}
-          hist.samples.push({t: Date.now(), total: Math.round(total), coins: top});
+          const sample = {t: Date.now(), total: Math.round(total), coins: top};
+          if (agg > 0) { sample.agg = Math.round(agg); sample.ex = exTop; }
+          hist.samples.push(sample);
           const cutoff = Date.now() - 8 * 86400 * 1000;
           hist.samples = hist.samples.filter(s => s.t > cutoff);
           fs.mkdirSync('data', {recursive: true});
           fs.writeFileSync(path, JSON.stringify(hist));
-          console.log('samples stored:', hist.samples.length);
+          console.log('samples stored:', hist.samples.length, 'agg:', Math.round(agg / 1e9) + 'B');
           EOS
           node /tmp/collect.mjs
       - name: Commit history
