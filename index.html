@@ -267,6 +267,15 @@
   .perp-metric .p { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .perp-metric .l { font-size: 10px; color: var(--muted); }
 
+  /* ---------- OI chart ---------- */
+  .oi-box { padding: 10px 14px 8px; border-bottom: 1px solid var(--grid); }
+  .oi-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .oi-val { font-size: 15px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .oi-side { font-size: 10px; font-weight: 700; color: var(--ink-2); }
+  .oi-head input[type=range] { width: 56px; accent-color: var(--accent); margin: 0 2px; }
+  .oi-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .oi-note { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
   /* ---------- liquidation risk ---------- */
   .liq-asset { padding: 12px 14px; border-bottom: 1px solid var(--grid); }
   .liq-asset:last-child { border-bottom: none; }
@@ -765,6 +774,71 @@ async function fetchHL(body) {
     return await r.json();
   } finally { clearTimeout(t); }
 }
+/* ---- total OI chart: 1D from live samples collected by this dashboard, 7D from DefiLlama daily ---- */
+const oiStore = {
+  key: "cryptopulse-oi-samples",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return this._m || []; } },
+  save(a) { this._m = a; try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
+};
+let oiView = "1d";
+try { if (localStorage.getItem("cryptopulse-oi-view") === "7d") oiView = "7d"; } catch (e) {}
+let llamaOI = {t: 0, data: null};
+async function getLlamaOI() {
+  if (llamaOI.data && Date.now() - llamaOI.t < 1_800_000) return llamaOI.data;
+  const j = await fetchJSON("https://api.llama.fi/summary/open-interest/hyperliquid", {timeout: 20000});
+  llamaOI = {t: Date.now(), data: j.totalDataChart || []};
+  return llamaOI.data;
+}
+function oiLineSVG(pts) {
+  if (!pts || pts.length < 2) return "";
+  const w = 320, h = 78, p = 6;
+  const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
+  const X = i => p + i * (w - p * 2) / (pts.length - 1);
+  const Y = v => p + (1 - (v - min) / span) * (h - p * 2);
+  const d = pts.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" ");
+  const up = pts[pts.length - 1] >= pts[0];
+  const color = up ? "var(--up)" : "var(--down)";
+  const area = d + " L" + X(pts.length - 1).toFixed(1) + " " + (h - 2) + " L" + X(0).toFixed(1) + " " + (h - 2) + " Z";
+  return '<svg width="100%" height="78" viewBox="0 0 320 78" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="' + area + '" fill="' + color + '" opacity="0.10"/>' +
+    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' +
+  "</svg>";
+}
+let lastTotalOI = null;
+async function renderOIChart() {
+  const box = document.getElementById("oiBox");
+  if (!box) return;
+  let pts = [], note = "", label;
+  if (oiView === "1d") {
+    label = "today";
+    const arr = oiStore.load();
+    pts = arr.map(s => s.v);
+    if (arr.length < 10) note = "1D chart builds from live samples while the dashboard is open — keep it running";
+  } else {
+    label = "last 7 days";
+    try {
+      const ch = await getLlamaOI();
+      pts = ch.slice(-8).map(x => x[1]);
+      if (lastTotalOI) pts.push(lastTotalOI);
+    } catch (e) { note = "weekly OI data unavailable right now"; }
+  }
+  const min = pts.length ? Math.min(...pts) : null, max = pts.length ? Math.max(...pts) : null;
+  box.innerHTML =
+    '<div class="oi-head"><span>Total open interest · ' + label + '</span>' +
+    '<span class="oi-val">' + (lastTotalOI ? fmtBig(lastTotalOI) : "—") + "</span>" +
+    '<span style="margin-left:auto" class="oi-side">1D</span>' +
+    '<input type="range" id="oiSlider" min="0" max="1" step="1" value="' + (oiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
+    '<span class="oi-side">7D</span></div>' +
+    (pts.length > 1 ? oiLineSVG(pts) +
+      '<div class="oi-scale"><span>low ' + fmtBig(min) + "</span><span>high " + fmtBig(max) + "</span></div>" : "") +
+    (note ? '<div class="oi-note">' + note + "</div>" : "");
+  const sl = document.getElementById("oiSlider");
+  if (sl) sl.addEventListener("input", () => {
+    oiView = sl.value === "1" ? "7d" : "1d";
+    try { localStorage.setItem("cryptopulse-oi-view", oiView); } catch (e) {}
+    renderOIChart();
+  });
+}
 async function loadHyperliquid() {
   const body = $("hyperBody");
   try {
@@ -781,9 +855,16 @@ async function loadHyperliquid() {
         oiUsd, vol: parseFloat(c.dayNtlVlm)
       };
     }).filter(Boolean).filter(r => r.oiUsd > 0)
-      .sort((a, b) => b.oiUsd - a.oiUsd).slice(0, 50);
+      .sort((a, b) => b.oiUsd - a.oiUsd);
     if (!rows.length) throw new Error("empty");
-    body.innerHTML = rows.map((r, i) =>
+    /* total OI across every market — feed the chart and the live sample store */
+    lastTotalOI = rows.reduce((s, r) => s + r.oiUsd, 0);
+    const samples = oiStore.load();
+    if (!samples.length || Date.now() - samples[samples.length - 1].t > 45_000) {
+      samples.push({t: Date.now(), v: lastTotalOI});
+      oiStore.save(samples.filter(s => s.t > Date.now() - 25 * 3600 * 1000).slice(-1500));
+    }
+    body.innerHTML = '<div class="oi-box" id="oiBox"></div>' + rows.slice(0, 50).map((r, i) =>
       '<div class="perp-row">' +
         '<span class="rank">' + (i + 1) + "</span>" +
         '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
@@ -793,6 +874,7 @@ async function loadHyperliquid() {
           (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
       "</div>"
     ).join("");
+    renderOIChart();
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".perp-row"))
@@ -845,6 +927,7 @@ async function loadLiquidations() {
     } catch (e) {}
     const blocks = [];
     let grand20 = 0, scanned = 0;
+    const excludedStale = [];
     const allProtos = new Set(), allChains = new Set();
     for (const {key, data} of results) {
       if (!data || !data.positions || !data.currentPrice) continue;
@@ -854,7 +937,10 @@ async function loadLiquidations() {
       const px = livePx || data.currentPrice;               /* live price wins */
       const snapPx = data.currentPrice;
       const drift = livePx ? Math.abs(livePx - snapPx) / livePx : 0;
-      /* positions whose liq price is above the LIVE price are already liquidated/closed — stale ghosts, drop them */
+      /* STRICT: a drifted snapshot means the position book itself is outdated —
+         showing it would be misleading, so the asset is excluded entirely */
+      if (drift > 0.15) { excludedStale.push(key.toUpperCase()); continue; }
+      /* safety net: drop anything already at/above live price */
       const pos = data.positions.filter(p => p.liqPrice > 0 && p.liqPrice < px && p.collateralValue > 0);
       if (!pos.length) continue;
       const sumWithin = f => pos.filter(p => p.liqPrice >= px * (1 - f))
@@ -881,8 +967,6 @@ async function loadLiquidations() {
         '<div class="liq-head"><span class="liq-sym">' + esc(label) + '</span>' +
         '<span class="liq-px">' + fmtPrice(px) + (livePx ? " live" : "") + '</span>' +
         '<span class="liq-total">' + fmtBig(total) + " at risk · " + chains.size + " chains</span></div>" +
-        (drift > 0.15 ? '<div class="liq-aave" style="color:var(--warn)">⚠ dataset snapshot at ' + fmtPrice(snapPx) +
-          " vs live " + fmtPrice(px) + " — already-liquidated positions removed, figures re-based to live price</div>" : "") +
         '<div class="liq-buckets">' +
           '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(w5) + "</div></div>" +
           '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(w10) + "</div></div>" +
@@ -906,8 +990,10 @@ async function loadLiquidations() {
     body.innerHTML =
       '<div class="liq-asset" style="padding:10px 14px"><div class="liq-head" style="margin:0">' +
       '<span class="liq-sym" style="font-size:12.5px">Σ ' + fmtBig(grand20) + " liquidatable within −20%</span>" +
-      '<span class="liq-total">' + scanned + " assets · " + allProtos.size + " lenders · " + allChains.size + " chains · re-based to live prices</span></div></div>" +
-      blocks.slice(0, 16).map(b => b.html).join("");
+      '<span class="liq-total">' + scanned + " assets · " + allProtos.size + " lenders · " + allChains.size + " chains · fresh data only</span></div></div>" +
+      blocks.slice(0, 16).map(b => b.html).join("") +
+      (excludedStale.length ? '<div class="liq-asset"><div class="oi-note">⚠ hidden — snapshot too old to trust (already-liquidated positions would pollute it): ' +
+        esc(excludedStale.join(", ")) + ". These reappear automatically once DefiLlama refreshes them.</div></div>" : "");
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".liq-asset"))
