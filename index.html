@@ -257,6 +257,21 @@
   }
   .liq-dist { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+  /* ---------- long vs short ---------- */
+  .ls-wrap { padding: 14px; }
+  .ls-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .ls-value { font-size: 34px; font-weight: 700; line-height: 1; }
+  .ls-label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+  .ls-when { margin-left: auto; font-size: 11px; color: var(--muted); text-align: right; }
+  .ls-meter { height: 10px; border-radius: 5px; background: var(--down); overflow: hidden; }
+  .ls-meter-fill { height: 100%; background: var(--up); border-radius: 5px 0 0 5px; transition: width .6s ease; }
+  .ls-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 5px; margin-bottom: 12px; }
+  .ls-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; padding: 5px 0; }
+  .ls-coin { font-size: 12px; font-weight: 700; }
+  .ls-bar { height: 7px; border-radius: 4px; background: var(--down); overflow: hidden; }
+  .ls-bar-fill { height: 100%; background: var(--up); border-radius: 4px 0 0 4px; }
+  .ls-net { font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
   /* ---------- whale scanner ---------- */
   .scan-bar {
     display: flex; gap: 8px; padding: 10px 14px;
@@ -370,6 +385,12 @@
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="longshort">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">⚖️ Long vs Short <span class="sub">Hyperliquid whale exposure</span></div>
+        <div class="panel-body" id="lsBody"><div class="empty">Waiting for whale scan…</div></div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="whales">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🐋 Whale Scanner <span class="sub" id="whalesSub">Hyperliquid wallets · live positions</span></div>
@@ -415,7 +436,8 @@ const DEFAULT_LAYOUT = [
   {id: "sec",        x: 9, y: 2, w: 3, h: 6, minW: 2, minH: 2},
   {id: "hyper",      x: 0, y: 8, w: 6, h: 5, minW: 2, minH: 2},
   {id: "liqs",       x: 6, y: 8, w: 6, h: 5, minW: 2, minH: 2},
-  {id: "whales",     x: 0, y: 13, w: 12, h: 4, minW: 3, minH: 2}
+  {id: "whales",     x: 0, y: 13, w: 12, h: 4, minW: 3, minH: 2},
+  {id: "longshort",  x: 0, y: 17, w: 4, h: 4, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -781,19 +803,27 @@ async function loadWhales() {
     });
     const mids = await fetchHL({type: "allMids"});
     const found = [];
+    const agg = {long: 0, short: 0, coins: {}, wallets: 0};
     for (let i = 0; i < candidates.length; i += 10) {
       const chunk = await Promise.allSettled(candidates.slice(i, i + 10).map(a =>
         fetchHL({type: "clearinghouseState", user: a}).then(s => ({addr: a, s}))
       ));
       chunk.forEach(c => {
         if (c.status !== "fulfilled") return;
+        agg.wallets++;
         (c.value.s.assetPositions || []).forEach(ap => {
           const p = ap.position;
-          if (Math.abs(parseFloat(p.positionValue)) >= WHALE_MIN)
-            found.push(whaleRow(p, c.value.addr, mids));
+          const v = Math.abs(parseFloat(p.positionValue));
+          if (!v) return;
+          const side = parseFloat(p.szi) >= 0 ? "long" : "short";
+          agg[side] += v;
+          const co = agg.coins[p.coin] || (agg.coins[p.coin] = {long: 0, short: 0});
+          co[side] += v;
+          if (v >= WHALE_MIN) found.push(whaleRow(p, c.value.addr, mids));
         });
       });
     }
+    renderLongShort(agg);
     /* biggest position first — a smaller one only outranks it when it's flashing red (>$25M within 10% of liq) */
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
@@ -811,6 +841,34 @@ async function loadWhales() {
       setError(body, "Whale scan unavailable right now — retrying automatically.");
   }
 }
+/* long vs short exposure — Fear & Greed style meter, fed by the whale scan */
+function renderLongShort(agg) {
+  const body = $("lsBody");
+  const total = agg.long + agg.short;
+  if (!total) { setError(body, "No exposure data yet."); return; }
+  const pct = agg.long / total * 100;
+  const color = pct >= 55 ? "var(--up)" : pct <= 45 ? "var(--down)" : "var(--warn)";
+  const label = pct >= 55 ? "Net long" : pct <= 45 ? "Net short" : "Balanced";
+  const coins = Object.entries(agg.coins)
+    .map(([coin, c]) => ({coin, ...c, total: c.long + c.short}))
+    .sort((a, b) => b.total - a.total).slice(0, 6);
+  body.innerHTML = '<div class="ls-wrap">' +
+    '<div class="ls-top"><span class="ls-value" style="color:' + color + '">' + pct.toFixed(0) + "%</span>" +
+    '<span class="ls-label">long · ' + esc(label) + "</span>" +
+    '<span class="ls-when">' + fmtBig(total) + " exposure<br>" + agg.wallets + " whale wallets</span></div>" +
+    '<div class="ls-meter"><div class="ls-meter-fill" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+    '<div class="ls-scale"><span>All short</span><span>Balanced</span><span>All long</span></div>' +
+    coins.map(c => {
+      const p = c.long / c.total * 100;
+      const net = c.long - c.short;
+      return '<div class="ls-row"><span class="ls-coin">' + esc(c.coin) + "</span>" +
+        '<div class="ls-bar"><div class="ls-bar-fill" style="width:' + p.toFixed(1) + '%"></div></div>' +
+        '<span class="ls-net ' + (net >= 0 ? "chg-up" : "chg-down") + '">' +
+        (net >= 0 ? "▲ net long " : "▼ net short ") + fmtBig(Math.abs(net)) + "</span></div>";
+    }).join("") +
+  "</div>";
+}
+
 /* scan any wallet on demand */
 async function scanWallet(addr) {
   const body = $("whalesBody");
