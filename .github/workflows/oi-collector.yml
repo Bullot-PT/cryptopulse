@@ -1,0 +1,53 @@
+name: Collect Hyperliquid OI samples
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: oi-collect
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sample Hyperliquid open interest
+        run: |
+          cat > /tmp/collect.mjs <<'EOS'
+          import fs from 'fs';
+          const res = await fetch('https://api.hyperliquid.xyz/info', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: 'metaAndAssetCtxs'})
+          });
+          const [meta, ctxs] = await res.json();
+          const coins = {};
+          let total = 0;
+          (meta.universe || []).forEach((u, i) => {
+            const c = ctxs[i];
+            if (!c || u.isDelisted) return;
+            const oi = parseFloat(c.openInterest) * parseFloat(c.markPx);
+            if (oi > 0) { coins[u.name] = Math.round(oi); total += oi; }
+          });
+          const top = Object.fromEntries(Object.entries(coins).sort((a, b) => b[1] - a[1]).slice(0, 60));
+          const path = 'data/oi-history.json';
+          let hist = {samples: []};
+          try { hist = JSON.parse(fs.readFileSync(path, 'utf8')); } catch (e) {}
+          hist.samples.push({t: Date.now(), total: Math.round(total), coins: top});
+          const cutoff = Date.now() - 8 * 86400 * 1000;
+          hist.samples = hist.samples.filter(s => s.t > cutoff);
+          fs.mkdirSync('data', {recursive: true});
+          fs.writeFileSync(path, JSON.stringify(hist));
+          console.log('samples stored:', hist.samples.length);
+          EOS
+          node /tmp/collect.mjs
+      - name: Commit history
+        run: |
+          git config user.name "oi-collector-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/oi-history.json
+          git commit -m "OI sample [skip ci]" || echo "nothing to commit"
+          git pull --rebase origin main || true
+          git push
