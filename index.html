@@ -214,6 +214,17 @@
   .bet-alert .b1 { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--ink); }
   .bet-alert .b2 { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
   .bet-amt { color: var(--down); font-variant-numeric: tabular-nums; }
+  .bet-x {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 13px; font-family: inherit; padding: 0 2px; line-height: 1; flex: 0 0 auto;
+  }
+  .bet-x:hover { color: var(--ink); }
+
+  /* whale account popup */
+  .wp-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; padding: 3px 0; color: var(--ink-2); }
+  .wp-row b { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .wp-big { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+  .wp-label { font-size: 10px; color: var(--muted); }
 
   /* ---------- sec alerts ---------- */
   .sec-alert-bar {
@@ -843,12 +854,15 @@ async function loadLiquidations() {
 
 /* ---------------- whale scanner (Hyperliquid on-chain positions ≥ $5M) ---------------- */
 const WHALE_MIN = 5_000_000;
-let hlLb = {rows: null, at: 0};
+let hlLb = {rows: null, at: 0, byAddr: {}};
 async function getLeaderboard() {
   if (hlLb.rows && (Date.now() - hlLb.at) < 1_800_000) return hlLb.rows;
   const j = await fetchJSON("https://stats-data.hyperliquid.xyz/Mainnet/leaderboard", {timeout: 45000});
-  hlLb = {rows: j.leaderboardRows || [], at: Date.now()};
-  return hlLb.rows;
+  const rows = j.leaderboardRows || [];
+  const byAddr = {};
+  rows.forEach(r => { if (r.ethAddress) byAddr[r.ethAddress.toLowerCase()] = r; });
+  hlLb = {rows, at: Date.now(), byAddr};
+  return rows;
 }
 function whaleDist(szi, liq, mark) {
   if (!liq || !mark || !isFinite(liq) || !isFinite(mark)) return null;
@@ -872,7 +886,7 @@ function renderWhaleRows(rows, note) {
     rows.map(r => {
       const distTxt = r.dist == null ? "" :
         '<span class="pos-liq ' + (r.dist < 10 ? "chg-down" : "wrow-meta") + '">liq @ ' + fmtPrice(r.liq) + " · " + r.dist.toFixed(1) + "% away</span>";
-      return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
+      return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" data-addr="' + esc(r.addr) + '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
         '<div class="wrow-line">' +
           '<span class="side-badge ' + (r.szi > 0 ? "side-long\">LONG" : "side-short\">SHORT") + "</span>" +
           '<span class="wrow-coin">' + esc(r.coin) + '</span>' +
@@ -1000,6 +1014,61 @@ function renderLongShort(agg, totalOI) {
     }).join("") +
   "</div>";
 }
+
+/* hover popup on whale rows: the account's all-time performance from the on-chain leaderboard */
+function pnlSpan(v) {
+  if (v == null || !isFinite(v)) return "<b>—</b>";
+  const cls = v >= 0 ? "chg-up" : "chg-down";
+  return '<b class="' + cls + '">' + (v >= 0 ? "+" : "−") + fmtBig(Math.abs(v)).slice(1) + "</b>";
+}
+function showWhalePop(row) {
+  const addr = row.dataset.addr;
+  if (!addr) return;
+  const lb = hlLb.byAddr[addr.toLowerCase()];
+  const short = addr.slice(0, 6) + "…" + addr.slice(-4);
+  let inner;
+  if (!lb) {
+    inner = '<div class="pp-head"><span class="pp-name">' + esc(short) + "</span></div>" +
+      '<div class="empty" style="padding:14px 0">No leaderboard record for this wallet yet.</div>';
+  } else {
+    let perf = {};
+    try { perf = Object.fromEntries(lb.windowPerformances); } catch (e) {}
+    const at = perf.allTime || {};
+    const atPnl = parseFloat(at.pnl), atRoi = parseFloat(at.roi);
+    const line = (label, w) => {
+      const p = perf[w] || {};
+      return '<div class="wp-row"><span>' + label + "</span>" + pnlSpan(parseFloat(p.pnl)) + "</div>";
+    };
+    inner =
+      '<div class="pp-head"><span class="pp-name">' + esc(short) + "</span>" +
+      '<span class="pp-px">acct ' + fmtBig(parseFloat(lb.accountValue)) + "</span>" +
+      '<span class="pp-tag">on-chain perf</span></div>' +
+      '<div class="wp-label">All-time PnL' + (isFinite(atRoi) ? " · ROI " + (atRoi * 100).toFixed(1) + "%" : "") + "</div>" +
+      '<div class="wp-big ' + ((atPnl || 0) >= 0 ? "chg-up" : "chg-down") + '">' +
+        ((atPnl || 0) >= 0 ? "+" : "−") + fmtBig(Math.abs(atPnl || 0)).slice(1) + "</div>" +
+      line("24h PnL", "day") + line("7d PnL", "week") + line("30d PnL", "month") +
+      '<div class="wp-row"><span>All-time volume</span><b>' + fmtBig(parseFloat(at.vlm)) + "</b></div>" +
+      '<div class="pp-hint">click row to open on Hypurrscan</div>';
+  }
+  pricePop.innerHTML = inner;
+  const r = row.getBoundingClientRect();
+  pricePop.style.display = "block";
+  const pw = 300, ph = pricePop.offsetHeight || 180;
+  let x = r.left - pw - 10;
+  if (x < 8) x = r.right + 10;
+  if (x + pw > window.innerWidth - 8) x = Math.max(8, window.innerWidth - pw - 8);
+  pricePop.style.left = x + "px";
+  pricePop.style.top = Math.min(Math.max(8, r.top - 20), window.innerHeight - ph - 8) + "px";
+}
+$("whalesBody").addEventListener("mouseover", e => {
+  const row = e.target.closest(".wrow");
+  if (row) showWhalePop(row);
+});
+$("whalesBody").addEventListener("mouseleave", () => { pricePop.style.display = "none"; });
+$("whalesBody").addEventListener("mouseout", e => {
+  if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".wrow"))
+    pricePop.style.display = "none";
+});
 
 /* scan any wallet on demand */
 async function scanWallet(addr) {
@@ -1363,6 +1432,27 @@ const pmSeen = {
   load() { try { return new Set(JSON.parse(localStorage.getItem(this.key)) || []); } catch (e) { return new Set(); } },
   save(set) { try { localStorage.setItem(this.key, JSON.stringify([...set].slice(-300))); } catch (e) {} }
 };
+/* alerts the user dismissed with ✕ — never shown again */
+const pmDismissed = {
+  key: "cryptopulse-pm-dismissed",
+  load() { try { return new Set(JSON.parse(localStorage.getItem(this.key)) || []); } catch (e) { return new Set(); } },
+  save(set) { try { localStorage.setItem(this.key, JSON.stringify([...set].slice(-300))); } catch (e) {} }
+};
+const pmAlertId = t => t.transactionHash || (t.title + "|" + t.timestamp);
+$("pmBody").addEventListener("click", e => {
+  const x = e.target.closest(".bet-x");
+  if (!x) return;
+  e.preventDefault(); e.stopPropagation();
+  const d = pmDismissed.load();
+  d.add(x.dataset.id);
+  pmDismissed.save(d);
+  const al = x.closest(".bet-alert");
+  if (al) al.remove();
+  if (!$("pmBody").querySelector(".bet-alert")) {
+    const panelEl = document.querySelector('.grid-stack-item[gs-id="polymarket"] .panel');
+    if (panelEl) panelEl.classList.remove("alert-live");
+  }
+});
 
 async function loadPolymarket() {
   const body = $("pmBody");
@@ -1372,14 +1462,16 @@ async function loadPolymarket() {
   try {
     const trades = await fetchJSON("https://data-api.polymarket.com/trades?limit=200&takerOnly=true&filterType=CASH&filterAmount=100000");
     const cutoff = Date.now() / 1000 - 3 * 3600;
+    const dismissed = pmDismissed.load();
     const hits = (Array.isArray(trades) ? trades : [])
       .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || "") && !PM_EXCLUDE.test(t.title || ""))
+      .filter(t => !dismissed.has(pmAlertId(t)))
       .sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
     /* sound on alerts we haven't announced before */
     const seen = pmSeen.load();
-    const fresh = hits.filter(t => !seen.has(t.transactionHash || (t.title + "|" + t.timestamp)));
+    const fresh = hits.filter(t => !seen.has(pmAlertId(t)));
     if (fresh.length) {
-      fresh.forEach(t => seen.add(t.transactionHash || (t.title + "|" + t.timestamp)));
+      fresh.forEach(t => seen.add(pmAlertId(t)));
       pmSeen.save(seen);
       playBeep();
     }
@@ -1391,7 +1483,8 @@ async function loadPolymarket() {
         return '<a class="bet-alert flash-red" href="' + link + '" target="_blank" rel="noopener">' +
           '<div class="b1">🚨 <span class="bet-amt">' + fmtBig(usd) + "</span> " + esc(t.side || "") +
           " “" + esc(t.outcome || "") + "”" +
-          '<span class="wrow-meta" style="margin-left:auto" data-ts="' + (t.timestamp * 1000) + '">' + timeAgo(t.timestamp * 1000) + "</span></div>" +
+          '<span class="wrow-meta" style="margin-left:auto" data-ts="' + (t.timestamp * 1000) + '">' + timeAgo(t.timestamp * 1000) + "</span>" +
+          '<button class="bet-x" data-id="' + esc(pmAlertId(t)) + '" title="Dismiss this alert">✕</button></div>' +
           '<div class="b2">' + esc(t.title || "") + " · @ " + (t.price != null ? (t.price * 100).toFixed(0) + "¢" : "?") + "</div>" +
         "</a>";
       }).join("");
