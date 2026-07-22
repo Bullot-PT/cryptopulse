@@ -203,6 +203,41 @@
     color: var(--muted); background: var(--surface-2); border-radius: 4px; padding: 1px 5px;
   }
 
+  /* ---------- hyperliquid perps ---------- */
+  .perp-row {
+    display: grid; grid-template-columns: 26px minmax(0,1fr) auto auto;
+    gap: 10px; align-items: center;
+    padding: 8px 14px; border-bottom: 1px solid var(--grid);
+  }
+  .perp-row:last-child { border-bottom: none; }
+  .perp-metric { text-align: right; }
+  .perp-metric .p { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .perp-metric .l { font-size: 10px; color: var(--muted); }
+
+  /* ---------- liquidation risk ---------- */
+  .liq-asset { padding: 12px 14px; border-bottom: 1px solid var(--grid); }
+  .liq-asset:last-child { border-bottom: none; }
+  .liq-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+  .liq-sym { font-size: 14px; font-weight: 700; }
+  .liq-px { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .liq-total { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+  .liq-buckets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+  .liq-bucket { background: var(--surface-2); border-radius: 8px; padding: 7px 9px; }
+  .liq-bucket .b-label { font-size: 10px; color: var(--muted); }
+  .liq-bucket .b-val { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .liq-aave { font-size: 11.5px; color: var(--ink-2); margin-bottom: 7px; }
+  .liq-aave b { color: var(--ink); }
+  .liq-pos {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; padding: 4px 0; color: var(--ink-2);
+  }
+  .proto-badge {
+    font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+    background: var(--surface-2); color: var(--serious); border: 1px solid var(--border);
+    white-space: nowrap; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .liq-dist { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
   /* ---------- sec filings ---------- */
   .sec-item { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: block; }
   .sec-item:last-child { border-bottom: none; }
@@ -281,6 +316,18 @@
         <div class="panel-body" id="secBody"><div class="empty">Loading filings…</div></div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="hyper">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">⚡ Hyperliquid Perps <span class="sub" id="hyperSub">top 50 by open interest</span></div>
+        <div class="panel-body" id="hyperBody"><div class="empty">Loading perps…</div></div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="liqs">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">💥 Liquidation Risk <span class="sub">DeFi lending · DefiLlama</span></div>
+        <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
+      </div></div>
+    </div>
   </div>
 </div>
 
@@ -289,6 +336,8 @@
   Cointelegraph / CoinDesk / Decrypt / The Block (RSS) ·
   <a href="https://bsky.app" target="_blank" rel="noopener">Bluesky</a> ·
   <a href="https://dexscreener.com" target="_blank" rel="noopener">DexScreener</a> ·
+  <a href="https://hyperliquid.xyz" target="_blank" rel="noopener">Hyperliquid</a> ·
+  <a href="https://defillama.com/liquidations/eth" target="_blank" rel="noopener">DefiLlama liquidations</a> ·
   <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" rel="noopener">Alternative.me</a> ·
   <a href="https://polymarket.com" target="_blank" rel="noopener">Polymarket</a> ·
   <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany" target="_blank" rel="noopener">SEC EDGAR</a>.
@@ -311,7 +360,9 @@ const DEFAULT_LAYOUT = [
   {id: "polymarket", x: 6, y: 3, w: 3, h: 5, minW: 2, minH: 2},
   {id: "fng",        x: 9, y: 0, w: 3, h: 2, minW: 2, minH: 2},
   {id: "trending",   x: 9, y: 2, w: 3, h: 3, minW: 2, minH: 2},
-  {id: "sec",        x: 9, y: 5, w: 3, h: 3, minW: 2, minH: 2}
+  {id: "sec",        x: 9, y: 5, w: 3, h: 3, minW: 2, minH: 2},
+  {id: "hyper",      x: 0, y: 8, w: 6, h: 5, minW: 2, minH: 2},
+  {id: "liqs",       x: 6, y: 8, w: 6, h: 5, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -612,6 +663,106 @@ async function loadListings() {
   }
 }
 
+/* ---------------- Hyperliquid perps (public info API) ---------------- */
+async function fetchHL(body) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const r = await fetch("https://api.hyperliquid.xyz/info", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(body), signal: ctl.signal
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function loadHyperliquid() {
+  const body = $("hyperBody");
+  try {
+    const [meta, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
+    const rows = (meta.universe || []).map((u, i) => {
+      const c = ctxs[i];
+      if (!c || u.isDelisted) return null;
+      const mark = parseFloat(c.markPx), prev = parseFloat(c.prevDayPx);
+      const oiUsd = parseFloat(c.openInterest) * mark;
+      return {
+        coin: u.name, mark,
+        chg: prev ? (mark - prev) / prev * 100 : null,
+        fundingApr: parseFloat(c.funding) * 24 * 365 * 100,
+        oiUsd, vol: parseFloat(c.dayNtlVlm)
+      };
+    }).filter(Boolean).filter(r => r.oiUsd > 0)
+      .sort((a, b) => b.oiUsd - a.oiUsd).slice(0, 50);
+    if (!rows.length) throw new Error("empty");
+    body.innerHTML = rows.map((r, i) =>
+      '<div class="perp-row">' +
+        '<span class="rank">' + (i + 1) + "</span>" +
+        '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
+        '<div class="s" style="text-transform:none">OI ' + fmtBig(r.oiUsd) + " · vol " + fmtBig(r.vol) + "</div></div>" +
+        '<div class="perp-metric"><div class="p">' + fmtPrice(r.mark) + "</div>" + chgSpan(r.chg) + "</div>" +
+        '<div class="perp-metric"><div class="p ' + (r.fundingApr >= 0 ? "chg-up" : "chg-down") + '">' +
+          (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
+      "</div>"
+    ).join("");
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".perp-row"))
+      setError(body, "Hyperliquid feed unavailable right now — retrying automatically.");
+  }
+}
+
+/* ---------------- liquidation risk (DefiLlama lending positions) ---------------- */
+const LIQ_ASSETS = [{key: "eth", label: "ETH"}, {key: "wbtc", label: "WBTC"}, {key: "sol", label: "SOL"}];
+async function loadLiquidations() {
+  const body = $("liqsBody");
+  try {
+    const results = await Promise.allSettled(LIQ_ASSETS.map(a =>
+      fetchJSON("https://defillama-datasets.llama.fi/liqs/" + a.key + "/latest.json", {timeout: 30000})
+        .then(d => ({...a, data: d}))
+    ));
+    const blocks = [];
+    for (const r of results) {
+      if (r.status !== "fulfilled" || !r.value.data || !r.value.data.positions) continue;
+      const {label, data} = r.value;
+      const px = data.currentPrice;
+      /* positions liquidated if price FALLS to liqPrice — keep those below current price */
+      const pos = data.positions.filter(p => p.liqPrice > 0 && p.liqPrice < px && p.collateralValue > 0);
+      const sumWithin = f => pos.filter(p => p.liqPrice >= px * (1 - f))
+        .reduce((s, p) => s + p.collateralValue, 0);
+      const w5 = sumWithin(0.05), w10 = sumWithin(0.10), w20 = sumWithin(0.20);
+      const aave20 = pos.filter(p => (p.protocol || "").startsWith("aave") && p.liqPrice >= px * 0.8)
+        .reduce((s, p) => s + p.collateralValue, 0);
+      const total = pos.reduce((s, p) => s + p.collateralValue, 0);
+      const top = pos.filter(p => p.liqPrice >= px * 0.75)
+        .sort((a, b) => b.collateralValue - a.collateralValue).slice(0, 3);
+      blocks.push('<div class="liq-asset">' +
+        '<div class="liq-head"><span class="liq-sym">' + esc(label) + '</span>' +
+        '<span class="liq-px">' + fmtPrice(px) + '</span>' +
+        '<span class="liq-total">' + fmtBig(total) + " total at risk below price</span></div>" +
+        '<div class="liq-buckets">' +
+          '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(w5) + "</div></div>" +
+          '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(w10) + "</div></div>" +
+          '<div class="liq-bucket"><div class="b-label">within −20%</div><div class="b-val">' + fmtBig(w20) + "</div></div>" +
+        "</div>" +
+        '<div class="liq-aave">Aave loans at risk (within −20%): <b>' + fmtBig(aave20) + "</b></div>" +
+        top.map(p => {
+          const dist = (px - p.liqPrice) / px * 100;
+          return '<a class="liq-pos" href="' + esc(p.url || "#") + '" target="_blank" rel="noopener">' +
+            '<span class="proto-badge">' + esc(p.protocol || "?") + "</span>" +
+            "<span>" + fmtBig(p.collateralValue) + " · liq @ " + fmtPrice(p.liqPrice) + "</span>" +
+            '<span class="liq-dist ' + (dist < 10 ? "chg-down" : "") + '">−' + dist.toFixed(1) + "% away</span></a>";
+        }).join("") +
+      "</div>");
+    }
+    if (!blocks.length) throw new Error("empty");
+    body.innerHTML = blocks.join("");
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".liq-asset"))
+      setError(body, "Liquidation data unavailable right now — retrying automatically.");
+  }
+}
+
 /* ---------------- SEC filings (data.sec.gov, crypto-exposed companies) ---------------- */
 const SEC_COMPANIES = [
   {cik: "0001679788", short: "Coinbase"},
@@ -769,9 +920,11 @@ async function loadPolymarket() {
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
 
-loadPrices(); loadNews(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadSocial(); loadListings();
+loadPrices(); loadNews(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadSocial(); loadListings(); loadHyperliquid(); loadLiquidations();
 every(loadSocial,   120_000, 130_000);  /* every 2 min */
 every(loadListings, 300_000, 310_000);  /* every 5 min */
+every(loadHyperliquid, 60_000, 65_000); /* every 60s */
+every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates ~hourly) */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadNews,     180_000, 180_000);  /* every 3 min */
