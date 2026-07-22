@@ -276,6 +276,17 @@
   .oi-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 3px; }
   .oi-note { font-size: 10px; color: var(--muted); margin-top: 4px; }
 
+  /* ---------- global OI ---------- */
+  .goi-hero { padding: 12px 14px 6px; }
+  .goi-total { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .goi-sub { font-size: 11px; color: var(--muted); }
+  .gx-row { display: grid; grid-template-columns: minmax(0,1fr) 70px auto; gap: 10px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--grid); }
+  .gx-row:last-child { border-bottom: none; }
+  .gx-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gx-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .gx-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+  .gx-val { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; text-align: right; }
+
   /* ---------- liquidation risk ---------- */
   .liq-asset { padding: 12px 14px; border-bottom: 1px solid var(--grid); }
   .liq-asset:last-child { border-bottom: none; }
@@ -376,13 +387,19 @@
     <div class="grid-stack-item" gs-id="prices">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">💰 Prices <span class="sub" id="pricesSub"></span></div>
-        <div class="panel-body" id="pricesBody"><div class="empty">Loading prices…</div></div>
+        <div class="panel-body" id="pricesOuter">
+          <div class="scan-bar"><input class="scan-input" id="priceSearch" placeholder="🔎 search top 100 coins…" spellcheck="false"></div>
+          <div id="pricesBody"><div class="empty">Loading prices…</div></div>
+        </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="listings">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🪙 Coin Listings <span class="sub">DexScreener · newest tokens</span></div>
-        <div class="panel-body" id="listingsBody"><div class="empty">Loading listings…</div></div>
+        <div class="panel-body" id="listingsOuter">
+          <div class="scan-bar"><input class="scan-input" id="listingSearch" placeholder="🔎 search new listings…" spellcheck="false"></div>
+          <div id="listingsBody"><div class="empty">Loading listings…</div></div>
+        </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="fng">
@@ -401,7 +418,10 @@
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🎯 Prediction Markets <span class="sub" id="pmSub"></span>
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button></div>
-        <div class="panel-body" id="pmBody"><div class="empty">Loading markets…</div></div>
+        <div class="panel-body" id="pmOuter">
+          <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
+          <div id="pmBody"><div class="empty">Loading markets…</div></div>
+        </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="sec">
@@ -419,14 +439,23 @@
     </div>
     <div class="grid-stack-item" gs-id="hyper">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Hyperliquid Perps <span class="sub" id="hyperSub">top 50 by open interest</span></div>
-        <div class="panel-body" id="hyperBody"><div class="empty">Loading perps…</div></div>
+        <div class="panel-head">⚡ Hyperliquid Perps <span class="sub" id="hyperSub">top 50 by OI · search all markets</span></div>
+        <div class="panel-body" id="hyperOuter">
+          <div class="scan-bar"><input class="scan-input" id="hyperSearch" placeholder="🔎 search a token's OI — e.g. BTC, HYPE, DOGE…" spellcheck="false"></div>
+          <div id="hyperBody"><div class="empty">Loading perps…</div></div>
+        </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="liqs">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">💥 Liquidation Risk <span class="sub">live Morpho + DefiLlama · all lenders</span></div>
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="globaloi">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges aggregated · CoinGecko</span></div>
+        <div class="panel-body" id="goiBody"><div class="empty">Loading global open interest…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="longshort">
@@ -477,6 +506,7 @@ const LAYOUT_KEY = "cryptopulse-layout-v1";
 const DEFAULT_LAYOUT = [
   {id: "fng",        x: 0, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
   {id: "longshort",  x: 2, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
+  {id: "globaloi",   x: 9, y: 16, w: 3, h: 5,  minW: 2, minH: 2},
   {id: "whales",     x: 4, y: 0,  w: 3, h: 12, minW: 2, minH: 2},
   {id: "sec",        x: 7, y: 0,  w: 2, h: 12, minW: 2, minH: 2},
   {id: "liqs",       x: 9, y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
@@ -614,31 +644,40 @@ async function loadPrices() {
   const body = $("pricesBody");
   try {
     const data = await fetchJSON(
-      "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&sparkline=true&price_change_percentage=24h"
+      "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true&price_change_percentage=24h"
     );
     if (!Array.isArray(data) || !data.length) throw new Error("empty response");
     priceCoins = data;
-    body.innerHTML = data.map((c, i) => {
-      const chg = c.price_change_percentage_24h;
-      const spark = c.sparkline_in_7d && c.sparkline_in_7d.price
-        ? sparkSVG(c.sparkline_in_7d.price.filter((_, idx) => idx % 4 === 0), (chg ?? 0) >= 0) : "";
-      return '<a class="price-row" data-i="' + i + '" target="_blank" rel="noopener" ' +
-        'href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(tvSymbol(c.symbol)) + '">' +
-        '<span class="rank">' + (i + 1) + "</span>" +
-        '<img class="coin-icon" src="' + esc(c.image) + '" alt="" loading="lazy" ' +
-          "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
-        '<div class="coin-name"><div class="n">' + esc(c.name) + '</div><div class="s">' + esc(c.symbol) + "</div></div>" +
-        spark +
-        '<div class="price-val"><div class="p">' + fmtPrice(c.current_price) + "</div>" + chgSpan(chg) + "</div>" +
-      "</a>";
-    }).join("");
-    $("pricesSub").textContent = "top 15 · 24h · click → TradingView";
+    renderPriceRows();
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".price-row"))
       setError(body, "Price feed unavailable right now — retrying automatically.");
   }
 }
+
+function renderPriceRows() {
+  const body = $("pricesBody");
+  const q = ($("priceSearch").value || "").trim().toUpperCase();
+  const list = q ? priceCoins.filter(c => (c.name + " " + c.symbol).toUpperCase().includes(q)) : priceCoins.slice(0, 15);
+  body.innerHTML = list.length ? list.map(c => {
+    const i = priceCoins.indexOf(c);
+    const chg = c.price_change_percentage_24h;
+    const spark = c.sparkline_in_7d && c.sparkline_in_7d.price
+      ? sparkSVG(c.sparkline_in_7d.price.filter((_, idx) => idx % 4 === 0), (chg ?? 0) >= 0) : "";
+    return '<a class="price-row" data-i="' + i + '" target="_blank" rel="noopener" ' +
+      'href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(tvSymbol(c.symbol)) + '">' +
+      '<span class="rank">' + (i + 1) + "</span>" +
+      '<img class="coin-icon" src="' + esc(c.image) + '" alt="" loading="lazy" ' +
+        "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
+      '<div class="coin-name"><div class="n">' + esc(c.name) + '</div><div class="s">' + esc(c.symbol) + "</div></div>" +
+      spark +
+      '<div class="price-val"><div class="p">' + fmtPrice(c.current_price) + "</div>" + chgSpan(chg) + "</div>" +
+    "</a>";
+  }).join("") : '<div class="empty">No coin matching “' + esc(q) + "” in the top 100.</div>";
+  $("pricesSub").textContent = q ? list.length + " of " + priceCoins.length : "top 15 · 24h · click → TradingView";
+}
+$("priceSearch").addEventListener("input", () => { if (priceCoins.length) renderPriceRows(); });
 
 /* ---------------- price hover popup: 24h linear chart with session high/low ---------------- */
 const pricePop = document.createElement("div");
@@ -738,13 +777,14 @@ async function loadListings() {
         if (!pairMap[key] || liq > (pairMap[key].liquidity && pairMap[key].liquidity.usd || 0)) pairMap[key] = pair;
       });
     } catch (e) { /* pairs are enrichment only */ }
-    body.innerHTML = profiles.map(p => {
+    listingRows = profiles.map(p => {
       const pair = pairMap[p.tokenAddress.toLowerCase()];
       const sym = pair && pair.baseToken.symbol || p.tokenAddress.slice(0, 6) + "…";
       const name = pair && pair.baseToken.name || (p.description || "").slice(0, 40) || "New token";
       const price = pair && parseFloat(pair.priceUsd);
       const chg = pair && pair.priceChange && pair.priceChange.h24;
-      return '<a class="listing-row" href="' + esc(p.url) + '" target="_blank" rel="noopener">' +
+      return {t: sym + " " + name + " " + p.chainId,
+        h: '<a class="listing-row" href="' + esc(p.url) + '" target="_blank" rel="noopener">' +
         '<img class="coin-icon" src="' + esc(p.icon || "") + '" alt="" loading="lazy" ' +
           "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc(sym[0].toUpperCase()) + "</div>'\">" +
         '<div class="coin-name"><div class="n">' + esc(sym) + ' <span class="chain-badge">' + esc(p.chainId) + '</span></div>' +
@@ -752,14 +792,24 @@ async function loadListings() {
         '<div class="price-val">' +
           (price ? '<div class="p">' + fmtPrice(price) + "</div>" : "") +
           (chg != null ? chgSpan(parseFloat(chg)) : "") + "</div>" +
-      "</a>";
-    }).join("");
+      "</a>"};
+    });
+    renderListingRows();
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".listing-row"))
       setError(body, "Listings feed unavailable right now — retrying automatically.");
   }
 }
+let listingRows = [];
+function renderListingRows() {
+  const body = $("listingsBody");
+  const q = ($("listingSearch").value || "").trim().toUpperCase();
+  const list = q ? listingRows.filter(r => r.t.toUpperCase().includes(q)) : listingRows;
+  body.innerHTML = list.length ? list.map(r => r.h).join("") :
+    '<div class="empty">No listing matching “' + esc(q) + "”.</div>";
+}
+$("listingSearch").addEventListener("input", renderListingRows);
 
 /* ---------------- Hyperliquid perps (public info API) ---------------- */
 async function fetchHL(body) {
@@ -921,16 +971,7 @@ async function loadHyperliquid() {
     if (!rows.length) throw new Error("empty");
     hyperRows = rows;
     recordOiSamples(rows); /* build per-token OI history locally */
-    body.innerHTML = rows.slice(0, 50).map((r, i) =>
-      '<div class="perp-row" data-coin="' + esc(r.coin) + '">' +
-        '<span class="rank">' + (i + 1) + "</span>" +
-        '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
-        '<div class="s" style="text-transform:none">OI ' + fmtBig(r.oiUsd) + " · vol " + fmtBig(r.vol) + "</div></div>" +
-        '<div class="perp-metric"><div class="p">' + fmtPrice(r.mark) + "</div>" + chgSpan(r.chg) + "</div>" +
-        '<div class="perp-metric"><div class="p ' + (r.fundingApr >= 0 ? "chg-up" : "chg-down") + '">' +
-          (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
-      "</div>"
-    ).join("");
+    renderHyperRows();
     if (perpPopCoin) renderPerpPop(); /* keep an open popup fresh */
     markUpdated();
   } catch (e) {
@@ -938,6 +979,27 @@ async function loadHyperliquid() {
       setError(body, "Hyperliquid feed unavailable right now — retrying automatically.");
   }
 }
+
+function buildPerpRow(r, i) {
+  return '<div class="perp-row" data-coin="' + esc(r.coin) + '">' +
+    '<span class="rank">' + (i + 1) + "</span>" +
+    '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
+    '<div class="s" style="text-transform:none">OI ' + fmtBig(r.oiUsd) + " · vol " + fmtBig(r.vol) + "</div></div>" +
+    '<div class="perp-metric"><div class="p">' + fmtPrice(r.mark) + "</div>" + chgSpan(r.chg) + "</div>" +
+    '<div class="perp-metric"><div class="p ' + (r.fundingApr >= 0 ? "chg-up" : "chg-down") + '">' +
+      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
+  "</div>";
+}
+function renderHyperRows() {
+  const body = $("hyperBody");
+  const q = ($("hyperSearch").value || "").trim().toUpperCase();
+  const list = q ? hyperRows.filter(r => r.coin.toUpperCase().includes(q)) : hyperRows.slice(0, 50);
+  body.innerHTML = list.length
+    ? list.map(buildPerpRow).join("")
+    : '<div class="empty">No Hyperliquid market matching “' + esc(q) + "”.</div>";
+  $("hyperSub").textContent = q ? list.length + " of " + hyperRows.length + " markets" : "top 50 by OI · search all markets";
+}
+$("hyperSearch").addEventListener("input", () => { if (hyperRows.length) renderHyperRows(); });
 
 /* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
 /* ---- LIVE lending risk from Morpho's public API (real-time, all its chains) ----
@@ -1473,6 +1535,78 @@ async function loadSEC() {
   }
 }
 
+/* ---------------- global OI: every exchange aggregated (CoinGecko derivatives) ---------------- */
+let goiView = "1d";
+try { if (localStorage.getItem("cryptopulse-goi-view") === "7d") goiView = "7d"; } catch (e) {}
+const goiStore = {
+  key: "cryptopulse-goi-samples",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {f: [], c: []}; } catch (e) { return this._m || {f: [], c: []}; } },
+  save(v) { this._m = v; try { localStorage.setItem(this.key, JSON.stringify(v)); } catch (e) {} }
+};
+let goiLast = null;
+async function loadGlobalOI() {
+  const body = $("goiBody");
+  try {
+    const [gx, sp] = await Promise.all([
+      fetchJSON("https://api.coingecko.com/api/v3/derivatives/exchanges?per_page=100&page=1"),
+      fetchJSON("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
+    ]);
+    const btcPx = sp.bitcoin && sp.bitcoin.usd;
+    if (!btcPx || !Array.isArray(gx)) throw new Error("no data");
+    const rows = gx.map(e => ({name: (e.name || "").replace(" (Futures)", ""), oi: (parseFloat(e.open_interest_btc) || 0) * btcPx}))
+      .filter(e => e.oi > 0).sort((a, b) => b.oi - a.oi);
+    const total = rows.reduce((s, e) => s + e.oi, 0);
+    goiLast = total;
+    /* local sampling so the chart also works between collector runs */
+    const st = goiStore.load();
+    const now = Date.now();
+    if (!st.f.length || now - st.f[st.f.length - 1][0] > 4 * 60_000) st.f.push([now, Math.round(total)]);
+    st.f = st.f.filter(x => x[0] > now - 25 * 3_600_000);
+    if (!st.c.length || now - st.c[st.c.length - 1][0] > 55 * 60_000) st.c.push([now, Math.round(total)]);
+    st.c = st.c.filter(x => x[0] > now - 7.2 * 86_400_000);
+    goiStore.save(st);
+    await renderGlobalOI(rows, total);
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".goi-hero"))
+      setError(body, "Global OI unavailable right now — retrying automatically.");
+  }
+}
+async function renderGlobalOI(rows, total) {
+  const body = $("goiBody");
+  const windowMs = goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
+  const bucket = goiView === "1d" ? 4 * 60_000 : 40 * 60_000;
+  const now = Date.now();
+  const remote = (await getOiHistory()).filter(s => s.t > now - windowMs && s.agg).map(s => [s.t, s.agg]);
+  const st = goiStore.load();
+  const local = (goiView === "1d" ? st.f : st.c).filter(x => x[0] > now - windowMs);
+  const merged = remote.concat(local).sort((a, b) => a[0] - b[0]);
+  const series = [];
+  let lastT = 0;
+  merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
+  body.innerHTML =
+    '<div class="goi-hero"><div class="oi-head" style="margin:0">' +
+      '<span class="goi-total">' + fmtBig(total) + "</span>" +
+      '<span style="margin-left:auto" class="oi-side">1D</span>' +
+      '<input type="range" id="goiSlider" min="0" max="1" step="1" value="' + (goiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
+      '<span class="oi-side">7D</span></div>' +
+    '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1d" ? "today" : "last 7 days") + "</div>" +
+    (series.length > 1 ? oiPopSVG(series) : '<div class="oi-note">history is building (collected 24/7 by the repo bot)…</div>') +
+    "</div>" +
+    rows.slice(0, 10).map(e =>
+      '<div class="gx-row"><span class="gx-name">' + esc(e.name) + "</span>" +
+      '<div class="gx-bar"><div class="gx-bar-fill" style="width:' + Math.min(100, e.oi / rows[0].oi * 100).toFixed(1) + '%"></div></div>' +
+      '<span class="gx-val">' + fmtBig(e.oi) + " · " + (e.oi / total * 100).toFixed(1) + "%</span></div>"
+    ).join("");
+  const sl = document.getElementById("goiSlider");
+  if (sl) sl.addEventListener("input", async () => {
+    goiView = sl.value === "1" ? "7d" : "1d";
+    try { localStorage.setItem("cryptopulse-goi-view", goiView); } catch (er) {}
+    const gx = rows;
+    await renderGlobalOI(gx, total);
+  });
+}
+
 /* ---------------- fear & greed (alternative.me) ---------------- */
 async function loadFng() {
   const body = $("fngBody");
@@ -1717,6 +1851,17 @@ $("pmBody").addEventListener("click", e => {
   }
 });
 
+let pmCards = [], pmAlertsHTML = "";
+function renderPmRows() {
+  const body = $("pmBody");
+  const q = ($("pmSearch").value || "").trim().toUpperCase();
+  const list = q ? pmCards.filter(c => c.t.toUpperCase().includes(q)) : pmCards.slice(0, 10);
+  body.innerHTML = pmAlertsHTML +
+    (list.length ? list.map(c => c.h).join("") :
+      (pmCards.length ? '<div class="empty">No market matching “' + esc(q) + "”.</div>" : ""));
+  $("pmSub").textContent = q ? list.length + " of " + pmCards.length + " markets" : "politics · macro · crypto · no sports";
+}
+$("pmSearch").addEventListener("input", renderPmRows);
 async function loadPolymarket() {
   const body = $("pmBody");
   const panelEl = document.querySelector('.grid-stack-item[gs-id="polymarket"] .panel');
@@ -1762,6 +1907,7 @@ async function loadPolymarket() {
     if (!Array.isArray(events) || !events.length) throw new Error("empty");
     const cards = [];
     for (const ev of events) {
+      if (false) break;
       if (!pmTopicOk(ev)) continue;
       const mkts = (ev.markets || []).filter(m => m.outcomePrices);
       if (!mkts.length) continue;
@@ -1780,24 +1926,22 @@ async function loadPolymarket() {
       const multi = (ev.markets || []).length > 1;
       const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
       const end = ev.endDate ? new Date(ev.endDate) : null;
-      cards.push(
-        '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
+      cards.push({t: ev.title || "",
+        h: '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
           '<div class="pm-q">' + esc(ev.title) + "</div>" +
           '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
           '<span class="pm-outcome">' + esc(label) + "</span>" +
           '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
           '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
           (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
-          "</div></a>"
-      );
-      if (cards.length >= 10) break;
+          "</div></a>"});
     }
     if (!cards.length && !alertsHTML) throw new Error("no markets");
-    body.innerHTML = alertsHTML + cards.join("");
-    $("pmSub").textContent = "politics · macro · crypto · no sports";
+    pmCards = cards; pmAlertsHTML = alertsHTML;
+    renderPmRows();
     markUpdated();
   } catch (e) {
-    if (alertsHTML) { body.innerHTML = alertsHTML; return; }
+    if (alertsHTML) { pmAlertsHTML = alertsHTML; renderPmRows(); return; }
     if (!body.querySelector(".pm-item"))
       setError(body, "Prediction-market feed unavailable right now.");
   }
@@ -1806,11 +1950,12 @@ async function loadPolymarket() {
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
 
-loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadListings(); loadHyperliquid(); loadLiquidations(); loadWhales();
+loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadListings(); loadHyperliquid(); loadLiquidations(); loadWhales(); loadGlobalOI();
 every(loadListings, 300_000, 310_000);  /* every 5 min */
 every(loadHyperliquid, 60_000, 65_000); /* every 60s */
 every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates ~hourly) */
 every(loadMorphoLive, 120_000, 150_000); /* live Morpho positions every 2 min */
+every(loadGlobalOI, 300_000, 320_000); /* aggregate exchange OI every 5 min */
 every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000, 245_000); /* every 4 min unless viewing a scanned wallet */
 setTimeout(loadLongShort, 8_000); every(loadLongShort, 900_000, 908_000); /* 500-wallet positioning scan every 15 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
