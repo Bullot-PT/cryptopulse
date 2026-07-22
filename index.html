@@ -177,6 +177,9 @@
     padding: 9px 14px; border-bottom: 1px solid var(--grid);
   }
   .trend-row:last-child { border-bottom: none; }
+  a.trend-row:hover { background: var(--surface-2); text-decoration: none; }
+  .trend-reason { font-size: 10.5px; color: var(--muted); margin-top: 2px; line-height: 1.35; }
+  .trend-reason b { color: var(--ink-2); font-weight: 600; }
 
   /* ---------- polymarket ---------- */
   .pm-item { padding: 12px 14px; border-bottom: 1px solid var(--grid); }
@@ -371,7 +374,8 @@
     </div>
     <div class="grid-stack-item" gs-id="polymarket">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🎯 Prediction Markets <span class="sub" id="pmSub"></span></div>
+        <div class="panel-head">🎯 Prediction Markets <span class="sub" id="pmSub"></span>
+          <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button></div>
         <div class="panel-body" id="pmBody"><div class="empty">Loading markets…</div></div>
       </div></div>
     </div>
@@ -1156,32 +1160,113 @@ async function loadFng() {
   }
 }
 
-/* ---------------- trending (CoinGecko) ---------------- */
+/* ---------------- trending (CoinGecko) with reasons + hover chart ---------------- */
+let trendCoins = [];
+const parseMoney = s => { const n = parseFloat(String(s || "").replace(/[$,]/g, "")); return isFinite(n) ? n : null; };
+function trendReason(c, pos) {
+  const d = c.data || {};
+  const parts = ["<b>#" + pos + " most-searched</b> on CoinGecko"];
+  const chg = d.price_change_percentage_24h && d.price_change_percentage_24h.usd;
+  if (chg != null && isFinite(chg)) {
+    const a = Math.abs(chg);
+    if (a >= 15) parts.push("price " + (chg > 0 ? "exploded +" : "dumped −") + a.toFixed(0) + "% in 24h");
+    else if (a >= 5) parts.push((chg > 0 ? "up +" : "down −") + a.toFixed(1) + "% in 24h");
+  }
+  const vol = parseMoney(d.total_volume), mcap = parseMoney(d.market_cap);
+  if (vol && mcap && mcap > 0) {
+    const r = vol / mcap;
+    if (r >= 0.5) parts.push("very heavy turnover (24h vol ≈ " + Math.round(r * 100) + "% of mcap)");
+    else if (r >= 0.15) parts.push("high volume for its size");
+  }
+  if (!c.market_cap_rank || c.market_cap_rank > 500) parts.push("micro-cap momentum");
+  return parts.slice(0, 3).join(" · ");
+}
 async function loadTrending() {
   const body = $("trendBody");
   try {
     const res = await fetchJSON("https://api.coingecko.com/api/v3/search/trending");
     const coins = (res.coins || []).slice(0, 8);
     if (!coins.length) throw new Error("empty");
-    body.innerHTML = coins.map(w => {
-      const c = w.item;
+    trendCoins = coins.map(w => w.item);
+    body.innerHTML = trendCoins.map((c, i) => {
       const chg = c.data && c.data.price_change_percentage_24h && c.data.price_change_percentage_24h.usd;
       const price = c.data && c.data.price;
-      return '<div class="trend-row">' +
+      return '<a class="trend-row" data-t="' + i + '" target="_blank" rel="noopener" ' +
+        'href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(tvSymbol(c.symbol)) + '">' +
         '<img class="coin-icon" src="' + esc(c.thumb) + '" alt="" loading="lazy" ' +
           "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
         '<div class="coin-name"><div class="n">' + esc(c.name) + '</div><div class="s">' + esc(c.symbol) +
-          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + "</div></div>" +
+          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + "</div>" +
+          '<div class="trend-reason">' + trendReason(c, i + 1) + "</div></div>" +
         '<div class="price-val">' +
           (typeof price === "number" ? '<div class="p">' + fmtPrice(price) + "</div>" : "") +
           chgSpan(chg) + "</div>" +
-      "</div>";
+      "</a>";
     }).join("");
     markUpdated();
   } catch (e) {
-    setError(body, "Trending feed unavailable right now.");
+    if (!body.querySelector(".trend-row"))
+      setError(body, "Trending feed unavailable right now.");
   }
 }
+/* hover chart for trending — 24h series lazily fetched and cached */
+const trendChartCache = {};
+let trendHoverId = null;
+async function showTrendPop(row) {
+  const c = trendCoins[Number(row.dataset.t)];
+  if (!c) return;
+  trendHoverId = c.id;
+  const chg = (c.data && c.data.price_change_percentage_24h && c.data.price_change_percentage_24h.usd) || 0;
+  const place = () => {
+    const r = row.getBoundingClientRect();
+    pricePop.style.display = "block";
+    const pw = 300, ph = pricePop.offsetHeight || 170;
+    let x = r.left - pw - 10;
+    if (x < 8) x = r.right + 10;
+    if (x + pw > window.innerWidth - 8) x = Math.max(8, window.innerWidth - pw - 8);
+    pricePop.style.left = x + "px";
+    pricePop.style.top = Math.min(Math.max(8, r.top - 30), window.innerHeight - ph - 8) + "px";
+  };
+  const head = '<div class="pp-head"><span class="pp-name">' + esc(c.name) + "</span>" +
+    (c.data && typeof c.data.price === "number" ? '<span class="pp-px">' + fmtPrice(c.data.price) + "</span>" : "") +
+    '<span class="pp-tag">last 24h</span></div>';
+  const cached = trendChartCache[c.id];
+  if (cached && Date.now() - cached.t < 300000) {
+    pricePop.innerHTML = head + popChartSVG(cached.pts, cached.hi, cached.lo, chg >= 0) +
+      '<div class="pp-hint">session high / low marked · click row for TradingView</div>';
+    place(); return;
+  }
+  pricePop.innerHTML = head + '<div class="empty" style="padding:30px 0">Loading 24h chart…</div>';
+  place();
+  try {
+    const mc = await fetchJSON("https://api.coingecko.com/api/v3/coins/" + encodeURIComponent(c.id) + "/market_chart?vs_currency=usd&days=1");
+    const raw = (mc.prices || []).map(p => p[1]).filter(v => isFinite(v));
+    if (raw.length < 5) throw new Error("no data");
+    const step = Math.max(1, Math.floor(raw.length / 48));
+    const pts = raw.filter((_, i) => i % step === 0);
+    if (pts[pts.length - 1] !== raw[raw.length - 1]) pts.push(raw[raw.length - 1]);
+    const hi = Math.max(...raw), lo = Math.min(...raw);
+    trendChartCache[c.id] = {t: Date.now(), pts, hi, lo};
+    if (trendHoverId !== c.id || pricePop.style.display === "none") return;
+    pricePop.innerHTML = head + popChartSVG(pts, hi, lo, chg >= 0) +
+      '<div class="pp-hint">session high / low marked · click row for TradingView</div>';
+    place();
+  } catch (e) {
+    if (trendHoverId !== c.id || pricePop.style.display === "none") return;
+    pricePop.innerHTML = head + '<div class="empty" style="padding:20px 0">Chart unavailable (rate limit) — try again shortly.</div>';
+    place();
+  }
+}
+$("trendBody").addEventListener("mouseover", e => {
+  const row = e.target.closest(".trend-row");
+  if (row && row.dataset.t != null) showTrendPop(row);
+});
+$("trendBody").addEventListener("mouseleave", () => { trendHoverId = null; pricePop.style.display = "none"; });
+$("trendBody").addEventListener("mouseout", e => {
+  if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".trend-row")) {
+    trendHoverId = null; pricePop.style.display = "none";
+  }
+});
 
 /* ---------------- polymarket (gamma API, sports filtered out) ---------------- */
 const PM_EXCLUDE = /\b(nba|nfl|mlb|nhl|ufc|mma|boxing|tennis|golf|soccer|football|basketball|baseball|hockey|cricket|rugby|f1|formula 1|nascar|olympic|world cup|premier league|la liga|serie a|bundesliga|champions league|europa|ballon|esport|counter-strike|league of legends|dota|valorant|overwatch|chess|darts|snooker|cycling|marathon|grand slam|wimbledon|super bowl|playoff|finals mvp|draft|transfer)\b/i;
@@ -1194,6 +1279,52 @@ function pmTopicOk(ev) {
 }
 const PM_ALERT_RE = /\b(politic|election|president|senate|congress|government|shutdown|impeach|supreme court|trump|biden|harris|vance|putin|zelensk|xi\b|war|ceasefire|invasion|missile|strike|nuclear|nato|russia|ukraine|iran|israel|gaza|china|taiwan|sanction|tariff|geopolit|military|troops|regime|coup\b)\b/i;
 
+/* ---- alert sound (Web Audio, no files) + on/off toggle ---- */
+let alertMuted = false;
+try { alertMuted = localStorage.getItem("cryptopulse-mute") === "1"; } catch (e) {}
+let audioCtx = null, beepPending = false;
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (beepPending && audioCtx.state === "running") { beepPending = false; playBeep(); }
+}
+document.addEventListener("pointerdown", ensureAudio);
+document.addEventListener("keydown", ensureAudio);
+function playBeep() {
+  if (alertMuted) return;
+  if (!audioCtx || audioCtx.state !== "running") { beepPending = true; return; }
+  const t0 = audioCtx.currentTime;
+  [[880, 0], [660, 0.18], [880, 0.36]].forEach(([f, dt]) => {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0, t0 + dt);
+    g.gain.linearRampToValueAtTime(0.18, t0 + dt + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.16);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0 + dt); o.stop(t0 + dt + 0.18);
+  });
+}
+function refreshSoundBtn() {
+  $("pmSound").textContent = alertMuted ? "🔕" : "🔔";
+  $("pmSound").title = alertMuted ? "Alert sound is OFF — click to enable" : "Alert sound is ON — click to mute";
+}
+$("pmSound").addEventListener("click", e => {
+  e.preventDefault(); e.stopPropagation();
+  alertMuted = !alertMuted;
+  try { localStorage.setItem("cryptopulse-mute", alertMuted ? "1" : "0"); } catch (er) {}
+  refreshSoundBtn();
+  if (!alertMuted) { ensureAudio(); playBeep(); } /* audible confirmation */
+});
+refreshSoundBtn();
+/* remember which big bets we've already alerted on (survives reloads) */
+const pmSeen = {
+  key: "cryptopulse-pm-seen",
+  load() { try { return new Set(JSON.parse(localStorage.getItem(this.key)) || []); } catch (e) { return new Set(); } },
+  save(set) { try { localStorage.setItem(this.key, JSON.stringify([...set].slice(-300))); } catch (e) {} }
+};
+
 async function loadPolymarket() {
   const body = $("pmBody");
   const panelEl = document.querySelector('.grid-stack-item[gs-id="polymarket"] .panel');
@@ -1205,6 +1336,14 @@ async function loadPolymarket() {
     const hits = (Array.isArray(trades) ? trades : [])
       .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || "") && !PM_EXCLUDE.test(t.title || ""))
       .sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
+    /* sound on alerts we haven't announced before */
+    const seen = pmSeen.load();
+    const fresh = hits.filter(t => !seen.has(t.transactionHash || (t.title + "|" + t.timestamp)));
+    if (fresh.length) {
+      fresh.forEach(t => seen.add(t.transactionHash || (t.title + "|" + t.timestamp)));
+      pmSeen.save(seen);
+      playBeep();
+    }
     if (hits.length) {
       alertActive = true;
       alertsHTML = hits.map(t => {
@@ -1282,7 +1421,11 @@ every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadTrending, 300_000, 305_000);  /* every 5 min */
 every(loadFng,      900_000, 900_000);  /* every 15 min */
-every(loadPolymarket, 120_000, 125_000);/* every 2 min */
+every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big bets */
+/* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { loadPolymarket(); loadPrices(); loadHyperliquid(); }
+});
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 </script>
 </body>
