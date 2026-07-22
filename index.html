@@ -425,7 +425,7 @@
     </div>
     <div class="grid-stack-item" gs-id="liqs">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Liquidation Risk <span class="sub">all collateral · all lenders · all chains</span></div>
+        <div class="panel-head">💥 Liquidation Risk <span class="sub">live Morpho + DefiLlama · all lenders</span></div>
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
       </div></div>
     </div>
@@ -774,71 +774,112 @@ async function fetchHL(body) {
     return await r.json();
   } finally { clearTimeout(t); }
 }
-/* ---- total OI chart: 1D from live samples collected by this dashboard, 7D from DefiLlama daily ---- */
-const oiStore = {
-  key: "cryptopulse-oi-samples",
-  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return this._m || []; } },
-  save(a) { this._m = a; try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
+/* ---- per-token OI history: sampled live by this dashboard (no free API publishes it) ---- */
+const oiCoinStore = {
+  key: "cryptopulse-oi-coins",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return this._m || {}; } },
+  save(o) { this._m = o; try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
-let oiView = "1d";
-try { if (localStorage.getItem("cryptopulse-oi-view") === "7d") oiView = "7d"; } catch (e) {}
-let llamaOI = {t: 0, data: null};
-async function getLlamaOI() {
-  if (llamaOI.data && Date.now() - llamaOI.t < 1_800_000) return llamaOI.data;
-  const j = await fetchJSON("https://api.llama.fi/summary/open-interest/hyperliquid", {timeout: 20000});
-  llamaOI = {t: Date.now(), data: j.totalDataChart || []};
-  return llamaOI.data;
+let perpOiView = "1d";
+try { if (localStorage.getItem("cryptopulse-oi-view") === "7d") perpOiView = "7d"; } catch (e) {}
+let hyperRows = [];
+function recordOiSamples(rows) {
+  const store = oiCoinStore.load();
+  const now = Date.now();
+  rows.slice(0, 60).forEach(r => {
+    const e = store[r.coin] || (store[r.coin] = {f: [], c: []});
+    if (!e.f.length || now - e.f[e.f.length - 1][0] > 4 * 60_000) e.f.push([now, Math.round(r.oiUsd)]);
+    e.f = e.f.filter(x => x[0] > now - 25 * 3_600_000);
+    if (!e.c.length || now - e.c[e.c.length - 1][0] > 55 * 60_000) e.c.push([now, Math.round(r.oiUsd)]);
+    e.c = e.c.filter(x => x[0] > now - 7.2 * 86_400_000);
+  });
+  /* cap stored coins so localStorage stays small */
+  const keys = Object.keys(store);
+  if (keys.length > 80) {
+    keys.sort((a, b) => (store[a].f.slice(-1)[0] || [0])[0] - (store[b].f.slice(-1)[0] || [0])[0]);
+    keys.slice(0, keys.length - 80).forEach(k => delete store[k]);
+  }
+  oiCoinStore.save(store);
 }
-function oiLineSVG(pts) {
-  if (!pts || pts.length < 2) return "";
-  const w = 320, h = 78, p = 6;
-  const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
-  const X = i => p + i * (w - p * 2) / (pts.length - 1);
-  const Y = v => p + (1 - (v - min) / span) * (h - p * 2);
-  const d = pts.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" ");
-  const up = pts[pts.length - 1] >= pts[0];
+function oiPopSVG(points) {
+  const w = 276, h = 110, padL = 4, padR = 60, padY = 12;
+  const min = Math.min(...points), max = Math.max(...points);
+  const span = (max - min) || 1;
+  const X = i => padL + i * (w - padL - padR) / (points.length - 1);
+  const Y = v => padY + (1 - (v - min) / span) * (h - padY * 2);
+  const d = points.map((p, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(p).toFixed(1)).join(" ");
+  const up = points[points.length - 1] >= points[0];
   const color = up ? "var(--up)" : "var(--down)";
-  const area = d + " L" + X(pts.length - 1).toFixed(1) + " " + (h - 2) + " L" + X(0).toFixed(1) + " " + (h - 2) + " Z";
-  return '<svg width="100%" height="78" viewBox="0 0 320 78" preserveAspectRatio="none" aria-hidden="true">' +
-    '<path d="' + area + '" fill="' + color + '" opacity="0.10"/>' +
-    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' +
+  const lbl = (v, txt, fill) =>
+    '<line x1="' + padL + '" x2="' + (w - padR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) +
+    '" stroke="var(--baseline)" stroke-width="1" stroke-dasharray="3 3"/>' +
+    '<text x="' + (w - padR + 4) + '" y="' + (Y(v) + 3).toFixed(1) +
+    '" fill="' + fill + '" font-size="9" font-family="system-ui,sans-serif">' + txt + "</text>";
+  const lastX = X(points.length - 1), lastY = Y(points[points.length - 1]);
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + " " + h + '" aria-hidden="true">' +
+    lbl(max, "H " + fmtBig(max), "var(--up)") + lbl(min, "L " + fmtBig(min), "var(--down)") +
+    '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+    '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="3.5" fill="' + color + '" stroke="var(--surface-2)" stroke-width="2"/>' +
   "</svg>";
 }
-let lastTotalOI = null;
-async function renderOIChart() {
-  const box = document.getElementById("oiBox");
-  if (!box) return;
-  let pts = [], note = "", label;
-  if (oiView === "1d") {
-    label = "today";
-    const arr = oiStore.load();
-    pts = arr.map(s => s.v);
-    if (arr.length < 10) note = "1D chart builds from live samples while the dashboard is open — keep it running";
-  } else {
-    label = "last 7 days";
-    try {
-      const ch = await getLlamaOI();
-      pts = ch.slice(-8).map(x => x[1]);
-      if (lastTotalOI) pts.push(lastTotalOI);
-    } catch (e) { note = "weekly OI data unavailable right now"; }
-  }
-  const min = pts.length ? Math.min(...pts) : null, max = pts.length ? Math.max(...pts) : null;
-  box.innerHTML =
-    '<div class="oi-head"><span>Total open interest · ' + label + '</span>' +
-    '<span class="oi-val">' + (lastTotalOI ? fmtBig(lastTotalOI) : "—") + "</span>" +
-    '<span style="margin-left:auto" class="oi-side">1D</span>' +
-    '<input type="range" id="oiSlider" min="0" max="1" step="1" value="' + (oiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
-    '<span class="oi-side">7D</span></div>' +
-    (pts.length > 1 ? oiLineSVG(pts) +
-      '<div class="oi-scale"><span>low ' + fmtBig(min) + "</span><span>high " + fmtBig(max) + "</span></div>" : "") +
-    (note ? '<div class="oi-note">' + note + "</div>" : "");
-  const sl = document.getElementById("oiSlider");
+let perpPopCoin = null, perpPopRow = null, perpHideTimer = null;
+function renderPerpPop() {
+  const r = hyperRows.find(x => x.coin === perpPopCoin);
+  if (!r || !perpPopRow) return;
+  const store = oiCoinStore.load();
+  const e = store[r.coin] || {f: [], c: []};
+  const series = (perpOiView === "1d" ? e.f : e.c).map(x => x[1]);
+  const label = perpOiView === "1d" ? "OI today" : "OI last 7d";
+  pricePop.innerHTML =
+    '<div class="pp-head"><span class="pp-name">' + esc(r.coin) + "</span>" +
+    '<span class="pp-px">OI ' + fmtBig(r.oiUsd) + "</span>" +
+    '<span class="pp-tag">' + label + "</span></div>" +
+    '<div class="oi-head" style="margin:0 0 4px">' +
+    '<span class="oi-side">1D</span>' +
+    '<input type="range" id="perpOiSlider" min="0" max="1" step="1" value="' + (perpOiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
+    '<span class="oi-side">7D</span>' +
+    '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · " +
+      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + "% funding</span></div>" +
+    (series.length > 1 ? oiPopSVG(series) +
+      '<div class="pp-hint">open-interest high / low of the window marked</div>' :
+      '<div class="empty" style="padding:22px 0">Collecting live OI samples — this chart fills while the dashboard runs' +
+      (perpOiView === "7d" ? " (7D needs a few days of samples)" : "") + ".</div>");
+  const sl = document.getElementById("perpOiSlider");
   if (sl) sl.addEventListener("input", () => {
-    oiView = sl.value === "1" ? "7d" : "1d";
-    try { localStorage.setItem("cryptopulse-oi-view", oiView); } catch (e) {}
-    renderOIChart();
+    perpOiView = sl.value === "1" ? "7d" : "1d";
+    try { localStorage.setItem("cryptopulse-oi-view", perpOiView); } catch (er) {}
+    renderPerpPop();
   });
+  const rect = perpPopRow.getBoundingClientRect();
+  pricePop.style.display = "block";
+  pricePop.style.pointerEvents = "auto"; /* the slider is clickable */
+  const pw = 300, ph = pricePop.offsetHeight || 190;
+  let x = rect.right + 10;
+  if (x + pw > window.innerWidth - 8) x = rect.left - pw - 10;
+  if (x < 8) x = Math.max(8, window.innerWidth - pw - 8);
+  pricePop.style.left = x + "px";
+  pricePop.style.top = Math.min(Math.max(8, rect.top - 24), window.innerHeight - ph - 8) + "px";
 }
+function hidePerpPop() {
+  pricePop.style.display = "none";
+  pricePop.style.pointerEvents = "none";
+  perpPopCoin = null; perpPopRow = null;
+}
+$("hyperBody").addEventListener("mouseover", e => {
+  const row = e.target.closest(".perp-row");
+  if (!row || row.dataset.coin == null) return;
+  clearTimeout(perpHideTimer);
+  perpPopCoin = row.dataset.coin; perpPopRow = row;
+  renderPerpPop();
+});
+$("hyperBody").addEventListener("mouseout", e => {
+  const to = e.relatedTarget;
+  if (to && to.closest && (to.closest(".perp-row") || to.closest(".price-pop"))) return;
+  clearTimeout(perpHideTimer);
+  perpHideTimer = setTimeout(hidePerpPop, 200);
+});
+pricePop.addEventListener("mouseenter", () => { if (perpPopCoin) clearTimeout(perpHideTimer); });
+pricePop.addEventListener("mouseleave", () => { if (perpPopCoin) hidePerpPop(); });
 async function loadHyperliquid() {
   const body = $("hyperBody");
   try {
@@ -857,15 +898,10 @@ async function loadHyperliquid() {
     }).filter(Boolean).filter(r => r.oiUsd > 0)
       .sort((a, b) => b.oiUsd - a.oiUsd);
     if (!rows.length) throw new Error("empty");
-    /* total OI across every market — feed the chart and the live sample store */
-    lastTotalOI = rows.reduce((s, r) => s + r.oiUsd, 0);
-    const samples = oiStore.load();
-    if (!samples.length || Date.now() - samples[samples.length - 1].t > 45_000) {
-      samples.push({t: Date.now(), v: lastTotalOI});
-      oiStore.save(samples.filter(s => s.t > Date.now() - 25 * 3600 * 1000).slice(-1500));
-    }
-    body.innerHTML = '<div class="oi-box" id="oiBox"></div>' + rows.slice(0, 50).map((r, i) =>
-      '<div class="perp-row">' +
+    hyperRows = rows;
+    recordOiSamples(rows); /* build per-token OI history locally */
+    body.innerHTML = rows.slice(0, 50).map((r, i) =>
+      '<div class="perp-row" data-coin="' + esc(r.coin) + '">' +
         '<span class="rank">' + (i + 1) + "</span>" +
         '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
         '<div class="s" style="text-transform:none">OI ' + fmtBig(r.oiUsd) + " · vol " + fmtBig(r.vol) + "</div></div>" +
@@ -874,7 +910,7 @@ async function loadHyperliquid() {
           (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
       "</div>"
     ).join("");
-    renderOIChart();
+    if (perpPopCoin) renderPerpPop(); /* keep an open popup fresh */
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".perp-row"))
@@ -883,6 +919,61 @@ async function loadHyperliquid() {
 }
 
 /* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
+/* ---- LIVE lending risk from Morpho's public API (real-time, all its chains) ----
+   healthFactor H means the position liquidates if collateral drops by (1 - 1/H). */
+async function loadMorphoLive() {
+  const box = document.getElementById("morphoLive");
+  if (!box) return;
+  try {
+    const q = {query: "{ marketPositions(first:300, orderBy: HealthFactor, orderDirection: Asc, where:{healthFactor_lte:1.25, healthFactor_gte:1.0}) { items { healthFactor state{ collateralUsd } user{ address } market{ collateralAsset{ symbol } loanAsset{ symbol } morphoBlue{ chain{ network } } } } } }"};
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 20000);
+    const r = await fetch("https://blue-api.morpho.org/graphql", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(q), signal: ctl.signal
+    });
+    clearTimeout(t);
+    const j = await r.json();
+    const items = ((j.data && j.data.marketPositions.items) || [])
+      .filter(i => i.state && i.state.collateralUsd >= 50000 && i.healthFactor >= 1)
+      .map(i => ({
+        hf: i.healthFactor, col: i.state.collateralUsd,
+        dist: (1 - 1 / i.healthFactor) * 100,
+        sym: i.market.collateralAsset.symbol, loan: i.market.loanAsset.symbol,
+        chain: (i.market.morphoBlue.chain.network || "").toLowerCase(),
+        addr: i.user.address
+      }));
+    if (!items.length) { box.innerHTML = ""; return; }
+    const within = d => items.filter(i => i.dist <= d).reduce((s, i) => s + i.col, 0);
+    const w5 = within(5), w10 = within(10), w20 = within(20);
+    const bySym = {};
+    items.forEach(i => { bySym[i.sym] = (bySym[i.sym] || 0) + i.col; });
+    const topSyms = Object.entries(bySym).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const top = items.sort((a, b) => b.col - a.col).slice(0, 3);
+    box.innerHTML = '<div class="liq-asset">' +
+      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">⛓ LIVE</span>' +
+      '<span class="liq-px">Morpho · real-time on-chain</span>' +
+      '<span class="liq-total">' + items.length + " positions ≥ $50k near liquidation</span></div>" +
+      '<div class="liq-buckets">' +
+        '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(w5) + "</div></div>" +
+        '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(w10) + "</div></div>" +
+        '<div class="liq-bucket"><div class="b-label">within −20%</div><div class="b-val">' + fmtBig(w20) + "</div></div>" +
+      "</div>" +
+      '<div class="liq-aave">' + topSyms.map(([s, v]) =>
+        '<span class="proto-badge">' + esc(s) + "</span> <b>" + fmtBig(v) + "</b>").join(" · ") +
+        " <span style='color:var(--muted)'>collateral at risk</span></div>" +
+      top.map(p =>
+        '<a class="liq-pos" href="https://debank.com/profile/' + esc(p.addr) + '" target="_blank" rel="noopener">' +
+          '<span class="proto-badge">' + esc(p.sym) + "/" + esc(p.loan) + "</span>" +
+          '<span class="chain-badge">' + esc(p.chain) + "</span>" +
+          "<span>" + fmtBig(p.col) + " · HF " + p.hf.toFixed(3) + "</span>" +
+          '<span class="liq-dist ' + (p.dist < 10 ? "chg-down" : "") + '">−' + p.dist.toFixed(1) + "% away</span></a>"
+      ).join("") +
+    "</div>";
+    markUpdated();
+  } catch (e) { /* keep previous content */ }
+}
+
 const LIQ_FALLBACK = ["eth", "wbtc", "btc", "steth", "wsteth", "weeth", "sol", "avax", "link", "matic"];
 /* map DefiLlama asset keys to CoinGecko ids so buckets are computed against LIVE prices,
    not the dataset's snapshot price (snapshots can lag badly) */
@@ -988,12 +1079,14 @@ async function loadLiquidations() {
     if (!blocks.length) throw new Error("empty");
     blocks.sort((a, b) => b.w20 - a.w20);
     body.innerHTML =
+      '<div id="morphoLive"></div>' +
       '<div class="liq-asset" style="padding:10px 14px"><div class="liq-head" style="margin:0">' +
       '<span class="liq-sym" style="font-size:12.5px">Σ ' + fmtBig(grand20) + " liquidatable within −20%</span>" +
       '<span class="liq-total">' + scanned + " assets · " + allProtos.size + " lenders · " + allChains.size + " chains · fresh data only</span></div></div>" +
       blocks.slice(0, 16).map(b => b.html).join("") +
       (excludedStale.length ? '<div class="liq-asset"><div class="oi-note">⚠ hidden — snapshot too old to trust (already-liquidated positions would pollute it): ' +
         esc(excludedStale.join(", ")) + ". These reappear automatically once DefiLlama refreshes them.</div></div>" : "");
+    loadMorphoLive();
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".liq-asset"))
@@ -1696,6 +1789,7 @@ loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC
 every(loadListings, 300_000, 310_000);  /* every 5 min */
 every(loadHyperliquid, 60_000, 65_000); /* every 60s */
 every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates ~hourly) */
+every(loadMorphoLive, 120_000, 150_000); /* live Morpho positions every 2 min */
 every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000, 245_000); /* every 4 min unless viewing a scanned wallet */
 setTimeout(loadLongShort, 8_000); every(loadLongShort, 900_000, 908_000); /* 500-wallet positioning scan every 15 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
