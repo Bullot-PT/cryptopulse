@@ -464,7 +464,7 @@ function initGrid() {
     column: 12,
     cellHeight: 88,
     margin: 7,
-    float: true,
+    float: false, /* auto-compact: panels always pack tightly upward, no empty holes */
     animate: true,
     draggable: {handle: ".panel-head"},
     resizable: {handles: "e,se,s,sw,w"},
@@ -478,6 +478,7 @@ function initGrid() {
   } else {
     applyLayout(DEFAULT_LAYOUT);
   }
+  grid.compact(); /* squeeze out any leftover gaps on load */
   grid.on("change", () => {
     const items = grid.engine.nodes.map(n => ({
       id: n.el.getAttribute("gs-id"), x: n.x, y: n.y, w: n.w, h: n.h
