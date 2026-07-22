@@ -416,7 +416,7 @@
     </div>
     <div class="grid-stack-item" gs-id="liqs">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Liquidation Risk <span class="sub">all lenders · all chains · DefiLlama</span></div>
+        <div class="panel-head">💥 Liquidation Risk <span class="sub">all collateral · all lenders · all chains</span></div>
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
       </div></div>
     </div>
@@ -800,46 +800,55 @@ async function loadHyperliquid() {
   }
 }
 
-/* ---------------- liquidation risk (DefiLlama: every tracked lender, every chain) ---------------- */
-const LIQ_ASSETS = [
-  {key: "eth", label: "ETH"}, {key: "wbtc", label: "WBTC"}, {key: "btc", label: "BTC"},
-  {key: "steth", label: "stETH"}, {key: "wsteth", label: "wstETH"}, {key: "weeth", label: "weETH"},
-  {key: "sol", label: "SOL"}, {key: "avax", label: "AVAX"}, {key: "link", label: "LINK"},
-  {key: "matic", label: "MATIC"}
-];
+/* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
+const LIQ_FALLBACK = ["eth", "wbtc", "btc", "steth", "wsteth", "weeth", "sol", "avax", "link", "matic"];
 async function loadLiquidations() {
   const body = $("liqsBody");
   try {
-    const results = await Promise.allSettled(LIQ_ASSETS.map(a =>
-      fetchJSON("https://defillama-datasets.llama.fi/liqs/" + a.key + "/latest.json", {timeout: 40000})
-        .then(d => ({...a, data: d}))
-    ));
+    /* discover every collateral asset DefiLlama tracks */
+    let keys = LIQ_FALLBACK;
+    try {
+      const av = await fetchJSON("https://defillama-datasets.llama.fi/liqs/availability.json", {timeout: 20000});
+      const all = Object.keys(av.availability || av).filter(k => k && !/[\s/]/.test(k));
+      if (all.length) keys = all;
+    } catch (e) {}
+    /* fetch in small waves to be polite; each file is per-asset positions across all lenders/chains */
+    const results = [];
+    for (let i = 0; i < keys.length; i += 6) {
+      const wave = await Promise.allSettled(keys.slice(i, i + 6).map(k =>
+        fetchJSON("https://defillama-datasets.llama.fi/liqs/" + encodeURIComponent(k) + "/latest.json", {timeout: 40000})
+          .then(d => ({key: k, data: d}))
+      ));
+      wave.forEach(r => { if (r.status === "fulfilled") results.push(r.value); });
+    }
     const blocks = [];
-    let grand20 = 0; const allProtos = new Set(), allChains = new Set();
-    for (const r of results) {
-      if (r.status !== "fulfilled" || !r.value.data || !r.value.data.positions) continue;
-      const {label, data} = r.value;
+    let grand20 = 0, scanned = 0;
+    const allProtos = new Set(), allChains = new Set();
+    for (const {key, data} of results) {
+      if (!data || !data.positions || !data.currentPrice) continue;
+      scanned++;
       const px = data.currentPrice;
       const pos = data.positions.filter(p => p.liqPrice > 0 && p.liqPrice < px && p.collateralValue > 0);
       if (!pos.length) continue;
       const sumWithin = f => pos.filter(p => p.liqPrice >= px * (1 - f))
         .reduce((s, p) => s + p.collateralValue, 0);
       const w5 = sumWithin(0.05), w10 = sumWithin(0.10), w20 = sumWithin(0.20);
-      /* breakdown by lender + chains, within -20% of current price */
       const protoAgg = {}, chains = new Set();
       pos.forEach(p => {
         chains.add(p.chain || "?");
+        allProtos.add(p.protocol || "?"); allChains.add(p.chain || "?");
         if (p.liqPrice >= px * 0.8) {
-          const k = p.protocol || "?";
-          protoAgg[k] = (protoAgg[k] || 0) + p.collateralValue;
+          const k2 = p.protocol || "?";
+          protoAgg[k2] = (protoAgg[k2] || 0) + p.collateralValue;
         }
       });
-      pos.forEach(p => { allProtos.add(p.protocol || "?"); allChains.add(p.chain || "?"); });
       grand20 += w20;
+      if (w20 < 500_000) continue; /* hide dust — everything still counts toward the Σ header */
       const topProtos = Object.entries(protoAgg).sort((a, b) => b[1] - a[1]).slice(0, 4);
       const total = pos.reduce((s, p) => s + p.collateralValue, 0);
       const top = pos.filter(p => p.liqPrice >= px * 0.75)
         .sort((a, b) => b.collateralValue - a.collateralValue).slice(0, 2);
+      const label = key.toUpperCase();
       blocks.push({w20, html:
         '<div class="liq-asset">' +
         '<div class="liq-head"><span class="liq-sym">' + esc(label) + '</span>' +
@@ -851,7 +860,7 @@ async function loadLiquidations() {
           '<div class="liq-bucket"><div class="b-label">within −20%</div><div class="b-val">' + fmtBig(w20) + "</div></div>" +
         "</div>" +
         (topProtos.length ? '<div class="liq-aave">' +
-          topProtos.map(([k, v]) => '<span class="proto-badge">' + esc(k) + "</span> <b>" + fmtBig(v) + "</b>").join(" · ") +
+          topProtos.map(([k2, v]) => '<span class="proto-badge">' + esc(k2) + "</span> <b>" + fmtBig(v) + "</b>").join(" · ") +
           " <span style='color:var(--muted)'>at risk within −20%</span></div>" : "") +
         top.map(p => {
           const dist = (px - p.liqPrice) / px * 100;
@@ -868,8 +877,8 @@ async function loadLiquidations() {
     body.innerHTML =
       '<div class="liq-asset" style="padding:10px 14px"><div class="liq-head" style="margin:0">' +
       '<span class="liq-sym" style="font-size:12.5px">Σ ' + fmtBig(grand20) + " liquidatable within −20%</span>" +
-      '<span class="liq-total">' + allProtos.size + " lenders · " + allChains.size + " chains tracked</span></div></div>" +
-      blocks.map(b => b.html).join("");
+      '<span class="liq-total">' + scanned + " collateral assets · " + allProtos.size + " lenders · " + allChains.size + " chains</span></div></div>" +
+      blocks.slice(0, 16).map(b => b.html).join("");
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".liq-asset"))
