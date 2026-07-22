@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Sample Hyperliquid + global exchange OI
+      - name: Sample multi-exchange OI
         run: |
           cat > /tmp/collect.mjs <<'EOS'
           import fs from 'fs';
@@ -24,14 +24,37 @@ jobs:
           });
           const [meta, ctxs] = await res.json();
           const coins = {};
+          const hlSet = new Set();
           let total = 0;
           (meta.universe || []).forEach((u, i) => {
             const c = ctxs[i];
             if (!c || u.isDelisted) return;
+            hlSet.add(u.name);
             const oi = parseFloat(c.openInterest) * parseFloat(c.markPx);
             if (oi > 0) { coins[u.name] = Math.round(oi); total += oi; }
           });
-          const top = Object.fromEntries(Object.entries(coins).sort((a, b) => b[1] - a[1]).slice(0, 60));
+          const topN = (o, n) => Object.fromEntries(Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n));
+          const top = topN(coins, 60);
+          let bb = {}, ok = {};
+          try {
+            const j = await fetch('https://api.bybit.com/v5/market/tickers?category=linear').then(r => r.json());
+            (j.result && j.result.list || []).forEach(t => {
+              if (!t.symbol || !t.symbol.endsWith('USDT')) return;
+              let b = t.symbol.slice(0, -4);
+              if (b.startsWith('1000')) b = 'k' + b.slice(4);
+              const v = parseFloat(t.openInterestValue);
+              if (v > 0) bb[b] = (bb[b] || 0) + Math.round(v);
+            });
+          } catch (e) { console.log('bybit failed', e.message); }
+          try {
+            const j = await fetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP').then(r => r.json());
+            (j.data || []).forEach(d => {
+              const b0 = (d.instId || '').split('-')[0];
+              const b = hlSet.has(b0) ? b0 : (hlSet.has('k' + b0) ? 'k' + b0 : b0);
+              const v = parseFloat(d.oiUsd);
+              if (v > 0) ok[b] = (ok[b] || 0) + Math.round(v);
+            });
+          } catch (e) { console.log('okx failed', e.message); }
           let agg = 0, ex = {};
           try {
             const [gxr, spr] = await Promise.all([
@@ -44,18 +67,19 @@ jobs:
               if (oi > 0) { agg += oi; ex[(e.name || '').replace(' (Futures)', '')] = Math.round(oi); }
             });
           } catch (e) { console.log('gx fetch failed', e.message); }
-          const exTop = Object.fromEntries(Object.entries(ex).sort((a, b) => b[1] - a[1]).slice(0, 12));
           const path = 'data/oi-history.json';
           let hist = {samples: []};
           try { hist = JSON.parse(fs.readFileSync(path, 'utf8')); } catch (e) {}
           const sample = {t: Date.now(), total: Math.round(total), coins: top};
-          if (agg > 0) { sample.agg = Math.round(agg); sample.ex = exTop; }
+          if (Object.keys(bb).length) sample.bb = topN(bb, 40);
+          if (Object.keys(ok).length) sample.ok = topN(ok, 40);
+          if (agg > 0) { sample.agg = Math.round(agg); sample.ex = topN(ex, 12); }
           hist.samples.push(sample);
           const cutoff = Date.now() - 8 * 86400 * 1000;
           hist.samples = hist.samples.filter(s => s.t > cutoff);
           fs.mkdirSync('data', {recursive: true});
           fs.writeFileSync(path, JSON.stringify(hist));
-          console.log('samples stored:', hist.samples.length, 'agg:', Math.round(agg / 1e9) + 'B');
+          console.log('samples stored:', hist.samples.length);
           EOS
           node /tmp/collect.mjs
       - name: Commit history
