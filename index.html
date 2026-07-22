@@ -387,8 +387,8 @@
     </div>
     <div class="grid-stack-item" gs-id="longshort">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚖️ Long vs Short <span class="sub">Hyperliquid whale exposure</span></div>
-        <div class="panel-body" id="lsBody"><div class="empty">Waiting for whale scan…</div></div>
+        <div class="panel-head">⚖️ Long vs Short <span class="sub">top 500 wallets · on-chain</span></div>
+        <div class="panel-body" id="lsBody"><div class="empty">Scanning positioning…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="whales">
@@ -803,27 +803,19 @@ async function loadWhales() {
     });
     const mids = await fetchHL({type: "allMids"});
     const found = [];
-    const agg = {long: 0, short: 0, coins: {}, wallets: 0};
     for (let i = 0; i < candidates.length; i += 10) {
       const chunk = await Promise.allSettled(candidates.slice(i, i + 10).map(a =>
         fetchHL({type: "clearinghouseState", user: a}).then(s => ({addr: a, s}))
       ));
       chunk.forEach(c => {
         if (c.status !== "fulfilled") return;
-        agg.wallets++;
         (c.value.s.assetPositions || []).forEach(ap => {
           const p = ap.position;
-          const v = Math.abs(parseFloat(p.positionValue));
-          if (!v) return;
-          const side = parseFloat(p.szi) >= 0 ? "long" : "short";
-          agg[side] += v;
-          const co = agg.coins[p.coin] || (agg.coins[p.coin] = {long: 0, short: 0});
-          co[side] += v;
-          if (v >= WHALE_MIN) found.push(whaleRow(p, c.value.addr, mids));
+          if (Math.abs(parseFloat(p.positionValue)) >= WHALE_MIN)
+            found.push(whaleRow(p, c.value.addr, mids));
         });
       });
     }
-    renderLongShort(agg);
     /* biggest position first — a smaller one only outranks it when it's flashing red (>$25M within 10% of liq) */
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
@@ -841,21 +833,62 @@ async function loadWhales() {
       setError(body, "Whale scan unavailable right now — retrying automatically.");
   }
 }
-/* long vs short exposure — Fear & Greed style meter, fed by the whale scan */
-function renderLongShort(agg) {
+/* long vs short — market-wide positioning, Fear & Greed style.
+   Scans the top 500 wallets by equity (the bulk of all open notional on Hyperliquid)
+   and reports what share of total exchange open interest that covers. */
+async function loadLongShort() {
+  const body = $("lsBody");
+  try {
+    const rows = await getLeaderboard();
+    const val = r => parseFloat(r.accountValue) || 0;
+    const top = [...rows].sort((a, b) => val(b) - val(a)).slice(0, 500).map(r => r.ethAddress);
+    let totalOI = 0;
+    try {
+      const [meta, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
+      (ctxs || []).forEach(c => { if (c) totalOI += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
+    } catch (e) {}
+    const agg = {long: 0, short: 0, coins: {}, wallets: 0};
+    for (let i = 0; i < top.length; i += 20) {
+      const chunk = await Promise.allSettled(top.slice(i, i + 20).map(a => fetchHL({type: "clearinghouseState", user: a})));
+      chunk.forEach(c => {
+        if (c.status !== "fulfilled") return;
+        agg.wallets++;
+        (c.value.assetPositions || []).forEach(ap => {
+          const p = ap.position;
+          const v = Math.abs(parseFloat(p.positionValue));
+          if (!v) return;
+          const side = parseFloat(p.szi) >= 0 ? "long" : "short";
+          agg[side] += v;
+          const co = agg.coins[p.coin] || (agg.coins[p.coin] = {long: 0, short: 0});
+          co[side] += v;
+        });
+      });
+      await new Promise(r => setTimeout(r, 250)); /* stay under HL rate limits */
+    }
+    renderLongShort(agg, totalOI);
+    markUpdated();
+  } catch (e) {
+    if (!body.querySelector(".ls-wrap"))
+      setError(body, "Positioning scan unavailable right now — retrying automatically.");
+  }
+}
+function renderLongShort(agg, totalOI) {
   const body = $("lsBody");
   const total = agg.long + agg.short;
   if (!total) { setError(body, "No exposure data yet."); return; }
   const pct = agg.long / total * 100;
   const color = pct >= 55 ? "var(--up)" : pct <= 45 ? "var(--down)" : "var(--warn)";
   const label = pct >= 55 ? "Net long" : pct <= 45 ? "Net short" : "Balanced";
+  /* one side of exchange OI vs one side of scanned book */
+  const coverage = totalOI ? Math.min(100, (total / 2) / totalOI * 100) : null;
   const coins = Object.entries(agg.coins)
     .map(([coin, c]) => ({coin, ...c, total: c.long + c.short}))
     .sort((a, b) => b.total - a.total).slice(0, 6);
   body.innerHTML = '<div class="ls-wrap">' +
     '<div class="ls-top"><span class="ls-value" style="color:' + color + '">' + pct.toFixed(0) + "%</span>" +
     '<span class="ls-label">long · ' + esc(label) + "</span>" +
-    '<span class="ls-when">' + fmtBig(total) + " exposure<br>" + agg.wallets + " whale wallets</span></div>" +
+    '<span class="ls-when">' + fmtBig(total) + " on-chain exposure<br>" + agg.wallets + " wallets" +
+    (coverage != null ? " · ≈" + coverage.toFixed(0) + "% of all OI" : "") + "</span></div>" +
     '<div class="ls-meter"><div class="ls-meter-fill" style="width:' + pct.toFixed(1) + '%"></div></div>' +
     '<div class="ls-scale"><span>All short</span><span>Balanced</span><span>All long</span></div>' +
     coins.map(c => {
@@ -1154,6 +1187,7 @@ every(loadListings, 300_000, 310_000);  /* every 5 min */
 every(loadHyperliquid, 60_000, 65_000); /* every 60s */
 every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates ~hourly) */
 every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000, 245_000); /* every 4 min unless viewing a scanned wallet */
+setTimeout(loadLongShort, 8_000); every(loadLongShort, 900_000, 908_000); /* 500-wallet positioning scan every 15 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadTrending, 300_000, 305_000);  /* every 5 min */
