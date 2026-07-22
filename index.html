@@ -802,6 +802,22 @@ async function loadHyperliquid() {
 
 /* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
 const LIQ_FALLBACK = ["eth", "wbtc", "btc", "steth", "wsteth", "weeth", "sol", "avax", "link", "matic"];
+/* map DefiLlama asset keys to CoinGecko ids so buckets are computed against LIVE prices,
+   not the dataset's snapshot price (snapshots can lag badly) */
+const LIQ_CG_IDS = {
+  eth: "ethereum", weth: "ethereum", btc: "bitcoin", wbtc: "wrapped-bitcoin",
+  steth: "staked-ether", wsteth: "wrapped-steth", weeth: "wrapped-eeth", beth: "binance-eth", wbeth: "wrapped-beth",
+  sol: "solana", msol: "msol", jitosol: "jito-staked-sol", bsol: "blazestake-staked-sol", stsol: "lido-staked-sol",
+  avax: "avalanche-2", savax: "benqi-liquid-staked-avax", matic: "matic-network", maticx: "stader-maticx",
+  link: "chainlink", dot: "polkadot", ada: "cardano", doge: "dogecoin", ltc: "litecoin", bch: "bitcoin-cash",
+  sui: "sui", hasui: "haedal-staked-sui", strk: "starknet", ape: "apecoin", joe: "joe", qi: "benqi",
+  crv: "curve-dao-token", mkr: "maker", aave: "aave", uni: "uniswap", snx: "havven", yfi: "yearn-finance",
+  comp: "compound-governance-token", bal: "balancer", cvx: "convex-finance", "1inch": "1inch", zrx: "0x",
+  knc: "kyber-network-crystal", enj: "enjincoin", mana: "decentraland", bat: "basic-attention-token",
+  dpi: "defipulse-index", xsushi: "xsushi", ren: "republic-protocol",
+  usdc: "usd-coin", polygonusdc: "usd-coin", usdt: "tether", dai: "dai", tusd: "true-usd", pyusd: "paypal-usd",
+  ausd: "agora-dollar", usdy: "ondo-us-dollar-yield", xcn: "chain-2", deep: "deepbook", blue: "bluefin"
+};
 async function loadLiquidations() {
   const body = $("liqsBody");
   try {
@@ -821,13 +837,24 @@ async function loadLiquidations() {
       ));
       wave.forEach(r => { if (r.status === "fulfilled") results.push(r.value); });
     }
+    /* live prices for every mapped asset — the reference for what is ACTUALLY at risk now */
+    let live = {};
+    try {
+      const ids = [...new Set(Object.values(LIQ_CG_IDS))].join(",");
+      live = await fetchJSON("https://api.coingecko.com/api/v3/simple/price?ids=" + ids + "&vs_currencies=usd", {timeout: 20000});
+    } catch (e) {}
     const blocks = [];
     let grand20 = 0, scanned = 0;
     const allProtos = new Set(), allChains = new Set();
     for (const {key, data} of results) {
       if (!data || !data.positions || !data.currentPrice) continue;
       scanned++;
-      const px = data.currentPrice;
+      const cgId = LIQ_CG_IDS[key];
+      const livePx = cgId && live[cgId] && live[cgId].usd;
+      const px = livePx || data.currentPrice;               /* live price wins */
+      const snapPx = data.currentPrice;
+      const drift = livePx ? Math.abs(livePx - snapPx) / livePx : 0;
+      /* positions whose liq price is above the LIVE price are already liquidated/closed — stale ghosts, drop them */
       const pos = data.positions.filter(p => p.liqPrice > 0 && p.liqPrice < px && p.collateralValue > 0);
       if (!pos.length) continue;
       const sumWithin = f => pos.filter(p => p.liqPrice >= px * (1 - f))
@@ -852,8 +879,10 @@ async function loadLiquidations() {
       blocks.push({w20, html:
         '<div class="liq-asset">' +
         '<div class="liq-head"><span class="liq-sym">' + esc(label) + '</span>' +
-        '<span class="liq-px">' + fmtPrice(px) + '</span>' +
+        '<span class="liq-px">' + fmtPrice(px) + (livePx ? " live" : "") + '</span>' +
         '<span class="liq-total">' + fmtBig(total) + " at risk · " + chains.size + " chains</span></div>" +
+        (drift > 0.15 ? '<div class="liq-aave" style="color:var(--warn)">⚠ dataset snapshot at ' + fmtPrice(snapPx) +
+          " vs live " + fmtPrice(px) + " — already-liquidated positions removed, figures re-based to live price</div>" : "") +
         '<div class="liq-buckets">' +
           '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(w5) + "</div></div>" +
           '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(w10) + "</div></div>" +
@@ -877,7 +906,7 @@ async function loadLiquidations() {
     body.innerHTML =
       '<div class="liq-asset" style="padding:10px 14px"><div class="liq-head" style="margin:0">' +
       '<span class="liq-sym" style="font-size:12.5px">Σ ' + fmtBig(grand20) + " liquidatable within −20%</span>" +
-      '<span class="liq-total">' + scanned + " collateral assets · " + allProtos.size + " lenders · " + allChains.size + " chains</span></div></div>" +
+      '<span class="liq-total">' + scanned + " assets · " + allProtos.size + " lenders · " + allChains.size + " chains · re-based to live prices</span></div></div>" +
       blocks.slice(0, 16).map(b => b.html).join("");
     markUpdated();
   } catch (e) {
