@@ -1022,7 +1022,7 @@ async function loadPolymarket() {
     const trades = await fetchJSON("https://data-api.polymarket.com/trades?limit=200&takerOnly=true&filterType=CASH&filterAmount=100000");
     const cutoff = Date.now() / 1000 - 3 * 3600;
     const hits = (Array.isArray(trades) ? trades : [])
-      .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || ""))
+      .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || "") && !PM_EXCLUDE.test(t.title || ""))
       .sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
     if (hits.length) {
       alertActive = true;
