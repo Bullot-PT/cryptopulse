@@ -3430,10 +3430,14 @@ function renderLiqmap() {
      → browser 500-wallet book → ≥$5M whale-scanner rows */
   let hlSrcUsed = null, dydxUsed = false, jupUsed = false, lgtUsed = false;
   /* Lighter: tape-discovered position book from the bot */
+  /* perp books stay valid while positions are open (levels are position-fixed and re-based to the
+     live price every second) — so the window is 3h, with the age always shown in the sub line.
+     GitHub's scheduler sometimes skips runs; a 1-2h-old perp book beats an empty panel.
+     The strict no-stale rule applies to LENDING (its snapshot is price-dependent). */
   if (lmSrc === "AGG" || lmSrc === "LGT") {
     const lx = lmBotBook.lighter;
     const ll = lx && lx.coins && (lx.coins[coin] || lx.coins["k" + coin]);
-    if (ll && Date.now() - (lx.t || 0) < 60 * 60_000) {
+    if (ll && Date.now() - (lx.t || 0) < 180 * 60_000) {
       lgtUsed = true;
       const scale = ll.px ? px / ll.px : 1;
       Object.entries(ll.bins || {}).forEach(([b, cell]) => {
@@ -3448,7 +3452,7 @@ function renderLiqmap() {
   if (lmSrc === "AGG" || lmSrc === "JUP") {
     const jx = lmBotBook.jup;
     const jj = jx && jx.coins && (jx.coins[coin] || jx.coins["k" + coin]);
-    if (jj && Date.now() - (jx.t || 0) < 60 * 60_000) {
+    if (jj && Date.now() - (jx.t || 0) < 180 * 60_000) {
       jupUsed = true;
       const scale = jj.px ? px / jj.px : 1;
       Object.entries(jj.bins || {}).forEach(([b, cell]) => {
@@ -3463,7 +3467,7 @@ function renderLiqmap() {
   if (lmSrc === "AGG" || lmSrc === "DYDX") {
     const dx = lmBotBook.dydx;
     const dd = dx && dx.coins && (dx.coins[coin] || dx.coins["k" + coin]);
-    if (dd && Date.now() - (dx.t || 0) < 60 * 60_000) {
+    if (dd && Date.now() - (dx.t || 0) < 180 * 60_000) {
       dydxUsed = true;
       const scale = dd.px ? px / dd.px : 1;
       Object.entries(dd.bins || {}).forEach(([b, cell]) => {
@@ -3477,7 +3481,7 @@ function renderLiqmap() {
   if (lmSrc === "AGG" || lmSrc === "HL") {
     const bot = lmBotBook.coins && (lmBotBook.coins[coin] || lmBotBook.coins["k" + coin]);
     const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
-    if (bot && Date.now() - lmBotBook.t < 45 * 60_000) {
+    if (bot && Date.now() - lmBotBook.t < 180 * 60_000) {
       hlSrcUsed = "bot";
       const scale = bot.px ? px / bot.px : 1; /* live-scale $ values */
       Object.entries(bot.bins || {}).forEach(([b, cell]) => {
