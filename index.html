@@ -329,13 +329,14 @@
   .ls-value { font-size: 34px; font-weight: 700; line-height: 1; }
   .ls-label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
   .ls-when { margin-left: auto; font-size: 11px; color: var(--muted); text-align: right; }
-  .ls-meter { height: 10px; border-radius: 5px; background: var(--down); overflow: hidden; }
-  .ls-meter-fill { height: 100%; background: var(--up); border-radius: 5px 0 0 5px; transition: width .6s ease; }
+  /* red = short share (left, under "All short"), green = long share (right, under "All long") */
+  .ls-meter { height: 10px; border-radius: 5px; background: var(--down); overflow: hidden; display: flex; justify-content: flex-end; }
+  .ls-meter-fill { height: 100%; background: var(--up); border-radius: 0 5px 5px 0; border-left: 2px solid var(--surface); transition: width .6s ease; }
   .ls-scale { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 5px; margin-bottom: 12px; }
   .ls-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; align-items: center; padding: 5px 0; }
   .ls-coin { font-size: 12px; font-weight: 700; }
-  .ls-bar { height: 7px; border-radius: 4px; background: var(--down); overflow: hidden; }
-  .ls-bar-fill { height: 100%; background: var(--up); border-radius: 4px 0 0 4px; }
+  .ls-bar { height: 7px; border-radius: 4px; background: var(--down); overflow: hidden; display: flex; justify-content: flex-end; }
+  .ls-bar-fill { height: 100%; background: var(--up); border-radius: 0 4px 4px 0; border-left: 2px solid var(--surface); }
   .ls-net { font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* ---------- whale scanner ---------- */
@@ -448,6 +449,35 @@
   .side-badge.fresh { background: rgba(250,178,25,0.15); color: var(--warn); cursor: help; }
   .side-badge.inflow { background: rgba(57,135,229,0.15); color: var(--accent); cursor: help; }
   #pmVol { width: 72px; height: 4px; accent-color: var(--accent); cursor: pointer; margin-left: auto; }
+
+  /* ---------- liquidation heatmap ---------- */
+  .lm-tabs { display: flex; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
+  .lm-tab { background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; color: var(--ink-2);
+    font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .lm-tab.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .lm-tab .x { color: inherit; opacity: .55; font-size: 10px; cursor: pointer; }
+  .lm-tab .x:hover { opacity: 1; }
+  .lm-sum { padding: 8px 14px; border-bottom: 1px solid var(--grid); font-size: 11.5px; color: var(--ink-2); line-height: 1.5; }
+  .lm-sum b { color: var(--ink); }
+  .lm-chart { padding: 6px 14px 12px; }
+  .lm-row { display: grid; grid-template-columns: 108px 1fr 70px; align-items: center; gap: 8px; padding: 1px 0; }
+  .lm-lvl { font-size: 10.5px; color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lm-lvl .pct { color: var(--muted); font-size: 9px; }
+  .lm-track { height: 15px; display: flex; align-items: center; }
+  .lm-bar { height: 13px; border-radius: 0 4px 4px 0; display: flex; overflow: hidden; min-width: 0; }
+  .lm-lend { background: var(--down); height: 100%; }
+  .lm-wl { background: #f0908a; height: 100%; margin-left: 2px; }
+  .lm-ws { background: var(--up); height: 100%; border-radius: 0 4px 4px 0; }
+  .lm-val { font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .lm-row.magnet .lm-lvl, .lm-row.magnet .lm-val { font-weight: 700; color: var(--warn); }
+  .lm-now { display: grid; grid-template-columns: 108px 1fr 70px; gap: 8px; align-items: center; margin: 3px 0; }
+  .lm-now .l { text-align: right; font-size: 11px; font-weight: 750; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .lm-now .rule { border-top: 2px solid var(--accent); position: relative; }
+  .lm-now .rule::after { content: "current price · live"; position: absolute; right: 0; top: -15px; font-size: 9px; color: var(--accent); }
+  .lm-side { padding: 1px 0 1px 116px; font-size: 10px; color: var(--muted); font-style: italic; }
+  .lm-legend { display: flex; gap: 11px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10px; color: var(--ink-2); flex-wrap: wrap; }
+  .lm-legend .k { display: inline-flex; align-items: center; gap: 4px; }
+  .lm-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
   .lsx-label { font-size: 11px; color: var(--ink-2); display: flex; flex-direction: column; line-height: 1.25; }
   .lsx-label .who { font-weight: 600; color: var(--ink); }
   .lsx-label .kind { font-size: 9.5px; color: var(--muted); }
@@ -608,6 +638,19 @@
         </div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="liqmap">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🧲 Liq Heatmap <span class="sub" id="lmSub">forced flow by price level · live price</span></div>
+        <div class="panel-body" id="lmOuter">
+          <div class="scan-bar">
+            <input class="scan-input" id="lmAdd" placeholder="add a token to map — e.g. AVAX, LINK, HYPE — press Enter" spellcheck="false">
+            <button class="btn-ghost" id="lmAddBtn">+ add</button>
+          </div>
+          <div class="lm-tabs" id="lmTabs"></div>
+          <div id="lmBody"><div class="empty">Loading liquidation map…</div></div>
+        </div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
@@ -661,7 +704,8 @@ const DEFAULT_LAYOUT = [
   {id: "listings",   x: 0, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
   {id: "trending",   x: 2, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
   {id: "globaloi",   x: 4, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
-  {id: "alerts",     x: 6, y: 12, w: 3, h: 6,  minW: 2, minH: 3}
+  {id: "alerts",     x: 6, y: 12, w: 3, h: 6,  minW: 2, minH: 3},
+  {id: "liqmap",     x: 0, y: 18, w: 6, h: 7,  minW: 3, minH: 3} /* new panels ALWAYS go to the bottom */
 ];
 const layoutStore = {
   _mem: null,
@@ -1820,7 +1864,8 @@ function renderLongShort(agg, totalOI) {
   if (!total) { setError(body, "No exposure data yet."); return; }
   const pct = agg.long / total * 100;
   const color = pct >= 55 ? "var(--up)" : pct <= 45 ? "var(--down)" : "var(--warn)";
-  const label = pct >= 55 ? "Net long" : pct <= 45 ? "Net short" : "Balanced";
+  const label = pct >= 55 ? "Net long" : pct <= 45 ? "Net short"
+    : pct >= 50 ? "Balanced · leans long" : "Balanced · leans short";
   /* one side of exchange OI vs one side of scanned book */
   const coverage = totalOI ? Math.min(100, (total / 2) / totalOI * 100) : null;
   const coins = Object.entries(agg.coins)
@@ -3114,6 +3159,136 @@ document.getElementById("lsxBody").addEventListener("click", e => {
   LSX_COINS = LSX_COINS.filter(c => c !== d.dataset.del);
   lsxSave(); renderLsCrowd();
 });
+
+/* ---------------- liquidation heatmap (forced flow by price level, live price) ---------------- */
+const LIQMAP_KEY = {BTC: "wbtc", ETH: "eth", SOL: "sol", MATIC: "matic", AVAX: "avax", LINK: "link"};
+let lmCoins = (() => {
+  try { const v = JSON.parse(localStorage.getItem("cryptopulse-liqmap-coins")); return Array.isArray(v) && v.length ? v : ["ETH", "BTC", "SOL"]; }
+  catch (e) { return ["ETH", "BTC", "SOL"]; }
+})();
+let lmCur = (() => { try { return localStorage.getItem("cryptopulse-liqmap-cur") || lmCoins[0]; } catch (e) { return lmCoins[0]; } })();
+function lmSave() { try { localStorage.setItem("cryptopulse-liqmap-coins", JSON.stringify(lmCoins)); localStorage.setItem("cryptopulse-liqmap-cur", lmCur); } catch (e) {} }
+const lmData = {}; /* coin -> {step, bins:{binIdx:usd}, snapPx, t} | {none:true} */
+async function fetchLiqmapCoin(coin) {
+  const key = LIQMAP_KEY[coin] || coin.toLowerCase();
+  try {
+    const d = await fetchJSONraw("https://defillama-datasets.llama.fi/liqs/" + encodeURIComponent(key) + "/latest.json", {timeout: 40000});
+    if (!d || !d.positions || !d.currentPrice) throw new Error("no book");
+    const px = d.currentPrice, step = px * 0.005; /* fine 0.5% bins in ABSOLUTE price, re-based to live px on render */
+    const bins = {};
+    d.positions.forEach(q => {
+      if (!(q.liqPrice > 0) || !(q.collateralValue > 0)) return;
+      if (q.liqPrice >= px * 1.02 || q.liqPrice < px * 0.55) return;
+      const b = Math.round(q.liqPrice / step);
+      bins[b] = (bins[b] || 0) + q.collateralValue;
+    });
+    lmData[coin] = {step, bins, snapPx: px, t: Date.now()};
+  } catch (e) { lmData[coin] = {none: true, t: Date.now()}; }
+  renderLiqmap();
+}
+function lmLivePx(coin) {
+  if (liveMark[coin]) return liveMark[coin];
+  if (liveMark["k" + coin]) return liveMark["k" + coin];
+  const pc = priceCoins.find(c => (c.symbol || "").toUpperCase() === coin);
+  if (pc) return pc.current_price;
+  const d = lmData[coin];
+  return d && d.snapPx || null;
+}
+function renderLiqmap() {
+  const body = $("lmBody"); if (!body) return;
+  /* tabs */
+  $("lmTabs").innerHTML = lmCoins.map(c =>
+    '<span class="lm-tab' + (c === lmCur ? " on" : "") + '" data-lm="' + esc(c) + '">' + esc(c) +
+    '<span class="x" data-lmx="' + esc(c) + '" title="Remove">✕</span></span>').join("");
+  const coin = lmCur, d = lmData[coin];
+  const px = lmLivePx(coin);
+  if (!px) { body.innerHTML = '<div class="empty">Waiting for a live price for ' + esc(coin) + "…</div>"; return; }
+  /* display buckets: 2.5% steps, −30%..+30%, re-based to the LIVE price every render */
+  const BK = []; for (let p = -30; p < 30; p += 2.5) BK.push({p, lend: 0, wl: 0, ws: 0});
+  const bIdx = pct => { const i = Math.floor((pct + 30) / 2.5); return i >= 0 && i < BK.length ? i : -1; };
+  if (d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
+    const bp = (+b) * d.step;
+    if (bp >= px) return; /* above live price = effectively gone; same strict rule as the risk panel */
+    const i = bIdx((bp - px) / px * 100); if (i >= 0) BK[i].lend += usd;
+  });
+  /* HL whale positions (≥$5M, live-scaled) from the scanner */
+  document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
+    const rc = row.dataset.coin;
+    if (rc !== coin && rc !== "k" + coin) return;
+    const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
+    const mark0 = parseFloat(row.dataset.mark0) || px, v0 = parseFloat(row.dataset.val0) || 0;
+    const v = v0 * (px / mark0);
+    if (!(liq > 0) || !v) return;
+    const i = bIdx((liq - px) / px * 100); if (i < 0) return;
+    if (szi > 0 && liq < px) BK[i].wl += v;
+    else if (szi < 0 && liq > px) BK[i].ws += v;
+  });
+  const rows = BK.filter(b => b.lend + b.wl + b.ws > 0).map(b => ({...b, tot: b.lend + b.wl + b.ws}));
+  const legend = '<div class="lm-legend">' +
+    '<span class="k"><span class="dot" style="background:var(--down)"></span>lending (forced sells)</span>' +
+    '<span class="k"><span class="dot" style="background:#f0908a"></span>whale longs (sells)</span>' +
+    '<span class="k"><span class="dot" style="background:var(--up)"></span>whale shorts (forced buys)</span>' +
+    '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
+  if (!rows.length) {
+    body.innerHTML = legend + '<div class="empty">' +
+      (d && d.none ? "No on-chain lending book for " + esc(coin) + " and no mapped whale positions — the map fills in as whales appear."
+                   : "Nothing liquidatable mapped in ±30% for " + esc(coin) + " right now.") + "</div>";
+    return;
+  }
+  const max = Math.max(...rows.map(r => r.tot));
+  const magnet = rows.reduce((m, r) => r.tot > m.tot ? r : m, rows[0]);
+  const sumSell = rows.filter(r => r.p < 0).reduce((s, r) => s + r.tot, 0);
+  const sumBuy = rows.filter(r => r.p >= 0).reduce((s, r) => s + r.tot, 0);
+  const fpx = v => fmtPrice(v);
+  const mkRow = r => {
+    const seg = (v, cls) => v > 0 ? '<div class="' + cls + '" style="width:' + (v / r.tot * 100).toFixed(1) + '%"></div>' : "";
+    return '<div class="lm-row' + (r === magnet ? " magnet" : "") + '">' +
+      '<div class="lm-lvl">' + fpx(px * (1 + r.p / 100)) + ' <span class="pct">' + (r.p > 0 ? "+" : "") + r.p + "%</span></div>" +
+      '<div class="lm-track"><div class="lm-bar" style="width:' + Math.max(1.2, r.tot / max * 100).toFixed(1) + '%" title="' +
+        (r.lend ? "lending " + fmtBig(r.lend) + "  " : "") + (r.wl ? "whale longs " + fmtBig(r.wl) + "  " : "") + (r.ws ? "whale shorts " + fmtBig(r.ws) : "") + '">' +
+        seg(r.lend, "lm-lend") + seg(r.wl, "lm-wl") + seg(r.ws, "lm-ws") + "</div></div>" +
+      '<div class="lm-val">' + fmtBig(r.tot) + "</div></div>";
+  };
+  const above = rows.filter(r => r.p >= 0).sort((a, b) => b.p - a.p);
+  const below = rows.filter(r => r.p < 0).sort((a, b) => b.p - a.p);
+  body.innerHTML = legend +
+    '<div class="lm-sum"><b>' + esc(coin) + "</b> · sell-cascade fuel −30%: <b style='color:var(--down)'>" + fmtBig(sumSell) + "</b>" +
+      " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
+      " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + 2.5) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
+      (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") + "</div>" +
+    '<div class="lm-chart">' +
+      (above.length ? above.map(mkRow).join("") : '<div class="lm-side">no forced buys mapped above</div>') +
+      '<div class="lm-now"><div class="l">' + fpx(px) + '</div><div class="rule"></div><div></div></div>' +
+      (below.length ? below.map(mkRow).join("") : '<div class="lm-side">nothing at risk below in range</div>') +
+    "</div>";
+  const sub = $("lmSub");
+  if (sub) sub.textContent = "forced flow by price level · price live" + (d && d.t && !d.none ? " · book " + timeAgo(d.t) : "");
+}
+function lmAddCoin() {
+  const el = $("lmAdd");
+  const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!c) return;
+  if (!lmCoins.includes(c)) { lmCoins.push(c); lmCur = c; lmSave(); renderLiqmap(); fetchLiqmapCoin(c); }
+  else { lmCur = c; lmSave(); renderLiqmap(); }
+  el.value = "";
+}
+$("lmAddBtn").addEventListener("click", lmAddCoin);
+$("lmAdd").addEventListener("keydown", e => { if (e.key === "Enter") lmAddCoin(); });
+$("lmTabs").addEventListener("click", e => {
+  const x = e.target.closest("[data-lmx]");
+  if (x) {
+    e.stopPropagation();
+    lmCoins = lmCoins.filter(c => c !== x.dataset.lmx);
+    if (!lmCoins.length) lmCoins = ["ETH"];
+    if (!lmCoins.includes(lmCur)) lmCur = lmCoins[0];
+    lmSave(); renderLiqmap(); return;
+  }
+  const t = e.target.closest("[data-lm]");
+  if (t) { lmCur = t.dataset.lm; lmSave(); renderLiqmap(); }
+});
+setTimeout(() => lmCoins.forEach(fetchLiqmapCoin), 4000);
+setInterval(renderLiqmap, 1000);              /* live price + whale $ re-based every second */
+setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books refresh ~hourly upstream */
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
