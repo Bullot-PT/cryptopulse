@@ -3174,15 +3174,18 @@ async function fetchLiqmapCoin(coin) {
   try {
     const d = await fetchJSONraw("https://defillama-datasets.llama.fi/liqs/" + encodeURIComponent(key) + "/latest.json", {timeout: 40000});
     if (!d || !d.positions || !d.currentPrice) throw new Error("no book");
-    const px = d.currentPrice, step = px * 0.005; /* fine 0.5% bins in ABSOLUTE price, re-based to live px on render */
+    /* reference = LIVE price when we have it (DefiLlama snapshot prices can be badly stale);
+       wide band so a stale snapshot can't clip the clusters that matter around the real price */
+    const ref = lmLivePx(coin) || d.currentPrice;
+    const step = ref * 0.005; /* fine 0.5% bins in ABSOLUTE price, re-based to live px on every render */
     const bins = {};
     d.positions.forEach(q => {
       if (!(q.liqPrice > 0) || !(q.collateralValue > 0)) return;
-      if (q.liqPrice >= px * 1.02 || q.liqPrice < px * 0.55) return;
+      if (q.liqPrice < ref * 0.3 || q.liqPrice > ref * 2) return;
       const b = Math.round(q.liqPrice / step);
       bins[b] = (bins[b] || 0) + q.collateralValue;
     });
-    lmData[coin] = {step, bins, snapPx: px, t: Date.now()};
+    lmData[coin] = {step, bins, snapPx: d.currentPrice, t: Date.now()};
   } catch (e) { lmData[coin] = {none: true, t: Date.now()}; }
   renderLiqmap();
 }
@@ -3255,7 +3258,9 @@ function renderLiqmap() {
     '<div class="lm-sum"><b>' + esc(coin) + "</b> · sell-cascade fuel −30%: <b style='color:var(--down)'>" + fmtBig(sumSell) + "</b>" +
       " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
       " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + 2.5) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
-      (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") + "</div>" +
+      (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") +
+      (d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15
+        ? ' · <span style="color:var(--warn)" title="DefiLlama’s snapshot was taken at a very different price (' + fmtPrice(d.snapPx) + '). Some below-price bars may include positions already liquidated — treat magnitudes as approximate until the book refreshes.">⚠ book snapshot drifted</span>' : "") + "</div>" +
     '<div class="lm-chart">' +
       (above.length ? above.map(mkRow).join("") : '<div class="lm-side">no forced buys mapped above</div>') +
       '<div class="lm-now"><div class="l">' + fpx(px) + '</div><div class="rule"></div><div></div></div>' +
