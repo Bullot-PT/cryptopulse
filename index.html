@@ -437,7 +437,7 @@
   .lsx-coin:last-child { border-bottom: none; }
   .lsx-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
   .lsx-name { font-size: 13px; font-weight: 750; letter-spacing: 0.02em; }
-  .lsx-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; white-space: nowrap; }
+  .lsx-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px; white-space: nowrap; cursor: help; }
   .lsx-tag-div { background: rgba(250,178,25,0.15); color: var(--warn); }
   .lsx-tag-al { background: var(--surface-2); color: var(--muted); }
   .lsx-note { margin-left: auto; font-size: 10.5px; color: var(--muted); text-align: right; }
@@ -2289,7 +2289,10 @@ function pmEventCard(ev, opts) {
   if (opts.skipDecided && prices[li] > 0.985) return null;
   const pct = prices[li] * 100;
   const multi = (ev.markets || []).length > 1;
-  const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
+  const outLead = outcomes[li] || "Yes";
+  /* always name the side the % refers to — "↑ 72,500 · No" means 94% is the NO side */
+  const label = multi ? ((m.groupItemTitle || outLead) + (outLead && outLead !== (m.groupItemTitle || "") ? " · " + outLead : ""))
+                      : outLead;
   const end = ev.endDate ? new Date(ev.endDate) : null;
   pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || "", vol: parseFloat(ev.volume24hr) || 0};
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
@@ -2880,16 +2883,24 @@ function renderLsCrowd() {
     const crowdLong = crowd != null ? crowd >= 0.5 : null;
     let tag = "", note = "";
     if (whaleLong != null && crowdLong != null) {
-      if (crowdLong && !whaleLong) { tag = '<span class="lsx-tag lsx-tag-div">⚠ squeeze fuel ↑</span>'; note = "crowd long · whales short"; }
-      else if (!crowdLong && whaleLong) { tag = '<span class="lsx-tag lsx-tag-div">⚠ squeeze fuel ↓</span>'; note = "crowd short · whales long"; }
-      else { tag = '<span class="lsx-tag lsx-tag-al">aligned</span>'; note = whaleLong ? "both lean long" : "both lean short"; }
+      if (crowdLong && !whaleLong) {
+        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority LONG while whales are net SHORT. If price falls, crowd longs get liquidated — that forced selling fuels the drop (a move in the whales’ favor). The bigger the divergence, the more fuel.">⚠ squeeze fuel ↓</span>';
+        note = "crowd long · whales short";
+      } else if (!crowdLong && whaleLong) {
+        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority SHORT while whales are net LONG. If price rises, crowd shorts get liquidated — that forced buying fuels the rally (a move in the whales’ favor). The bigger the divergence, the more fuel.">⚠ squeeze fuel ↑</span>';
+        note = "crowd short · whales long";
+      } else {
+        tag = '<span class="lsx-tag lsx-tag-al" title="Whales and crowd lean the same way — no forced-flow conflict between smart money and retail on this coin.">aligned</span>';
+        note = whaleLong ? "both lean long" : "both lean short";
+      }
     }
     const srcs = [];
     if (whaleShare != null) {
       const cls = whaleLong ? "up" : "dn";
       srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">HL whales</span><span class="kind">on-chain net</span></div>' +
         lsxBar(whaleShare) + '<div class="lsx-pct">' + lsxPct(whaleShare) +
-        ' <span class="' + cls + '">' + (whaleLong ? "▲" : "▼") + " " + fmtBig(Math.abs(whaleNet)) + "</span></div></div>");
+        ' <span class="' + cls + '" title="Net dollar imbalance (longs − shorts) of the top-500 Hyperliquid wallets, live. The % alone hides size — 59/41 could be $2M or $500M. This is how much real money is behind the split; the CEX rows only count accounts, not dollars.">' +
+        (whaleLong ? "▲" : "▼") + " " + fmtBig(Math.abs(whaleNet)) + "</span></div></div>");
     }
     if (cex.bnG != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">retail ratio</span></div>' + lsxBar(cex.bnG) + '<div class="lsx-pct">' + lsxPct(cex.bnG) + "</div></div>");
     if (cex.bnT != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">top traders</span></div>' + lsxBar(cex.bnT) + '<div class="lsx-pct">' + lsxPct(cex.bnT) + "</div></div>");
