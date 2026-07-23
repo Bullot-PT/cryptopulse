@@ -1936,16 +1936,75 @@ $("pmBody").addEventListener("click", e => {
 });
 
 let pmCards = [], pmAlertsHTML = "";
+function pmEventCard(ev, opts) {
+  opts = opts || {};
+  const mkts = (ev.markets || []).filter(m => m.outcomePrices);
+  if (!mkts.length) return null;
+  mkts.sort((a, b) => (parseFloat(b.volume24hr) || 0) - (parseFloat(a.volume24hr) || 0));
+  const m = mkts[0];
+  let outcomes = [], prices = [];
+  try {
+    outcomes = JSON.parse(m.outcomes || "[]");
+    prices = JSON.parse(m.outcomePrices || "[]").map(Number);
+  } catch (e) { return null; }
+  if (!prices.length) return null;
+  let li = 0;
+  prices.forEach((p, i) => { if (p > prices[li]) li = i; });
+  if (opts.skipDecided && prices[li] > 0.985) return null;
+  const pct = prices[li] * 100;
+  const multi = (ev.markets || []).length > 1;
+  const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
+  const end = ev.endDate ? new Date(ev.endDate) : null;
+  return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
+    '<div class="pm-q">' + esc(ev.title) + "</div>" +
+    '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
+    '<span class="pm-outcome">' + esc(label) + "</span>" +
+    '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
+    '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
+    (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
+    "</div></a>";
+}
+let pmSearchTimer = null, pmSearchToken = 0;
 function renderPmRows() {
   const body = $("pmBody");
-  const q = ($("pmSearch").value || "").trim().toUpperCase();
-  const list = q ? pmCards.filter(c => c.t.toUpperCase().includes(q)) : pmCards.slice(0, 10);
+  const q = ($("pmSearch").value || "").trim();
+  const Q = q.toUpperCase();
+  const list = Q ? pmCards.filter(c => c.t.toUpperCase().includes(Q)) : pmCards.slice(0, 10);
   body.innerHTML = pmAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
-      (pmCards.length ? '<div class="empty">No market matching “' + esc(q) + "”.</div>" : ""));
-  $("pmSub").textContent = q ? list.length + " of " + pmCards.length + " markets" : "politics · macro · crypto · no sports";
+      (pmCards.length && !Q ? "" : "")) +
+    (Q.length >= 3 ? '<div id="pmRemote"><div class="empty">Searching all of Polymarket…</div></div>' :
+      (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
+  $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
 }
-$("pmSearch").addEventListener("input", renderPmRows);
+async function pmRemoteSearch(q) {
+  const token = ++pmSearchToken;
+  try {
+    const j = await fetchJSON("https://gamma-api.polymarket.com/public-search?q=" + encodeURIComponent(q) +
+      "&events_status=active&limit_per_type=12", {timeout: 15000});
+    if (token !== pmSearchToken) return;
+    const box = document.getElementById("pmRemote");
+    if (!box) return;
+    const localSlugs = new Set(pmCards.map(c => c.slug));
+    const cards = (j.events || []).filter(ev => !localSlugs.has(ev.slug))
+      .map(ev => pmEventCard(ev)).filter(Boolean);
+    box.innerHTML =
+      '<div class="oi-note" style="padding:6px 14px 2px">🔎 all of Polymarket — “' + esc(q) + "”</div>" +
+      (cards.length ? cards.join("") : '<div class="empty">Nothing on Polymarket for “' + esc(q) + "”.</div>") +
+      '<a class="liq-pos" style="padding:8px 14px" target="_blank" rel="noopener" ' +
+      'href="https://www.google.com/search?q=' + encodeURIComponent("site:kalshi.com " + q) + '">' +
+      '<span class="proto-badge">KALSHI</span><span>search “' + esc(q) + "” on Kalshi ↗ (their API blocks browser access)</span></a>";
+  } catch (e) {
+    const box = document.getElementById("pmRemote");
+    if (box && token === pmSearchToken) box.innerHTML = '<div class="empty">Polymarket search unavailable right now.</div>';
+  }
+}
+$("pmSearch").addEventListener("input", () => {
+  renderPmRows();
+  clearTimeout(pmSearchTimer);
+  const q = ($("pmSearch").value || "").trim();
+  if (q.length >= 3) pmSearchTimer = setTimeout(() => pmRemoteSearch(q), 550);
+});
 async function loadPolymarket() {
   const body = $("pmBody");
   const panelEl = document.querySelector('.grid-stack-item[gs-id="polymarket"] .panel');
@@ -1991,34 +2050,9 @@ async function loadPolymarket() {
     if (!Array.isArray(events) || !events.length) throw new Error("empty");
     const cards = [];
     for (const ev of events) {
-      if (false) break;
       if (!pmTopicOk(ev)) continue;
-      const mkts = (ev.markets || []).filter(m => m.outcomePrices);
-      if (!mkts.length) continue;
-      mkts.sort((a, b) => (parseFloat(b.volume24hr) || 0) - (parseFloat(a.volume24hr) || 0));
-      const m = mkts[0];
-      let outcomes = [], prices = [];
-      try {
-        outcomes = JSON.parse(m.outcomes || "[]");
-        prices = JSON.parse(m.outcomePrices || "[]").map(Number);
-      } catch (_) { continue; }
-      if (!prices.length) continue;
-      let li = 0;
-      prices.forEach((p, i) => { if (p > prices[li]) li = i; });
-      if (prices[li] > 0.985) continue; /* skip effectively-decided markets */
-      const pct = prices[li] * 100;
-      const multi = (ev.markets || []).length > 1;
-      const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
-      const end = ev.endDate ? new Date(ev.endDate) : null;
-      cards.push({t: ev.title || "",
-        h: '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
-          '<div class="pm-q">' + esc(ev.title) + "</div>" +
-          '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
-          '<span class="pm-outcome">' + esc(label) + "</span>" +
-          '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
-          '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
-          (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
-          "</div></a>"});
+      const h = pmEventCard(ev, {skipDecided: true});
+      if (h) cards.push({t: ev.title || "", slug: ev.slug, h});
     }
     if (!cards.length && !alertsHTML) throw new Error("no markets");
     pmCards = cards; pmAlertsHTML = alertsHTML;
