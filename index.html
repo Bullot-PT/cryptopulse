@@ -405,7 +405,7 @@
   <div class="spacer"></div>
   <span class="hint">drag panels by their header · drag edges to resize</span>
   <button class="btn-ghost" id="resetLayout" title="Restore the default panel arrangement">Reset layout</button>
-  <div class="updated"><span class="pulse-dot"></span><span id="updatedAt">connecting…</span></div>
+  <div class="updated"><span class="pulse-dot" id="liveDot" title="Live WebSocket feed"></span><span id="updatedAt">connecting…</span></div>
 </header>
 
 <div class="board-wrap">
@@ -695,7 +695,7 @@ function renderPriceRows() {
     const chg = c.price_change_percentage_24h;
     const spark = c.sparkline_in_7d && c.sparkline_in_7d.price
       ? sparkSVG(c.sparkline_in_7d.price.filter((_, idx) => idx % 4 === 0), (chg ?? 0) >= 0) : "";
-    return '<a class="price-row" data-i="' + i + '" target="_blank" rel="noopener" ' +
+    return '<a class="price-row" data-i="' + i + '" data-sym="' + esc((c.symbol||"").toUpperCase()) + '" target="_blank" rel="noopener" ' +
       'href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(tvSymbol(c.symbol)) + '">' +
       '<span class="rank">' + (i + 1) + "</span>" +
       '<img class="coin-icon" src="' + esc(c.image) + '" alt="" loading="lazy" ' +
@@ -1408,7 +1408,10 @@ function renderWhaleRows(rows, note) {
     rows.map(r => {
       const distTxt = r.dist == null ? "" :
         '<span class="pos-liq ' + (r.dist < 10 ? "chg-down" : "wrow-meta") + '">liq @ ' + fmtPrice(r.liq) + " · " + r.dist.toFixed(1) + "% away</span>";
-      return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" data-addr="' + esc(r.addr) + '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
+      return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" data-addr="' + esc(r.addr) +
+        '" data-coin="' + esc(r.coin) + '" data-liq="' + (r.liq || 0) + '" data-szi="' + r.szi +
+        '" data-mark0="' + r.mark + '" data-val0="' + r.value + '" data-upnl0="' + r.upnl +
+        '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
         '<div class="wrow-line">' +
           '<span class="side-badge ' + (r.szi > 0 ? "side-long\">LONG" : "side-short\">SHORT") + "</span>" +
           '<span class="wrow-coin">' + esc(r.coin) + '</span>' +
@@ -2323,6 +2326,98 @@ async function loadPolymarket() {
       setError(body, "Prediction-market feed unavailable right now.");
   }
 }
+
+/* ---------------- LIVE feeds via WebSocket (Binance prices + Hyperliquid mids) ---------------- */
+const liveMark = {}; /* coin -> latest mark price */
+function setLiveDot(on) {
+  const d = document.getElementById("liveDot");
+  if (d) d.style.background = on ? "var(--up)" : "var(--muted)";
+}
+/* Binance !miniTicker@arr → sub-second price + 24h% for the Prices panel */
+let bnWs = null, bnRetry = 0, priceThrottle = 0;
+function connectBinancePrices() {
+  try { bnWs = new WebSocket("wss://stream.binance.com:9443/ws/!miniTicker@arr"); }
+  catch (e) { return; }
+  bnWs.onopen = () => { bnRetry = 0; setLiveDot(true); };
+  bnWs.onmessage = ev => {
+    let arr; try { arr = JSON.parse(ev.data); } catch (e) { return; }
+    if (!Array.isArray(arr)) return;
+    /* build quick lookup of symbols we show */
+    const rows = document.querySelectorAll("#pricesBody .price-row");
+    if (!rows.length) return;
+    const bySym = {};
+    rows.forEach(r => { bySym[r.dataset.sym] = r; });
+    arr.forEach(t => {
+      if (!t.s || !t.s.endsWith("USDT")) return;
+      const base = t.s.slice(0, -4);
+      const row = bySym[base];
+      if (!row) return;
+      const price = parseFloat(t.c);
+      const open = parseFloat(t.o);
+      const chg = open ? (price - open) / open * 100 : null;
+      const pEl = row.querySelector(".price-val .p");
+      const cEl = row.querySelector(".price-val .chg-up, .price-val .chg-down");
+      if (pEl) pEl.textContent = fmtPrice(price);
+      if (cEl && chg != null) {
+        cEl.className = "c " + (chg >= 0 ? "chg-up" : "chg-down");
+        cEl.innerHTML = (chg >= 0 ? "▲ " : "▼ ") + Math.abs(chg).toFixed(2) + "%";
+      }
+      /* keep priceCoins in sync so the hover chart header shows live price */
+      const i = Number(row.dataset.i);
+      if (priceCoins[i]) { priceCoins[i].current_price = price; if (chg != null) priceCoins[i].price_change_percentage_24h = chg; }
+    });
+  };
+  bnWs.onclose = () => { setLiveDot(false); bnRetry++; setTimeout(connectBinancePrices, Math.min(15000, 1000 * bnRetry)); };
+  bnWs.onerror = () => { try { bnWs.close(); } catch (e) {} };
+}
+/* Hyperliquid allMids → live mark, recompute whale rows' value / distance-to-liq / flash every ~1s */
+let hlWs = null, hlRetry = 0, whaleThrottle = 0;
+function connectHyperMids() {
+  try { hlWs = new WebSocket("wss://api.hyperliquid.xyz/ws"); }
+  catch (e) { return; }
+  hlWs.onopen = () => {
+    hlRetry = 0;
+    hlWs.send(JSON.stringify({ method: "subscribe", subscription: { type: "allMids" } }));
+  };
+  hlWs.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (!m || m.channel !== "allMids" || !m.data || !m.data.mids) return;
+    Object.entries(m.data.mids).forEach(([c, p]) => { liveMark[c] = parseFloat(p); });
+    const nowT = Date.now();
+    if (nowT - whaleThrottle < 1000) return; /* ~1s cadence */
+    whaleThrottle = nowT;
+    updateWhaleLive();
+  };
+  hlWs.onclose = () => { hlRetry++; setTimeout(connectHyperMids, Math.min(15000, 1000 * hlRetry)); };
+  hlWs.onerror = () => { try { hlWs.close(); } catch (e) {} };
+}
+function updateWhaleLive() {
+  document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
+    const coin = row.dataset.coin;
+    const mark = liveMark[coin];
+    if (!mark) return;
+    const liq = parseFloat(row.dataset.liq);
+    const szi = parseFloat(row.dataset.szi);
+    const mark0 = parseFloat(row.dataset.mark0) || mark;
+    const val0 = parseFloat(row.dataset.val0) || 0;
+    const value = val0 * (mark / mark0); /* size fixed → value scales with mark */
+    let dist = null;
+    if (liq > 0) {
+      if (szi > 0 && liq < mark) dist = (mark - liq) / mark * 100;
+      if (szi < 0 && liq > mark) dist = (liq - mark) / mark * 100;
+    }
+    const distEl = row.querySelector(".pos-liq");
+    if (distEl && dist != null) {
+      distEl.className = "pos-liq " + (dist < 10 ? "chg-down" : "wrow-meta");
+      distEl.textContent = "liq @ " + fmtPrice(liq) + " · " + dist.toFixed(1) + "% away";
+    }
+    const valEl = row.querySelector(".wrow-val");
+    if (valEl) valEl.textContent = fmtBig(value);
+    const alert = value >= 25e6 && dist != null && dist <= 10;
+    row.classList.toggle("flash-red", alert);
+  });
+}
+setTimeout(() => { connectBinancePrices(); connectHyperMids(); }, 1500);
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
