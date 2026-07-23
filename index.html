@@ -759,7 +759,7 @@ function chgSpan(v, cls) {
 }
 
 /* fetch with timeout so panels degrade gracefully */
-async function fetchJSON(url, {timeout = 12000} = {}) {
+async function fetchJSONraw(url, {timeout = 12000} = {}) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeout);
   try {
@@ -767,6 +767,29 @@ async function fetchJSON(url, {timeout = 12000} = {}) {
     if (!r.ok) throw new Error("HTTP " + r.status);
     return await r.json();
   } finally { clearTimeout(t); }
+}
+/* CoinGecko's free tier rejects bursts (429). One queue spaces its calls out so the
+   startup rush doesn't trip the limit; every other API still fetches directly. */
+let cgChain = Promise.resolve(), cgLastAt = 0;
+function fetchJSON(url, opts) {
+  if (String(url).includes("api.coingecko.com")) {
+    const run = async () => {
+      const wait = cgLastAt + 1700 - Date.now();
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      cgLastAt = Date.now();
+      return fetchJSONraw(url, opts);
+    };
+    const p = cgChain.then(run, run);
+    cgChain = p.then(() => {}, () => {});
+    return p;
+  }
+  return fetchJSONraw(url, opts);
+}
+/* failed panel loads retry fast (25s) instead of waiting for the next full cycle */
+const retryTimers = {};
+function retrySoon(fn, key, ms) {
+  if (retryTimers[key]) return;
+  retryTimers[key] = setTimeout(() => { delete retryTimers[key]; fn(); }, ms || 25_000);
 }
 
 function setError(el, msg) { el.innerHTML = '<div class="error">' + esc(msg) + "</div>"; }
@@ -811,9 +834,26 @@ async function loadPrices() {
     priceCoins = data;
     renderPriceRows();
     markUpdated();
+    /* keep a slim copy so a rate-limited startup can still show last-known prices */
+    try {
+      const slim = data.map(c => ({id: c.id, symbol: c.symbol, name: c.name, image: c.image,
+        current_price: c.current_price, price_change_percentage_24h: c.price_change_percentage_24h,
+        sparkline_in_7d: {price: (c.sparkline_in_7d && c.sparkline_in_7d.price || []).filter((_, i, a) => i % Math.max(1, Math.ceil(a.length / 40)) === 0)}}));
+      localStorage.setItem("cryptopulse-prices-cache", JSON.stringify({t: Date.now(), d: slim}));
+    } catch (e) {}
   } catch (e) {
-    if (!body.querySelector(".price-row"))
-      setError(body, "Price feed unavailable right now — retrying automatically.");
+    if (!body.querySelector(".price-row")) {
+      let shown = false;
+      try {
+        const c = JSON.parse(localStorage.getItem("cryptopulse-prices-cache"));
+        if (c && Array.isArray(c.d) && c.d.length) {
+          priceCoins = c.d; renderPriceRows(); shown = true;
+          $("pricesSub").textContent = "cached " + timeAgo(c.t) + " · refreshing…";
+        }
+      } catch (er) {}
+      if (!shown) setError(body, "Price feed unavailable right now — retrying automatically.");
+    }
+    retrySoon(loadPrices, "prices");
   }
 }
 
@@ -2066,14 +2106,22 @@ async function loadGlobalOI() {
     if (!st.c.length || now - st.c[st.c.length - 1][0] > 55 * 60_000) st.c.push([now, Math.round(total)]);
     st.c = st.c.filter(x => x[0] > now - 7.2 * 86_400_000);
     goiStore.save(st);
+    try { localStorage.setItem("cryptopulse-goi-cache", JSON.stringify({t: Date.now(), rows: rows.slice(0, 12), total})); } catch (e) {}
     await renderGlobalOI(rows, total);
     markUpdated();
   } catch (e) {
-    if (!body.querySelector(".goi-hero"))
-      setError(body, "Global OI unavailable right now — retrying automatically.");
+    if (!body.querySelector(".goi-hero")) {
+      let shown = false;
+      try {
+        const c = JSON.parse(localStorage.getItem("cryptopulse-goi-cache"));
+        if (c && Array.isArray(c.rows) && c.rows.length) { await renderGlobalOI(c.rows, c.total, c.t); shown = true; }
+      } catch (er) {}
+      if (!shown) setError(body, "Global OI unavailable right now — retrying automatically.");
+    }
+    retrySoon(loadGlobalOI, "goi");
   }
 }
-async function renderGlobalOI(rows, total) {
+async function renderGlobalOI(rows, total, cachedAt) {
   const body = $("goiBody");
   const windowMs = goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
   const bucket = goiView === "1d" ? 4 * 60_000 : 40 * 60_000;
@@ -2091,7 +2139,8 @@ async function renderGlobalOI(rows, total) {
       '<span style="margin-left:auto" class="oi-side">1D</span>' +
       '<input type="range" id="goiSlider" min="0" max="1" step="1" value="' + (goiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
       '<span class="oi-side">7D</span></div>' +
-    '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1d" ? "today" : "last 7 days") + "</div>" +
+    '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1d" ? "today" : "last 7 days") +
+      (cachedAt ? ' · <span style="color:var(--warn)">cached ' + timeAgo(cachedAt) + " · refreshing…</span>" : "") + "</div>" +
     (series.length > 1 ? oiPopSVG(series) : '<div class="oi-note">history is building (collected 24/7 by the repo bot)…</div>') +
     "</div>" +
     rows.slice(0, 10).map(e =>
@@ -2179,6 +2228,7 @@ async function loadTrending() {
     resolveTrendLinks(body);
     markUpdated();
   } catch (e) {
+    retrySoon(loadTrending, "trending");
     if (!body.querySelector(".trend-row"))
       setError(body, "Trending feed unavailable right now.");
   }
@@ -2401,13 +2451,21 @@ function pmEventCard(ev, opts) {
     (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
     "</div></a>";
 }
-/* ---- odds-move detector: >=10pp shift in ~1h = information event ---- */
+/* ---- odds-move detector: >=10pp shift in ~1h = information event ----
+   One card per market, ever: re-triggers UPDATE the same card (only if the numbers changed).
+   Dismissing (✕) snoozes that market for 10 min — if it still qualifies after, it may return. */
 let pmOddsAlertsHTML = "";
-const oddsAlerted = new Set(); /* per session, per slug */
 function trackOddsMoves(oddsNow) {
   const hist = watchStore.get("cryptopulse-pm-odds", {});
   const now = Date.now();
-  const alerts = [];
+  const snooze = watchStore.get("cryptopulse-pm-odds-snooze", {});
+  const pre = watchStore.get("cryptopulse-pm-odds-alerts", []);
+  /* keep only recent alerts and ONE per market (cleans up any older duplicates too) */
+  const bySlug = {};
+  pre.filter(a => a.t > now - 3 * 3_600_000)
+     .forEach(a => { if (!bySlug[a.slug] || a.t > bySlug[a.slug].t) bySlug[a.slug] = a; });
+  let stored = Object.values(bySlug);
+  let dirty = stored.length !== pre.length, fresh = false;
   oddsNow.forEach(o => {
     if (!o || !o.slug) return;
     const arr = hist[o.slug] = (hist[o.slug] || []).filter(x => x[0] > now - 2 * 3_600_000);
@@ -2416,23 +2474,26 @@ function trackOddsMoves(oddsNow) {
       .sort((a, b) => Math.abs((now - 3_600_000) - a[0]) - Math.abs((now - 3_600_000) - b[0]))[0];
     if (base) {
       const delta = o.pct - base[1];
-      if (Math.abs(delta) >= 10 && !oddsAlerted.has(o.slug)) {
-        oddsAlerted.add(o.slug);
-        /* base[2] = volume24hr snapshot an hour ago; volume only rises within a day */
+      const snoozedAt = snooze[o.slug];
+      if (Math.abs(delta) >= 10 && !(snoozedAt && now - snoozedAt < 10 * 60_000)) {
         const dvol = base[2] != null ? Math.max(0, (o.vol || 0) - base[2]) : null;
-        alerts.push({slug: o.slug, title: o.title, label: o.label,
-          pct: o.pct, from: base[1], delta, dvol, t: now});
+        const ex = stored.find(a => a.slug === o.slug);
+        if (!ex) {
+          stored.push({slug: o.slug, title: o.title, label: o.label, pct: o.pct, from: base[1], delta, dvol, t: now});
+          dirty = true; fresh = true;
+        } else if (Math.round(ex.pct) !== Math.round(o.pct) || Math.round(ex.delta) !== Math.round(delta)) {
+          /* same market, NEW numbers → refresh the same card and chime again */
+          ex.pct = o.pct; ex.from = base[1]; ex.delta = delta; ex.dvol = dvol; ex.t = now;
+          dirty = true; fresh = true;
+        } /* identical numbers while the card is still on the page → stay silent */
       }
     }
     if (!arr.length || now - arr[arr.length - 1][0] > 5 * 60_000) arr.push([now, o.pct, o.vol || 0]);
   });
   watchStore.set("cryptopulse-pm-odds", hist);
-  if (alerts.length) {
-    const stored = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.t > now - 3 * 3_600_000);
-    watchStore.set("cryptopulse-pm-odds-alerts", stored.concat(alerts).slice(-8));
-    playBeep();
-  }
-  const act = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.t > now - 3 * 3_600_000);
+  if (dirty) watchStore.set("cryptopulse-pm-odds-alerts", stored.slice(-8));
+  if (fresh) playBeep();
+  const act = stored.filter(a => a.t > now - 3 * 3_600_000);
   pmOddsAlertsHTML = act.map(a => {
     const up = a.delta > 0;
     const move = a.from != null
@@ -2454,6 +2515,10 @@ $("pmBody").addEventListener("click", e => {
   e.preventDefault(); e.stopPropagation();
   const rest = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.slug !== x.dataset.odds);
   watchStore.set("cryptopulse-pm-odds-alerts", rest);
+  /* dismissed = not important right now → snooze this market for 10 min */
+  const sn = watchStore.get("cryptopulse-pm-odds-snooze", {});
+  sn[x.dataset.odds] = Date.now();
+  watchStore.set("cryptopulse-pm-odds-snooze", sn);
   const al = x.closest(".bet-alert");
   if (al) al.remove();
 });
