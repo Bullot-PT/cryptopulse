@@ -269,12 +269,15 @@
 
   /* ---------- OI source buttons ---------- */
   .src-btn {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-    color: var(--muted); font-size: 9.5px; font-weight: 700; padding: 2px 7px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--muted); font-size: 10px; font-weight: 700; padding: 3px 7px;
     cursor: pointer; font-family: inherit; letter-spacing: 0.02em;
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    min-width: 30px; height: 24px; opacity: 0.62; transition: opacity .12s, border-color .12s;
   }
-  .src-btn:hover { color: var(--ink); }
-  .src-on { border-color: var(--accent); color: var(--accent); }
+  .src-btn img { width: 15px; height: 15px; border-radius: 4px; display: block; }
+  .src-btn:hover { color: var(--ink); opacity: 1; }
+  .src-on { border-color: var(--accent); color: var(--accent); opacity: 1; box-shadow: 0 0 0 1px rgba(57,135,229,0.35); }
 
   /* ---------- OI chart ---------- */
   .oi-box { padding: 10px 14px 8px; border-bottom: 1px solid var(--grid); }
@@ -967,9 +970,13 @@ async function renderPerpPop() {
   let lastT = 0;
   merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
   const curVal = r.src[perpOiSrc] || 0;
+  const SRC_DOMAIN = {HL: "hyperliquid.xyz", BN: "binance.com", BB: "bybit.com", OK: "okx.com"};
   const btns = Object.keys(SRC_LABELS).map(s =>
     '<button class="src-btn' + (s === perpOiSrc ? " src-on" : "") + '" data-src="' + s + '" title="' + SRC_LABELS[s] + '">' +
-    (s === "AGG" ? "Σ AGG" : s) + "</button>").join(" ");
+    (s === "AGG" ? "Σ" :
+      '<img src="https://www.google.com/s2/favicons?domain=' + SRC_DOMAIN[s] + '&sz=32" alt="' + s + '" ' +
+      "onerror=\"this.replaceWith(document.createTextNode('" + s + "'))\">") +
+    "</button>").join(" ");
   pricePop.innerHTML =
     '<div class="pp-head"><span class="pp-name">' + esc(r.coin) + "</span>" +
     '<span class="pp-px">OI ' + fmtBig(curVal) + "</span>" +
