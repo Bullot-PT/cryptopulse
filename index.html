@@ -674,8 +674,8 @@ function applyLayout(items) {
   const byId = {};
   items.forEach(it => { byId[it.id] = it; });
   applyingLayout = true; /* never let programmatic moves overwrite the user's saved layout */
+  try { grid.float(true); } catch (e) {} /* suspend auto-compact so every panel lands EXACTLY where told */
   grid.batchUpdate();
-  /* apply in reading order (top-left first) so float:false collision-pushes can't shuffle panels */
   const els = [...document.querySelectorAll(".grid-stack-item")].sort((a, b) => {
     const ia = byId[a.getAttribute("gs-id")] || {y: 999, x: 999};
     const ib = byId[b.getAttribute("gs-id")] || {y: 999, x: 999};
@@ -686,6 +686,7 @@ function applyLayout(items) {
     if (it) grid.update(el, {x: it.x, y: it.y, w: it.w, h: it.h});
   });
   grid.batchUpdate(false);
+  try { grid.float(false); } catch (e) {} /* re-enable auto-compact; a gapless layout stays put */
   applyingLayout = false;
 }
 function initGrid() {
