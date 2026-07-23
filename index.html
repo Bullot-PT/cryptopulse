@@ -443,6 +443,10 @@
   .lsx-note { margin-left: auto; font-size: 10.5px; color: var(--muted); text-align: right; }
   .lsx-src { display: grid; grid-template-columns: 104px 1fr minmax(78px, auto); align-items: center; gap: 8px; padding: 3px 0; }
   .lsx-pct { white-space: nowrap; }
+  .lsx-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 2px; flex: 0 0 auto; }
+  .lsx-del:hover { color: var(--down); }
+  .side-badge.fresh { background: rgba(250,178,25,0.15); color: var(--warn); cursor: help; }
+  .side-badge.inflow { background: rgba(57,135,229,0.15); color: var(--accent); cursor: help; }
   .lsx-label { font-size: 11px; color: var(--ink-2); display: flex; flex-direction: column; line-height: 1.25; }
   .lsx-label .who { font-weight: 600; color: var(--ink); }
   .lsx-label .kind { font-size: 9.5px; color: var(--muted); }
@@ -605,7 +609,13 @@
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
-        <div class="panel-body" id="lsxBody"><div class="empty">Loading positioning…</div></div>
+        <div class="panel-body" id="lsxOuter">
+          <div class="scan-bar">
+            <input class="scan-input" id="lsxAdd" placeholder="add a token to compare — e.g. HYPE, PEPE — press Enter" spellcheck="false">
+            <button class="btn-ghost" id="lsxAddBtn">+ add</button>
+          </div>
+          <div id="lsxBody"><div class="empty">Loading positioning…</div></div>
+        </div>
       </div></div>
     </div>
   </div>
@@ -1473,6 +1483,20 @@ function whaleDist(szi, liq, mark) {
   if (szi < 0 && liq > mark) return (liq - mark) / mark * 100;   /* short liquidates above */
   return null;
 }
+/* fresh-wallet detector: ~all of the account's lifetime volume happened in the last week/month
+   → newly funded (or long-dormant) wallet suddenly opening size. Classic informed-money footprint. */
+function whaleFreshness(addr) {
+  const lb = hlLb.byAddr[(addr || "").toLowerCase()];
+  if (!lb) return null;
+  let perf = {}; try { perf = Object.fromEntries(lb.windowPerformances); } catch (e) { return null; }
+  const at = parseFloat((perf.allTime || {}).vlm) || 0;
+  const wk = parseFloat((perf.week  || {}).vlm) || 0;
+  const mo = parseFloat((perf.month || {}).vlm) || 0;
+  if (!at) return null;
+  if (wk / at >= 0.9) return "week";
+  if (mo / at >= 0.9) return "month";
+  return null;
+}
 function whaleRow(p, addr, mids) {
   const szi = parseFloat(p.szi);
   const value = Math.abs(parseFloat(p.positionValue));
@@ -1481,7 +1505,29 @@ function whaleRow(p, addr, mids) {
   const dist = whaleDist(szi, liq, mark);
   const upnl = parseFloat(p.unrealizedPnl);
   const lev = p.leverage && p.leverage.value;
-  return {coin: p.coin, szi, value, mark, liq, dist, upnl, lev, entry: parseFloat(p.entryPx), addr};
+  return {coin: p.coin, szi, value, mark, liq, dist, upnl, lev, entry: parseFloat(p.entryPx), addr, fresh: whaleFreshness(addr)};
+}
+/* chain 'indexer': read each wallet's on-chain ledger (deposits + incoming transfers) straight from Hyperliquid.
+   Fresh USDC arriving in the last 48h while the wallet runs size = new ammo, often ahead of a move. */
+const depCache = {}; /* addr -> {t, v} — 10-min cache to stay friendly with the API */
+async function walletInflow48h(addr) {
+  const c = depCache[addr];
+  const now = Date.now();
+  if (c && now - c.t < 600_000) return c.v;
+  let v = 0;
+  try {
+    const j = await fetchHL({type: "userNonFundingLedgerUpdates", user: addr, startTime: now - 48 * 3_600_000});
+    (Array.isArray(j) ? j : []).forEach(u => {
+      const d = u.delta || {};
+      const usd = parseFloat(d.usdcValue || d.amount) || 0;
+      if (d.type === "deposit") v += usd; /* bridged in from Arbitrum */
+      else if ((d.type === "send" || d.type === "spotTransfer") &&
+               (d.destination || "").toLowerCase() === addr.toLowerCase() &&
+               (d.user || "").toLowerCase() !== addr.toLowerCase()) v += usd; /* received from another wallet */
+    });
+  } catch (e) { return c ? c.v : 0; }
+  depCache[addr] = {t: now, v};
+  return v;
 }
 /* ---- whale watchlist: pin wallets, detect position changes between scans ---- */
 const watchStore = {
@@ -1579,6 +1625,13 @@ function renderWhaleRows(rows, note) {
         '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
         '<div class="wrow-line">' +
           '<span class="side-badge ' + (r.szi > 0 ? "side-long\">LONG" : "side-short\">SHORT") + "</span>" +
+          (r.fresh ? '<span class="side-badge fresh" title="' + (r.fresh === "week"
+            ? "Fresh wallet: ~all of this account’s lifetime trading volume happened in the last 7 days — a newly funded (or long-dormant) account suddenly opening size. Classic footprint of informed money positioning before news."
+            : "Recent wallet: ~all of this account’s lifetime trading volume happened within the last month — a young account already running size.") +
+            '">🆕 ' + (r.fresh === "week" ? "NEW" : "1M") + "</span>" : "") +
+          (r.inflow >= 250_000 ? '<span class="side-badge inflow" title="Fresh money on-chain: this wallet received ' + fmtBig(r.inflow) +
+            ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">💰 +' +
+            fmtBig(r.inflow) + "</span>" : "") +
           '<span class="wrow-coin">' + esc(r.coin) + '</span>' +
           '<span class="wrow-val">' + fmtBig(r.value) + '</span>' +
           '<span class="wrow-meta">' + (r.lev ? r.lev + "x" : "") + "</span>" +
@@ -1602,9 +1655,12 @@ async function loadWhales() {
     const wvlm = r => { try { return parseFloat(Object.fromEntries(r.windowPerformances).week.vlm) || 0; } catch (e) { return 0; } };
     const byVal = [...rows].sort((a, b) => val(b) - val(a)).slice(0, 70);
     const byVlm = [...rows].sort((a, b) => wvlm(b) - wvlm(a)).slice(0, 30);
+    /* fresh wallets: ≥90% of lifetime volume happened this week AND ≥$500k account — newly funded accounts opening size */
+    const isFresh = r => { try { const p = Object.fromEntries(r.windowPerformances); const at = parseFloat(p.allTime.vlm) || 0; return at > 0 && (parseFloat(p.week.vlm) || 0) / at >= 0.9; } catch (e) { return false; } };
+    const byFresh = rows.filter(r => isFresh(r) && val(r) >= 500_000).sort((a, b) => val(b) - val(a)).slice(0, 25);
     const seen = new Set(), candidates = [];
     getPinned().forEach(a => { if (!seen.has(a)) { seen.add(a); candidates.push(a); } });
-    byVal.concat(byVlm).forEach(r => {
+    byVal.concat(byVlm, byFresh).forEach(r => {
       if (!seen.has(r.ethAddress)) { seen.add(r.ethAddress); candidates.push(r.ethAddress); }
     });
     const mids = await fetchHL({type: "allMids"});
@@ -1629,11 +1685,20 @@ async function loadWhales() {
         }
       });
     }
-    /* biggest position first — a smaller one only outranks it when it's flashing red (>$25M within 10% of liq) */
+    /* chain-ledger pass: check the displayed wallets for fresh USDC arriving in the last 48h */
+    const uniqAddrs = [...new Set(found.map(r => r.addr))].slice(0, 30);
+    for (let i = 0; i < uniqAddrs.length; i += 10) {
+      await Promise.allSettled(uniqAddrs.slice(i, i + 10).map(a => walletInflow48h(a)));
+    }
+    found.forEach(r => { r.inflow = (depCache[r.addr] || {}).v || 0; });
+    /* flashing-red alerts first, then fresh wallets / fresh money (🆕 💰), then biggest position */
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
       if (fa !== fb) return fb - fa;
       if (fa && fb) return a.dist - b.dist;
+      const na = (a.fresh === "week" || a.inflow >= 500_000) ? 2 : a.fresh ? 1 : 0;
+      const nb = (b.fresh === "week" || b.inflow >= 500_000) ? 2 : b.fresh ? 1 : 0;
+      if (na !== nb) return nb - na;
       return b.value - a.value;
     });
     $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned";
@@ -2846,16 +2911,26 @@ initCustomAlerts();
 
 /* ---------------- whales vs crowd (multi-exchange sentiment, live) ---------------- */
 let lsSnapshot = {t: 0, coins: {}};
-const LSX_COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE"];
+const LSX_DEFAULT = ["BTC", "ETH", "SOL", "XRP", "DOGE"];
+let LSX_COINS = (() => {
+  try { const v = JSON.parse(localStorage.getItem("cryptopulse-lsx-coins")); return Array.isArray(v) && v.length ? v : LSX_DEFAULT.slice(); }
+  catch (e) { return LSX_DEFAULT.slice(); }
+})();
+function lsxSave() { try { localStorage.setItem("cryptopulse-lsx-coins", JSON.stringify(LSX_COINS)); } catch (e) {} }
 const lsxCex = {}; /* coin -> {bnG, bnT, by, t} */
 let lsxCexFetched = 0;
 async function fetchLsxCex() {
-  await Promise.all(LSX_COINS.map(async coin => {
-    const sym = coin + "USDT";
+  await Promise.all(LSX_COINS.slice().map(async coin => {
+    /* try SYMUSDT, then 1000SYMUSDT (micro-price coins like PEPE/BONK/SHIB on CEX futures) */
+    const syms = [coin + "USDT", "1000" + coin + "USDT"];
     const o = lsxCex[coin] || (lsxCex[coin] = {});
-    try { const b = await fetchJSON("https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) o.bnG = +b[0].longAccount; } catch (e) {}
-    try { const b = await fetchJSON("https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) o.bnT = +b[0].longAccount; } catch (e) {}
-    try { const b = await fetchJSON("https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=" + sym + "&period=5min&limit=1", {timeout: 8000}); if (b && b.result && b.result.list && b.result.list[0]) o.by = +b.result.list[0].buyRatio; } catch (e) {}
+    for (const sym of syms) {
+      let hit = false;
+      try { const b = await fetchJSON("https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) { o.bnG = +b[0].longAccount; hit = true; } } catch (e) {}
+      try { const b = await fetchJSON("https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) { o.bnT = +b[0].longAccount; hit = true; } } catch (e) {}
+      try { const b = await fetchJSON("https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=" + sym + "&period=5min&limit=1", {timeout: 8000}); if (b && b.result && b.result.list && b.result.list[0]) { o.by = +b.result.list[0].buyRatio; hit = true; } } catch (e) {}
+      if (hit) break;
+    }
     o.t = Date.now();
   }));
   lsxCexFetched = Date.now();
@@ -2872,14 +2947,21 @@ function renderLsCrowd() {
   const rows = LSX_COINS.map(coin => {
     const cex = lsxCex[coin] || {};
     const crowd = lsxCrowdAvg(cex);
-    const snap = lsSnapshot.coins[coin];
+    /* HL uses k-prefixed names for micro-price coins (kPEPE, kBONK) */
+    const hlName = lsSnapshot.coins[coin] ? coin : (lsSnapshot.coins["k" + coin] ? "k" + coin : coin);
+    const snap = lsSnapshot.coins[hlName];
     let whaleShare = null, whaleNet = null;
     if (snap && (snap.long + snap.short) > 0) {
       whaleShare = snap.long / (snap.long + snap.short);
       whaleNet = snap.net;
-      if (snap.markRef && liveMark[coin]) whaleNet = snap.net * (liveMark[coin] / snap.markRef); /* live-scaled $ */
+      if (snap.markRef && liveMark[hlName]) whaleNet = snap.net * (liveMark[hlName] / snap.markRef); /* live-scaled $ */
     }
-    if (crowd == null && whaleShare == null) return "";
+    if (crowd == null && whaleShare == null) {
+      if (!lsxCexFetched) return "";
+      return '<div class="lsx-coin"><div class="lsx-top"><span class="lsx-name">' + esc(coin) + "</span>" +
+        '<span class="lsx-note">no data — not on Binance/Bybit futures &amp; top-500 HL whales hold none</span>' +
+        '<button class="lsx-del" data-del="' + esc(coin) + '" title="Remove">✕</button></div></div>';
+    }
     const whaleLong = whaleShare != null ? whaleShare >= 0.5 : null;
     const crowdLong = crowd != null ? crowd >= 0.5 : null;
     let tag = "", note = "";
@@ -2906,7 +2988,9 @@ function renderLsCrowd() {
     if (cex.bnG != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">retail ratio</span></div>' + lsxBar(cex.bnG) + '<div class="lsx-pct">' + lsxPct(cex.bnG) + "</div></div>");
     if (cex.bnT != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">top traders</span></div>' + lsxBar(cex.bnT) + '<div class="lsx-pct">' + lsxPct(cex.bnT) + "</div></div>");
     if (cex.by != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Bybit</span><span class="kind">account ratio</span></div>' + lsxBar(cex.by) + '<div class="lsx-pct">' + lsxPct(cex.by) + "</div></div>");
-    return '<div class="lsx-coin"><div class="lsx-top"><span class="lsx-name">' + coin + "</span>" + tag + '<span class="lsx-note">' + note + "</span></div>" + srcs.join("") + "</div>";
+    return '<div class="lsx-coin"><div class="lsx-top"><span class="lsx-name">' + esc(coin) + "</span>" + tag +
+      '<span class="lsx-note">' + note + "</span>" +
+      '<button class="lsx-del" data-del="' + esc(coin) + '" title="Remove from this panel">✕</button></div>' + srcs.join("") + "</div>";
   }).filter(Boolean).join("");
   if (!rows) { if (!body.querySelector(".lsx-coin")) body.innerHTML = '<div class="empty">Loading positioning…</div>'; return; }
   body.innerHTML =
@@ -2918,6 +3002,22 @@ function renderLsCrowd() {
 }
 setTimeout(fetchLsxCex, 3000);
 setInterval(renderLsCrowd, 1000); /* live-scale whale $ + refresh every second */
+/* fully customizable token list — add via the bar, remove via ✕, saved per-browser */
+function lsxAddCoin() {
+  const el = document.getElementById("lsxAdd");
+  const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!c) return;
+  if (!LSX_COINS.includes(c)) { LSX_COINS.push(c); lsxSave(); renderLsCrowd(); fetchLsxCex(); }
+  el.value = "";
+}
+document.getElementById("lsxAddBtn").addEventListener("click", lsxAddCoin);
+document.getElementById("lsxAdd").addEventListener("keydown", e => { if (e.key === "Enter") lsxAddCoin(); });
+document.getElementById("lsxBody").addEventListener("click", e => {
+  const d = e.target.closest(".lsx-del"); if (!d) return;
+  e.preventDefault();
+  LSX_COINS = LSX_COINS.filter(c => c !== d.dataset.del);
+  lsxSave(); renderLsCrowd();
+});
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
