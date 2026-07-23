@@ -2615,11 +2615,22 @@ setTimeout(() => { connectBinancePrices(); connectHyperMids(); }, 1500);
 const CA = {
   rules: [],
   tg: {token: "", chat: ""},
-  fired: {},            /* signature -> last-fired ms (cooldown) */
-  COOLDOWN: 15 * 60_000
+  fired: {},            /* signature -> last-fired ms (cooldown, persisted) */
+  COOLDOWN: 60 * 60_000 /* one ping per hour for the same alert */
 };
+/* fired-times live in localStorage so a page reload OR another open tab won't re-ping */
+function caFiredMap() {
+  try {
+    const m = JSON.parse(localStorage.getItem("cryptopulse-ca-fired") || "{}");
+    const now = Date.now(); let changed = false;
+    for (const k in m) { if (now - m[k] > CA.COOLDOWN) { delete m[k]; changed = true; } } /* prune expired */
+    if (changed) try { localStorage.setItem("cryptopulse-ca-fired", JSON.stringify(m)); } catch (e) {}
+    return m;
+  } catch (e) { return {}; }
+}
 function caLoad() {
   try { CA.rules = JSON.parse(localStorage.getItem("cryptopulse-ca-rules") || "[]"); } catch (e) { CA.rules = []; }
+  CA.fired = caFiredMap();
   try {
     CA.tg.token = localStorage.getItem("cryptopulse-tg-token") || "";
     CA.tg.chat  = localStorage.getItem("cryptopulse-tg-chat")  || "";
@@ -2696,8 +2707,11 @@ function caBrowserNotify(title, body) {
 function fireCustomAlert(rule, sig, msg) {
   const now = Date.now();
   const key = rule.id + "|" + sig;
-  if (CA.fired[key] && now - CA.fired[key] < CA.COOLDOWN) return;
-  CA.fired[key] = now;
+  const fired = caFiredMap();               /* read fresh — respects other tabs + past reloads */
+  if (fired[key] && now - fired[key] < CA.COOLDOWN) return;
+  fired[key] = now;
+  try { localStorage.setItem("cryptopulse-ca-fired", JSON.stringify(fired)); } catch (e) {}
+  CA.fired = fired;
   rule.lastMsg = msg; caSaveRules(); renderCaRules();
   const rowEl = document.querySelector('.ca-rule[data-rid="' + rule.id + '"]');
   if (rowEl) { rowEl.classList.add("hot"); setTimeout(() => rowEl.classList.remove("hot"), 20_000); }
@@ -2778,8 +2792,23 @@ function initCustomAlerts() {
   valIn.addEventListener("keydown", e => { if (e.key === "Enter") $("caAdd").click(); });
   $("caRules").addEventListener("click", e => {
     const x = e.target.closest(".ca-rule-x"); if (!x) return;
-    CA.rules = CA.rules.filter(r => r.id !== x.dataset.rid);
+    const rid = x.dataset.rid;
+    CA.rules = CA.rules.filter(r => r.id !== rid);
     caSaveRules(); renderCaRules();
+    /* forget this rule's fired-state so a future rule isn't muted by it */
+    const fired = caFiredMap(); let changed = false;
+    for (const k in fired) { if (k.indexOf(rid + "|") === 0) { delete fired[k]; changed = true; } }
+    if (changed) try { localStorage.setItem("cryptopulse-ca-fired", JSON.stringify(fired)); } catch (er) {}
+    CA.fired = fired;
+  });
+  /* if a rule is added/deleted in ANOTHER tab, re-sync here so a cancelled alert stops everywhere */
+  window.addEventListener("storage", ev => {
+    if (ev.key === "cryptopulse-ca-rules") {
+      try { CA.rules = JSON.parse(ev.newValue || "[]"); } catch (e) { CA.rules = []; }
+      renderCaRules();
+    } else if (ev.key === "cryptopulse-ca-fired") {
+      CA.fired = caFiredMap();
+    }
   });
   /* telegram setup */
   $("caTgToggle").addEventListener("click", () => {
