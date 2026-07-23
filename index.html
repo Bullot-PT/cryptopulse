@@ -3185,7 +3185,8 @@ async function fetchLmBotBook() {
 /* source selector: aggregate + one button per DEX (more perp DEXes plug in here one by one) */
 const LM_SOURCES = [
   {k: "AGG", label: "Σ Aggregate", tip: "All sources combined"},
-  {k: "HL", label: "Hyperliquid", tip: "Hyperliquid perps only — full wallet book"},
+  {k: "HL", label: "Hyperliquid", tip: "Hyperliquid perps only — full wallet book (bot, 15-min cycle)"},
+  {k: "DYDX", label: "dYdX", tip: "dYdX v4 perps only — COMPLETE on-chain book, every subaccount on the chain (bot, 15-min cycle)"},
   {k: "LEND", label: "Lending", tip: "On-chain lending books only (all lenders, all chains via DefiLlama)"}
 ];
 let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
@@ -3232,15 +3233,30 @@ function renderLiqmap() {
   /* display buckets: 2.5% steps, −30%..+30%, re-based to the LIVE price every render */
   const BK = []; for (let p = -30; p < 30; p += 2.5) BK.push({p, lend: 0, wl: 0, ws: 0});
   const bIdx = pct => { const i = Math.floor((pct + 30) / 2.5); return i >= 0 && i < BK.length ? i : -1; };
-  if (lmSrc !== "HL" && d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
+  if ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
     const bp = (+b) * d.step;
     if (bp >= px) return; /* above live price = effectively gone; same strict rule as the risk panel */
     const i = bIdx((bp - px) / px * 100); if (i >= 0) BK[i].lend += usd;
   });
   /* HL positions, best source available: bot's FULL leaderboard book (≤2500 wallets, 15-min cycle)
      → browser 500-wallet book → ≥$5M whale-scanner rows */
-  let hlSrcUsed = null;
-  if (lmSrc !== "LEND") {
+  let hlSrcUsed = null, dydxUsed = false;
+  /* dYdX: complete chain book from the bot */
+  if (lmSrc === "AGG" || lmSrc === "DYDX") {
+    const dx = lmBotBook.dydx;
+    const dd = dx && dx.coins && (dx.coins[coin] || dx.coins["k" + coin]);
+    if (dd && Date.now() - (dx.t || 0) < 60 * 60_000) {
+      dydxUsed = true;
+      const scale = dd.px ? px / dd.px : 1;
+      Object.entries(dd.bins || {}).forEach(([b, cell]) => {
+        const bp = (+b) * dd.step;
+        const i = bIdx((bp - px) / px * 100); if (i < 0) return;
+        if (cell[0] && bp < px) BK[i].wl += cell[0] * scale;
+        if (cell[1] && bp > px) BK[i].ws += cell[1] * scale;
+      });
+    }
+  }
+  if (lmSrc === "AGG" || lmSrc === "HL") {
     const bot = lmBotBook.coins && (lmBotBook.coins[coin] || lmBotBook.coins["k" + coin]);
     const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
     if (bot && Date.now() - lmBotBook.t < 45 * 60_000) {
@@ -3279,8 +3295,8 @@ function renderLiqmap() {
   const rows = BK.filter(b => b.lend + b.wl + b.ws > 0).map(b => ({...b, tot: b.lend + b.wl + b.ws}));
   const legend = '<div class="lm-legend">' +
     '<span class="k" title="On-chain lending collateral (DefiLlama — all lenders, all chains) that gets sold if price falls to that level"><span class="dot" style="background:var(--down)"></span>lending (forced sells)</span>' +
-    '<span class="k" title="Longs of the top-500 Hyperliquid wallets (every size, from the 15-min scan) liquidated at that level"><span class="dot" style="background:#f0908a"></span>HL longs (sells)</span>' +
-    '<span class="k" title="Shorts of the top-500 Hyperliquid wallets liquidated at that level — forced BUYING that fuels rallies"><span class="dot" style="background:var(--up)"></span>HL shorts (forced buys)</span>' +
+    '<span class="k" title="Perp longs across the integrated DEXes (Hyperliquid full book + dYdX complete chain book) liquidated at that level — forced selling"><span class="dot" style="background:#f0908a"></span>perp longs (sells)</span>' +
+    '<span class="k" title="Perp shorts across the integrated DEXes liquidated at that level — forced BUYING that fuels rallies"><span class="dot" style="background:var(--up)"></span>perp shorts (forced buys)</span>' +
     '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
   if (!rows.length) {
     body.innerHTML = legend + '<div class="empty">' +
@@ -3319,12 +3335,11 @@ function renderLiqmap() {
     "</div>";
   const sub = $("lmSub");
   if (sub) sub.textContent = "forced flow by price level · price live" +
-    (lmSrc !== "AGG" ? " · " + (lmSrc === "HL" ? "Hyperliquid only" : "lending only") : "") +
-    (lmSrc !== "LEND"
-      ? (hlSrcUsed === "bot" ? " · HL full book (" + (lmBotBook.wallets || "?") + " wallets) " + timeAgo(lmBotBook.t)
-        : hlSrcUsed === "scan" ? " · HL 500-wallet book " + timeAgo(hlLiqBook.t) : "")
-      : "") +
-    (lmSrc !== "HL" && d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
+    (lmSrc !== "AGG" ? " · " + (lmSrc === "HL" ? "Hyperliquid only" : lmSrc === "DYDX" ? "dYdX only" : "lending only") : "") +
+    (hlSrcUsed === "bot" ? " · HL (" + (lmBotBook.wallets || "?") + "w) " + timeAgo(lmBotBook.t)
+      : hlSrcUsed === "scan" ? " · HL 500w " + timeAgo(hlLiqBook.t) : "") +
+    (dydxUsed ? " · dYdX (" + (lmBotBook.dydx.subs || "?") + " accts) " + timeAgo(lmBotBook.dydx.t) : "") +
+    ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
 }
 function lmAddCoin() {
   const el = $("lmAdd");

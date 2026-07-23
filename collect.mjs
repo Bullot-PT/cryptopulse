@@ -152,6 +152,75 @@ try {
   console.log('liq-book:', scanned, 'wallets,', positions, 'positions,', Object.keys(book).length, 'coins');
 } catch (e) { console.log('liq-book failed', e.message); }
 
+// ---------------- dYdX v4: FULL on-chain book (EVERY subaccount, ~26 pages) ----------------
+// equity = USDC + Σ size·oracle ; liq for position i (others at oracle):
+//   p_liq = (MM_rest − equity + size·oracle) / (size − mmf·|size|)
+try {
+  const mk = await jget('https://indexer.dydx.trade/v4/perpetualMarkets?limit=1000');
+  const byClob = {};
+  Object.values(mk.markets || {}).forEach(m => {
+    byClob[String(m.clobPairId)] = {
+      base: (m.ticker || '').split('-')[0],
+      px: parseFloat(m.oraclePrice),
+      mmf: parseFloat(m.maintenanceMarginFraction),
+      ar: parseInt(m.atomicResolution)
+    };
+  });
+  const HOSTS = ['https://dydx-rest.publicnode.com', 'https://rest-dydx.ecostake.com', 'https://dydx-api.polkachu.com'];
+  let host = null;
+  for (const h of HOSTS) {
+    try { const t0 = await jget(h + '/dydxprotocol/subaccounts/subaccount?pagination.limit=1'); if (t0 && t0.subaccount) { host = h; break; } }
+    catch (e) {}
+  }
+  if (!host) throw new Error('no dydx LCD host reachable');
+  const dbook = {}; let dPos = 0, dSubs = 0, key = '';
+  for (let page = 0; page < 40; page++) {
+    const u = host + '/dydxprotocol/subaccounts/subaccount?pagination.limit=1000' + (key ? '&pagination.key=' + encodeURIComponent(key) : '');
+    const j2 = await jget(u);
+    const subs = j2.subaccount || [];
+    subs.forEach(s => {
+      const perps = s.perpetual_positions || [];
+      if (!perps.length) return;
+      let usdc = 0;
+      (s.asset_positions || []).forEach(a => { if (!a.asset_id || a.asset_id === 0 || a.asset_id === '0') usdc += parseInt(a.quantums) / 1e6; });
+      const pos = perps.map(p => {
+        const m = byClob[String(p.perpetual_id ?? 0)]; // BTC-USD has id 0, omitted in proto JSON
+        if (!m || !(m.px > 0)) return null;
+        const size = parseInt(p.quantums) * Math.pow(10, m.ar);
+        if (!size) return null;
+        return { m, size, notional: size * m.px };
+      }).filter(Boolean);
+      if (!pos.length) return;
+      dSubs++;
+      const equity = usdc + pos.reduce((t, q) => t + q.notional, 0);
+      const mmTotal = pos.reduce((t, q) => t + q.m.mmf * Math.abs(q.notional), 0);
+      pos.forEach(q => {
+        const v = Math.abs(q.notional);
+        if (v < 10000) return;
+        const mmRest = mmTotal - q.m.mmf * v;
+        const denom = q.size - q.m.mmf * Math.abs(q.size);
+        if (!denom) return;
+        const liq = (mmRest - equity + q.notional) / denom;
+        if (!(liq > 0) || liq < q.m.px * 0.3 || liq > q.m.px * 3) return;
+        const co = dbook[q.m.base] || (dbook[q.m.base] = { px: q.m.px, step: q.m.px * 0.005, bins: {} });
+        const b = Math.round(liq / co.step);
+        const cell = co.bins[b] || (co.bins[b] = [0, 0]);
+        if (q.size > 0) cell[0] += v; else cell[1] += v;
+        dPos++;
+      });
+    });
+    key = j2.pagination && j2.pagination.next_key;
+    if (!key || !subs.length) break;
+    await new Promise(r2 => setTimeout(r2, 150));
+  }
+  Object.values(dbook).forEach(co => { Object.keys(co.bins).forEach(b => { co.bins[b] = [Math.round(co.bins[b][0]), Math.round(co.bins[b][1])]; }); });
+  let lbj = { t: now };
+  try { lbj = JSON.parse(fs.readFileSync('data/liq-book.json', 'utf8')); } catch (e) {}
+  lbj.dydx = { t: now, subs: dSubs, positions: dPos, coins: dbook };
+  fs.writeFileSync('data/liq-book.json', JSON.stringify(lbj));
+  console.log('dydx book:', dSubs, 'subaccounts with positions,', dPos, 'positions >= $10k,', Object.keys(dbook).length, 'coins, host:', host);
+} catch (e) { console.log('dydx book failed', e.message); }
+
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
 const tgOn = !!(TG_TOKEN && TG_CHAT);
