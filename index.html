@@ -447,6 +447,7 @@
   .lsx-del:hover { color: var(--down); }
   .side-badge.fresh { background: rgba(250,178,25,0.15); color: var(--warn); cursor: help; }
   .side-badge.inflow { background: rgba(57,135,229,0.15); color: var(--accent); cursor: help; }
+  #pmVol { width: 72px; height: 4px; accent-color: var(--accent); cursor: pointer; margin-left: auto; }
   .lsx-label { font-size: 11px; color: var(--ink-2); display: flex; flex-direction: column; line-height: 1.25; }
   .lsx-label .who { font-weight: 600; color: var(--ink); }
   .lsx-label .kind { font-size: 9.5px; color: var(--muted); }
@@ -504,6 +505,7 @@
     <div class="grid-stack-item" gs-id="polymarket">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🎯 Prediction Markets <span class="sub" id="pmSub"></span>
+          <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button></div>
         <div class="panel-body" id="pmOuter">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
@@ -1691,14 +1693,12 @@ async function loadWhales() {
       await Promise.allSettled(uniqAddrs.slice(i, i + 10).map(a => walletInflow48h(a)));
     }
     found.forEach(r => { r.inflow = (depCache[r.addr] || {}).v || 0; });
-    /* flashing-red alerts first, then fresh wallets / fresh money (🆕 💰), then biggest position */
+    /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
+       🆕/💰 badges still show on rows wherever they sit. */
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
       if (fa !== fb) return fb - fa;
       if (fa && fb) return a.dist - b.dist;
-      const na = (a.fresh === "week" || a.inflow >= 500_000) ? 2 : a.fresh ? 1 : 0;
-      const nb = (b.fresh === "week" || b.inflow >= 500_000) ? 2 : b.fresh ? 1 : 0;
-      if (na !== nb) return nb - na;
       return b.value - a.value;
     });
     $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned";
@@ -2271,9 +2271,12 @@ function pmTopicOk(ev) {
 }
 const PM_ALERT_RE = /\b(politic|election|president|senate|congress|government|shutdown|impeach|supreme court|trump|biden|harris|vance|putin|zelensk|xi\b|war|ceasefire|invasion|missile|strike|nuclear|nato|russia|ukraine|iran|israel|gaza|china|taiwan|sanction|tariff|geopolit|military|troops|regime|coup\b)\b/i;
 
-/* ---- alert sound (Web Audio, no files) + on/off toggle ---- */
+/* ---- alert sound (Web Audio, no files) + on/off toggle + volume slider ---- */
 let alertMuted = false;
 try { alertMuted = localStorage.getItem("cryptopulse-mute") === "1"; } catch (e) {}
+/* volume: 0–1 slider value; 0.5 (default) = 2× the old loudness, 1.0 = 4× */
+let alertVol = 0.5;
+try { const v = parseFloat(localStorage.getItem("cryptopulse-vol")); if (isFinite(v) && v >= 0 && v <= 1) alertVol = v; } catch (e) {}
 let audioCtx = null, beepPending = false;
 function ensureAudio() {
   if (!audioCtx) {
@@ -2288,14 +2291,15 @@ function ensureAudio() {
 document.addEventListener("pointerdown", ensureAudio);
 document.addEventListener("keydown", ensureAudio);
 function playBeep() {
-  if (alertMuted) return;
+  if (alertMuted || alertVol <= 0) return;
   if (!audioCtx || audioCtx.state !== "running") { beepPending = true; return; }
   const t0 = audioCtx.currentTime;
+  const peak = Math.min(0.9, 0.72 * alertVol); /* slider 50% ≈ 0.36 = double the old 0.18 */
   [[880, 0], [660, 0.18], [880, 0.36]].forEach(([f, dt]) => {
     const o = audioCtx.createOscillator(), g = audioCtx.createGain();
     o.type = "sine"; o.frequency.value = f;
     g.gain.setValueAtTime(0, t0 + dt);
-    g.gain.linearRampToValueAtTime(0.18, t0 + dt + 0.02);
+    g.gain.linearRampToValueAtTime(peak, t0 + dt + 0.02);
     g.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.16);
     o.connect(g); g.connect(audioCtx.destination);
     o.start(t0 + dt); o.stop(t0 + dt + 0.18);
@@ -2313,6 +2317,19 @@ $("pmSound").addEventListener("click", e => {
   if (!alertMuted) { ensureAudio(); playBeep(); } /* audible confirmation */
 });
 refreshSoundBtn();
+/* volume slider: drag to set, release plays a preview at the new level */
+(() => {
+  const s = $("pmVol");
+  if (!s) return;
+  s.value = Math.round(alertVol * 100);
+  s.addEventListener("input", () => { alertVol = (+s.value) / 100; });
+  s.addEventListener("change", () => {
+    try { localStorage.setItem("cryptopulse-vol", String(alertVol)); } catch (e) {}
+    if (!alertMuted && alertVol > 0) { ensureAudio(); playBeep(); }
+  });
+  /* keep slider drags from dragging the whole panel (panel-head is the drag handle) */
+  ["pointerdown", "mousedown", "touchstart", "click"].forEach(ev => s.addEventListener(ev, e => e.stopPropagation()));
+})();
 /* alerts announced this session — an active alert chimes once per visit */
 const pmSeenSession = new Set();
 /* alerts the user dismissed with ✕ — never shown again */
