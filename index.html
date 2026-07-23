@@ -484,6 +484,9 @@
   .lm-pop .r b { font-variant-numeric: tabular-nums; }
   /* CEX live liquidations feed */
   .cx-stats { padding: 8px 14px; border-bottom: 1px solid var(--grid); font-size: 11.5px; color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; }
+  .cx-custom { width: 72px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--ink); font: inherit; font-size: 11px; padding: 3px 7px; }
+  .cx-custom:focus { outline: none; border-color: var(--accent); }
   .cx-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .cx-row { display: flex; align-items: center; gap: 8px; padding: 3.5px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 11.5px; }
   .cx-row .when { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; width: 52px; }
@@ -670,7 +673,16 @@
     </div>
     <div class="grid-stack-item" gs-id="cexliq">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance · Bybit · OKX · BitMEX · Deribit · real-time forced orders</span></div>
+        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance · Bybit · OKX · BitMEX · Deribit</span>
+          <span id="cxFlt" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">
+            <button class="src-btn" data-cxf="ALL">ALL</button>
+            <button class="src-btn" data-cxf="BTC">BTC</button>
+            <button class="src-btn" data-cxf="ETH">ETH</button>
+            <button class="src-btn" data-cxf="SOL">SOL</button>
+            <button class="src-btn" data-cxf="HYPE">HYPE</button>
+            <button class="src-btn" data-cxf="CUSTOM" title="Lock any token — type it in the box">Custom</button>
+            <input id="cxCustomIn" class="cx-custom" placeholder="token…" spellcheck="false" title="Type a token (e.g. PIPPIN) and press Enter — the feed locks to it">
+          </span></div>
         <div class="panel-body" id="cxBody"><div class="empty">Connecting to the liquidation streams…</div></div>
       </div></div>
     </div>
@@ -3653,9 +3665,49 @@ setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books
 const cxEvents = []; /* newest first: {t, ex, coin, side: 'L'(long liq→forced sell)|'S'(short liq→forced buy), usd, px} */
 let cxDirty = false, cxConnected = {bn: false, by: false, ok: false, bm: false, dr: false};
 const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
+/* coin filter: ALL / BTC / ETH / SOL / HYPE / CUSTOM(typed token). kPEPE matches PEPE both ways. */
+let cxFilter = (() => { try { return localStorage.getItem("cryptopulse-cx-filter") || "ALL"; } catch (e) { return "ALL"; } })();
+let cxCustom = (() => { try { return localStorage.getItem("cryptopulse-cx-custom") || ""; } catch (e) { return ""; } })();
+function cxWant() { return cxFilter === "ALL" ? null : cxFilter === "CUSTOM" ? (cxCustom.trim().toUpperCase() || null) : cxFilter; }
+function cxCoinMatch(coin, want) {
+  if (!want) return true;
+  const c = (coin || "").toUpperCase();
+  return c === want || c === "K" + want || "K" + c === want;
+}
+/* persistent hourly buckets (7 days) so 1D/1W totals survive reloads — they accumulate while
+   the dashboard is open (no exchange publishes free historical liquidation totals) */
+const cxStore = {
+  key: "cryptopulse-cx-hist",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return {}; } },
+  save(v) { try { localStorage.setItem(this.key, JSON.stringify(v)); } catch (e) {} }
+};
+let cxHist = cxStore.load(), cxHistDirty = false;
+setInterval(() => {
+  if (!cxHistDirty) return;
+  cxHistDirty = false;
+  const minHk = Math.floor((Date.now() - 7.2 * 86_400_000) / 3_600_000);
+  Object.keys(cxHist).forEach(k => { if (+k < minHk) delete cxHist[k]; });
+  cxStore.save(cxHist);
+}, 30_000);
+function cxSums(rangeMs, want) {
+  const cutoff = Date.now() - rangeMs;
+  let L = 0, S = 0;
+  Object.entries(cxHist).forEach(([hk, b]) => {
+    if ((+hk + 1) * 3_600_000 < cutoff) return;
+    if (want) Object.entries(b.c || {}).forEach(([coin, cc]) => { if (cxCoinMatch(coin, want)) { L += cc[0]; S += cc[1]; } });
+    else { L += b.L; S += b.S; }
+  });
+  return {L, S};
+}
 function cxAdd(ev) {
   cxEvents.unshift(ev);
-  if (cxEvents.length > 400) cxEvents.length = 400;
+  if (cxEvents.length > 1500) cxEvents.length = 1500;
+  const hk = Math.floor(ev.t / 3_600_000);
+  const b = cxHist[hk] || (cxHist[hk] = {L: 0, S: 0, c: {}});
+  if (ev.side === "L") b.L += ev.usd; else b.S += ev.usd;
+  const cc = b.c[ev.coin] || (b.c[ev.coin] = [0, 0]);
+  cc[ev.side === "L" ? 0 : 1] += ev.usd;
+  cxHistDirty = true;
   cxDirty = true;
 }
 function connectBinanceLiqs() {
@@ -3790,21 +3842,32 @@ function connectDeribitLiqs() {
 function renderCx() {
   const body = $("cxBody"); if (!body) return;
   const now = Date.now();
-  let sell1h = 0, buy1h = 0, v60 = 0, n60 = 0;
+  const want = cxWant();
+  let v60 = 0, n60 = 0;
+  const h1 = {L: 0, S: 0};
   cxEvents.forEach(ev => {
-    if (now - ev.t < 3600_000) { if (ev.side === "L") sell1h += ev.usd; else buy1h += ev.usd; }
+    if (!cxCoinMatch(ev.coin, want)) return;
+    if (now - ev.t < 3600_000) h1[ev.side] += ev.usd;
     if (now - ev.t < 60_000) { n60++; v60 += ev.usd; }
   });
-  const shown = cxEvents.filter(ev => ev.usd >= 3000).slice(0, 60);
+  const d1 = cxSums(86_400_000, want), w1 = cxSums(7 * 86_400_000, want);
+  /* locked on one token → show every size (small caps cascade in small bites); ALL → ≥$3k to keep it readable */
+  const minUsd = want ? 100 : 3000;
+  const shown = cxEvents.filter(ev => ev.usd >= minUsd && cxCoinMatch(ev.coin, want)).slice(0, 60);
+  const pair = (label, o, tip) =>
+    '<span title="' + tip + '">' + label + ' <b style="color:var(--down)" title="longs liquidated (forced sells)">▼ ' + fmtBig(o.L) + '</b> ' +
+    '<b style="color:var(--up)" title="shorts liquidated (forced buys)">▲ ' + fmtBig(o.S) + "</b></span>";
   const stats = '<div class="cx-stats">' +
-    '<span title="Value of LONG positions force-sold in the last hour (both exchanges)">1h longs liq <b style="color:var(--down)">' + fmtBig(sell1h) + "</b></span>" +
-    '<span title="Value of SHORT positions force-bought in the last hour">1h shorts liq <b style="color:var(--up)">' + fmtBig(buy1h) + "</b></span>" +
+    (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
+    pair("1h", h1, "Last hour — longs (▼ forced sells) vs shorts (▲ forced buys)") +
+    pair("1D", d1, "Last 24h — accumulates while the dashboard is open (exchanges don’t publish free historical liquidation totals)") +
+    pair("1W", w1, "Last 7 days — accumulates while the dashboard is open") +
     '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
     "</div>";
   const nConn = Object.values(cxConnected).filter(Boolean).length;
   if (!shown.length) {
     body.innerHTML = stats + '<div class="empty">' +
-      (nConn ? nConn + "/5 streams live — waiting for the next liquidation ≥ $3k…" : "Connecting to the liquidation streams…") + "</div>";
+      (nConn ? nConn + "/5 streams live — waiting for the next " + (want ? esc(want) + " liquidation…" : "liquidation ≥ $3k…") : "Connecting to the liquidation streams…") + "</div>";
     return;
   }
   body.innerHTML = stats + shown.map(ev => {
@@ -3819,6 +3882,40 @@ function renderCx() {
     "</div>";
   }).join("");
 }
+/* filter buttons + custom box (in the panel head — wired once, click never starts a drag) */
+function cxFltPaint() {
+  document.querySelectorAll("#cxFlt [data-cxf]").forEach(b =>
+    b.classList.toggle("src-on", b.dataset.cxf === cxFilter));
+}
+document.querySelectorAll("#cxFlt [data-cxf]").forEach(b => {
+  b.addEventListener("mousedown", e => e.stopPropagation());
+  b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    cxFilter = b.dataset.cxf;
+    try { localStorage.setItem("cryptopulse-cx-filter", cxFilter); } catch (err) {}
+    if (cxFilter === "CUSTOM") { const i = document.getElementById("cxCustomIn"); if (i) i.focus(); }
+    cxFltPaint(); renderCx();
+  });
+});
+(() => {
+  const i = document.getElementById("cxCustomIn");
+  if (!i) return;
+  i.value = cxCustom;
+  ["mousedown", "click"].forEach(evn => i.addEventListener(evn, e => e.stopPropagation()));
+  i.addEventListener("input", () => {
+    cxCustom = i.value.trim().toUpperCase();
+    try { localStorage.setItem("cryptopulse-cx-custom", cxCustom); } catch (err) {}
+    if (cxFilter === "CUSTOM") renderCx();
+  });
+  i.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      cxFilter = "CUSTOM";
+      try { localStorage.setItem("cryptopulse-cx-filter", cxFilter); } catch (err) {}
+      cxFltPaint(); renderCx();
+    }
+  });
+})();
+cxFltPaint();
 connectBinanceLiqs();
 connectBybitLiqs();
 connectOkxLiqs();
