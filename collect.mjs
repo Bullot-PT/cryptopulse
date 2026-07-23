@@ -281,13 +281,14 @@ try {
   // Strategy: paced single requests + 429 backoff + hard 5-min time budget, and a
   // cumulative per-account position cache so the book keeps building across runs.
   const lgEnd = Date.now() + 5 * 60_000;
-  let lg429 = 0;
+  let lg429 = 0, lgDelay = 200; /* adaptive pacing: speed up while clean, back off on 429 */
   const lgGet = async (path) => {
     for (let att = 0; att < 4; att++) {
       if (Date.now() > lgEnd) throw new Error('lg-budget');
       const r = await fetch(LG + path);
-      if (r.status === 429) { lg429++; await new Promise(r2 => setTimeout(r2, 4000)); continue; }
+      if (r.status === 429) { lg429++; lgDelay = Math.min(1200, Math.round(lgDelay * 1.8)); await new Promise(r2 => setTimeout(r2, 4000)); continue; }
       if (!r.ok) throw new Error('http ' + r.status);
+      lgDelay = Math.max(150, lgDelay - 8);
       return r.json();
     }
     throw new Error('lg-429');
@@ -317,7 +318,7 @@ try {
             if (a != null && !known.has(a)) { known.add(a); fresh.push(a); }
         });
       } catch (e) { if (e.message === 'lg-budget') break; }
-      await new Promise(r2 => setTimeout(r2, 350));
+      await new Promise(r2 => setTimeout(r2, lgDelay));
     }
   } catch (e) {}
   // --- account scans: stale holders first (refresh), then backlog queue, then fresh tape ids ---
@@ -339,7 +340,7 @@ try {
     });
     if (rows.length) { posCache[a] = rows; tsCache[a] = Date.now(); }
     else { delete posCache[a]; delete tsCache[a]; newEmpty.push(a); }
-    await new Promise(r2 => setTimeout(r2, 350));
+    await new Promise(r2 => setTimeout(r2, lgDelay));
   }
   // --- prune holders not refreshable for >24h, then rebuild book from the FULL cache ---
   Object.keys(posCache).forEach(a => { if ((tsCache[a] || 0) < Date.now() - 24 * 3600_000) { delete posCache[a]; delete tsCache[a]; } });

@@ -529,7 +529,7 @@
     </div>
     <div class="grid-stack-item" gs-id="trending">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🔥 Trending <span class="sub">CoinGecko searches</span></div>
+        <div class="panel-head">🔥 Trending <span class="sub" id="trendSub">CoinGecko searches</span></div>
         <div class="panel-body" id="trendBody"><div class="empty">Loading trending…</div></div>
       </div></div>
     </div>
@@ -578,7 +578,7 @@
     </div>
     <div class="grid-stack-item" gs-id="globaloi">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges aggregated · CoinGecko</span></div>
+        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges · ⚡ = direct from the DEX API (HL · dYdX · Lighter · Aster)</span></div>
         <div class="panel-body" id="goiBody"><div class="empty">Loading global open interest…</div></div>
       </div></div>
     </div>
@@ -2169,6 +2169,46 @@ const goiStore = {
   save(v) { this._m = v; try { localStorage.setItem(this.key, JSON.stringify(v)); } catch (e) {} }
 };
 let goiLast = null;
+/* direct-from-exchange OI for the perp DEXes (real numbers straight from each API, no aggregator lag).
+   These replace / top up the CoinGecko rows: exact HL + dYdX + Lighter totals, Aster top-30 markets. */
+let goiDirectCache = {t: 0, rows: []};
+async function fetchDirectDexOi() {
+  if (Date.now() - goiDirectCache.t < 240_000) return goiDirectCache.rows;
+  const out = [];
+  const jobs = [
+    (async () => { /* Hyperliquid — exact, every market */
+      const [, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
+      let oi = 0; (ctxs || []).forEach(c => { if (c) oi += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
+      if (oi > 0) out.push({name: "Hyperliquid", oi, live: 1, m: "hyperliquid"});
+    })(),
+    (async () => { /* dYdX v4 — exact, every market, straight from the indexer */
+      const j = await fetchJSONraw("https://indexer.dydx.trade/v4/perpetualMarkets?limit=500", {timeout: 20000});
+      const oi = Object.values(j.markets || {}).reduce((s, m) => s + (parseFloat(m.openInterest) || 0) * (parseFloat(m.oraclePrice) || 0), 0);
+      if (oi > 0) out.push({name: "dYdX v4", oi, live: 1, m: "dydx"});
+    })(),
+    (async () => { /* Lighter — exact, every market in one call */
+      const j = await fetchJSONraw("https://mainnet.zklighter.elliot.ai/api/v1/orderBookDetails", {timeout: 20000});
+      const oi = (j.order_book_details || []).reduce((s, d) => s + (parseFloat(d.open_interest) || 0) * (parseFloat(d.mark_price) || 0), 0);
+      if (oi > 0) out.push({name: "Lighter", oi, live: 1, m: "lighter"});
+    })(),
+    (async () => { /* Aster — Binance-clone API only exposes OI per symbol; top 30 by volume covers the bulk */
+      const tk = await fetchJSONraw("https://fapi.asterdex.com/fapi/v1/ticker/24hr", {timeout: 20000});
+      const topM = (Array.isArray(tk) ? tk : []).filter(t => (t.symbol || "").endsWith("USDT"))
+        .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume)).slice(0, 30);
+      const pxOf = {}; topM.forEach(t => { pxOf[t.symbol] = parseFloat(t.lastPrice) || 0; });
+      let oi = 0;
+      for (let i = 0; i < topM.length; i += 10) {
+        const rs = await Promise.allSettled(topM.slice(i, i + 10).map(t =>
+          fetchJSONraw("https://fapi.asterdex.com/fapi/v1/openInterest?symbol=" + t.symbol, {timeout: 15000})));
+        rs.forEach(r => { if (r.status === "fulfilled" && r.value) oi += (parseFloat(r.value.openInterest) || 0) * (pxOf[r.value.symbol] || 0); });
+      }
+      if (oi > 0) out.push({name: "Aster", oi, live: 1, m: "aster", note: "top 30 markets by volume (their API only exposes OI one market at a time)"});
+    })()
+  ];
+  await Promise.allSettled(jobs);
+  if (out.length) goiDirectCache = {t: Date.now(), rows: out};
+  return goiDirectCache.rows;
+}
 async function loadGlobalOI() {
   const body = $("goiBody");
   try {
@@ -2179,7 +2219,16 @@ async function loadGlobalOI() {
     const btcPx = sp.bitcoin && sp.bitcoin.usd;
     if (!btcPx || !Array.isArray(gx)) throw new Error("no data");
     const rows = gx.map(e => ({name: (e.name || "").replace(" (Futures)", ""), oi: (parseFloat(e.open_interest_btc) || 0) * btcPx}))
-      .filter(e => e.oi > 0).sort((a, b) => b.oi - a.oi);
+      .filter(e => e.oi > 0);
+    /* merge the direct DEX feeds: exact numbers replace the aggregator's row for the same exchange */
+    try {
+      (await fetchDirectDexOi()).forEach(dx => {
+        const i = rows.findIndex(r => r.name.toLowerCase().includes(dx.m));
+        if (i >= 0) rows.splice(i, 1);
+        rows.push(dx);
+      });
+    } catch (e) {}
+    rows.sort((a, b) => b.oi - a.oi);
     const total = rows.reduce((s, e) => s + e.oi, 0);
     goiLast = total;
     /* local sampling so the chart also works between collector runs */
@@ -2227,8 +2276,10 @@ async function renderGlobalOI(rows, total, cachedAt) {
       (cachedAt ? ' · <span style="color:var(--warn)">cached ' + timeAgo(cachedAt) + " · refreshing…</span>" : "") + "</div>" +
     (series.length > 1 ? oiPopSVG(series) : '<div class="oi-note">history is building (collected 24/7 by the repo bot)…</div>') +
     "</div>" +
-    rows.slice(0, 10).map(e =>
-      '<div class="gx-row"><span class="gx-name">' + esc(e.name) + "</span>" +
+    rows.slice(0, 14).map(e =>
+      '<div class="gx-row"><span class="gx-name"' +
+        (e.live ? ' style="color:var(--up)" title="Real OI straight from the exchange’s own API' + (e.note ? " — " + esc(e.note) : "") + '"' : "") + '>' +
+        esc(e.name) + (e.live ? " ⚡" : "") + "</span>" +
       '<div class="gx-bar"><div class="gx-bar-fill" style="width:' + Math.min(100, e.oi / rows[0].oi * 100).toFixed(1) + '%"></div></div>' +
       '<span class="gx-val">' + fmtBig(e.oi) + " · " + (e.oi / total * 100).toFixed(1) + "%</span></div>"
     ).join("");
@@ -2286,14 +2337,12 @@ function trendReason(c, pos) {
   if (!c.market_cap_rank || c.market_cap_rank > 500) parts.push("micro-cap momentum");
   return parts.slice(0, 3).join(" · ");
 }
-async function loadTrending() {
+/* trending renders instantly from the last good snapshot (localStorage) while the live fetch
+   waits its turn in the CoinGecko queue — no more empty panel after a page refresh */
+function renderTrending(items, cachedAt) {
   const body = $("trendBody");
-  try {
-    const res = await fetchJSON("https://api.coingecko.com/api/v3/search/trending");
-    const coins = (res.coins || []).slice(0, 8);
-    if (!coins.length) throw new Error("empty");
-    trendCoins = coins.map(w => w.item);
-    body.innerHTML = trendCoins.map((c, i) => {
+  trendCoins = items;
+  body.innerHTML = trendCoins.map((c, i) => {
       const chg = c.data && c.data.price_change_percentage_24h && c.data.price_change_percentage_24h.usd;
       const price = c.data && c.data.price;
       return '<a class="trend-row" data-t="' + i + '" target="_blank" rel="noopener" ' +
@@ -2309,14 +2358,37 @@ async function loadTrending() {
           chgSpan(chg) + "</div>" +
       "</a>";
     }).join("");
-    resolveTrendLinks(body);
+  resolveTrendLinks(body);
+  const sub = $("trendSub");
+  if (sub) sub.textContent = "CoinGecko searches" + (cachedAt ? " · cached " + timeAgo(cachedAt) : "");
+}
+async function loadTrending() {
+  const body = $("trendBody");
+  try {
+    const res = await fetchJSON("https://api.coingecko.com/api/v3/search/trending");
+    const coins = (res.coins || []).slice(0, 8);
+    if (!coins.length) throw new Error("empty");
+    const items = coins.map(w => w.item);
+    try { localStorage.setItem("cryptopulse-trending-cache", JSON.stringify({t: Date.now(), items})); } catch (e) {}
+    renderTrending(items, null);
     markUpdated();
   } catch (e) {
     retrySoon(loadTrending, "trending");
-    if (!body.querySelector(".trend-row"))
-      setError(body, "Trending feed unavailable right now.");
+    if (!body.querySelector(".trend-row")) {
+      const c = (() => { try { return JSON.parse(localStorage.getItem("cryptopulse-trending-cache")); } catch (e2) { return null; } })();
+      if (c && c.items && c.items.length) renderTrending(c.items, c.t);
+      else setError(body, "Trending feed unavailable right now.");
+    }
   }
 }
+/* show the cached snapshot immediately on page load — the live fetch replaces it when it lands */
+setTimeout(() => {
+  try {
+    if ($("trendBody").querySelector(".trend-row")) return; /* live data already in */
+    const c = JSON.parse(localStorage.getItem("cryptopulse-trending-cache"));
+    if (c && c.items && c.items.length) renderTrending(c.items, c.t);
+  } catch (e) {}
+}, 0);
 /* chart destination: TradingView for CEX-listed coins (top ~300),
    DexScreener best-liquidity pair for everything smaller */
 const trendLinkCache = {};
@@ -2800,7 +2872,12 @@ function connectBinancePrices() {
   bnWs.onerror = () => { try { bnWs.close(); } catch (e) {} };
 }
 /* Hyperliquid allMids → live mark, recompute whale rows' value / distance-to-liq / flash every ~1s */
-let hlWs = null, hlRetry = 0, whaleThrottle = 0;
+let hlWs = null, hlRetry = 0, whaleThrottle = 0, hlLastMids = 0;
+/* watchdog: a WS can go silently dead (sleep/wake, network blip) without firing onclose —
+   if no mids arrived for 15s, force-close so the reconnect logic kicks in and price goes live again */
+setInterval(() => {
+  if (hlLastMids && Date.now() - hlLastMids > 15_000 && hlWs) { try { hlWs.close(); } catch (e) {} }
+}, 5000);
 function connectHyperMids() {
   try { hlWs = new WebSocket("wss://api.hyperliquid.xyz/ws"); }
   catch (e) { return; }
@@ -2811,6 +2888,7 @@ function connectHyperMids() {
   hlWs.onmessage = ev => {
     let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
     if (!m || m.channel !== "allMids" || !m.data || !m.data.mids) return;
+    hlLastMids = Date.now();
     Object.entries(m.data.mids).forEach(([c, p]) => { liveMark[c] = parseFloat(p); });
     const nowT = Date.now();
     if (nowT - whaleThrottle < 1000) return; /* ~1s cadence */
@@ -3227,6 +3305,24 @@ const LM_SOURCES = [
 ];
 let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
 if (!LM_SOURCES.some(s => s.k === lmSrc)) lmSrc = "AGG";
+/* manual refresh: bypass the 5-min bucket on the bot book, re-pull lending, force a fresh mids snapshot */
+let lmReloading = false;
+async function lmForceReload() {
+  if (lmReloading) return;
+  lmReloading = true;
+  renderLiqmap();
+  try {
+    const j = await fetchJSONraw("data/liq-book.json?b=" + Date.now(), {timeout: 20000});
+    if (j && j.coins) lmBotBook = j;
+  } catch (e) {}
+  try {
+    const mids = await fetchHL({type: "allMids"});
+    Object.entries(mids || {}).forEach(([c, p]) => { liveMark[c] = parseFloat(p); });
+  } catch (e) {}
+  lmCoins.forEach(fetchLiqmapCoin);
+  lmReloading = false;
+  renderLiqmap();
+}
 async function fetchLiqmapCoin(coin) {
   const key = LIQMAP_KEY[coin] || coin.toLowerCase();
   try {
@@ -3262,7 +3358,8 @@ function renderLiqmap() {
     '<span class="lm-tab' + (c === lmCur ? " on" : "") + '" draggable="true" title="Drag to reorder" data-lm="' + esc(c) + '">' + esc(c) +
     '<span class="x" data-lmx="' + esc(c) + '" title="Remove">✕</span></span>').join("") +
     '<span style="margin-left:auto;display:inline-flex;gap:4px;align-items:center">' +
-    LM_SOURCES.map(s => '<button class="src-btn' + (s.k === lmSrc ? " src-on" : "") + '" data-lmsrc="' + s.k + '" title="' + esc(s.tip) + '">' + s.label + "</button>").join("") + "</span>";
+    LM_SOURCES.map(s => '<button class="src-btn' + (s.k === lmSrc ? " src-on" : "") + '" data-lmsrc="' + s.k + '" title="' + esc(s.tip) + '">' + s.label + "</button>").join("") +
+    '<button class="src-btn" data-lmreload="1" title="Force-refresh all heatmap data now (bot books + lending + live price)">' + (lmReloading ? "…" : "↻") + "</button></span>";
   const coin = lmCur, d = lmData[coin];
   const px = lmLivePx(coin);
   if (!px) { body.innerHTML = '<div class="empty">Waiting for a live price for ' + esc(coin) + "…</div>"; return; }
@@ -3421,6 +3518,7 @@ function lmAddCoin() {
 $("lmAddBtn").addEventListener("click", lmAddCoin);
 $("lmAdd").addEventListener("keydown", e => { if (e.key === "Enter") lmAddCoin(); });
 $("lmTabs").addEventListener("click", e => {
+  if (e.target.closest("[data-lmreload]")) { e.preventDefault(); lmForceReload(); return; }
   const sb = e.target.closest("[data-lmsrc]");
   if (sb) {
     lmSrc = sb.dataset.lmsrc;
