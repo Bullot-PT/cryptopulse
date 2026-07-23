@@ -3326,7 +3326,7 @@ function renderLiqmap() {
       " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
       " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + 2.5) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
       (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") +
-      (d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15
+      ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15
         ? ' · <span style="color:var(--warn)" title="DefiLlama’s snapshot was taken at a very different price (' + fmtPrice(d.snapPx) + '). Some below-price bars may include positions already liquidated — treat magnitudes as approximate until the book refreshes.">⚠ book snapshot drifted</span>' : "") + "</div>" +
     '<div class="lm-chart">' +
       (above.length ? above.map(mkRow).join("") : '<div class="lm-side">no forced buys mapped above</div>') +
