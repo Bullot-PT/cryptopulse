@@ -3385,6 +3385,18 @@ const LM_SOURCES = [
 ];
 let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
 if (!LM_SOURCES.some(s => s.k === lmSrc)) lmSrc = "AGG";
+/* mouse-wheel zoom: ±range% shown over 24 rows; scroll up = zoom in, down = zoom out */
+const LM_RANGES = [7.5, 10, 15, 20, 30, 40, 50];
+let lmRange = (() => { try { const v = +localStorage.getItem("cryptopulse-liqmap-range"); return LM_RANGES.includes(v) ? v : 30; } catch (e) { return 30; } })();
+let lmWheelAt = 0;
+function lmZoom(dir) { /* dir -1 = in, +1 = out */
+  const i = LM_RANGES.indexOf(lmRange);
+  const ni = Math.min(LM_RANGES.length - 1, Math.max(0, i + dir));
+  if (ni === i) return;
+  lmRange = LM_RANGES[ni];
+  try { localStorage.setItem("cryptopulse-liqmap-range", String(lmRange)); } catch (e) {}
+  renderLiqmap();
+}
 /* manual refresh: bypass the 5-min bucket on the bot book, re-pull lending, force a fresh mids snapshot */
 let lmReloading = false;
 async function lmForceReload() {
@@ -3443,9 +3455,11 @@ function renderLiqmap() {
   const coin = lmCur, d = lmData[coin];
   const px = lmLivePx(coin);
   if (!px) { body.innerHTML = '<div class="empty">Waiting for a live price for ' + esc(coin) + "…</div>"; return; }
-  /* display buckets: 2.5% steps, −30%..+30%, re-based to the LIVE price every render */
-  const BK = []; for (let p = -30; p < 30; p += 2.5) BK.push({p, lend: 0, wl: 0, ws: 0});
-  const bIdx = pct => { const i = Math.floor((pct + 30) / 2.5); return i >= 0 && i < BK.length ? i : -1; };
+  /* display buckets: 24 rows over ±lmRange%, re-based to the LIVE price every render.
+     Mouse wheel inside the chart zooms the range in/out. */
+  const R = lmRange, ST = R / 12;
+  const BK = []; for (let p = -R; p < R - ST / 2; p += ST) BK.push({p, lend: 0, wl: 0, ws: 0});
+  const bIdx = pct => { const i = Math.floor((pct + R) / ST); return i >= 0 && i < BK.length ? i : -1; };
   /* STALE-DATA RULE: a lending snapshot taken at a very different price is old information —
      old information is NOT shown. Excluded entirely (no approximate bars), noted in the sum line. */
   const lendDrifted = d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15;
@@ -3561,12 +3575,13 @@ function renderLiqmap() {
   const sumBuy = rows.filter(r => r.p >= 0).reduce((s, r) => s + r.tot, 0);
   /* price levels always with 2 decimals (sub-$1 coins keep their finer precision) */
   const fpx = v => v >= 1 ? "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) : fmtPrice(v);
+  const fpc = p => (p > 0 ? "+" : "") + (ST < 2 ? p.toFixed(1) : Math.round(p * 10) / 10);
   const mkRow = r => {
     const seg = (v, cls) => v > 0 ? '<div class="' + cls + '" style="width:' + (v / r.tot * 100).toFixed(1) + '%"></div>' : "";
     return '<div class="lm-row' + (r === magnet ? " magnet" : "") + '" data-lmpop="1" data-lvl="' + fpx(px * (1 + r.p / 100)) +
-      '" data-pct="' + (r.p > 0 ? "+" : "") + r.p + '" data-lend="' + Math.round(r.lend) + '" data-wl="' + Math.round(r.wl) +
+      '" data-pct="' + fpc(r.p) + '" data-lend="' + Math.round(r.lend) + '" data-wl="' + Math.round(r.wl) +
       '" data-ws="' + Math.round(r.ws) + '" data-tot="' + Math.round(r.tot) + '">' +
-      '<div class="lm-lvl">' + fpx(px * (1 + r.p / 100)) + ' <span class="pct">' + (r.p > 0 ? "+" : "") + r.p + "%</span></div>" +
+      '<div class="lm-lvl">' + fpx(px * (1 + r.p / 100)) + ' <span class="pct">' + fpc(r.p) + "%</span></div>" +
       '<div class="lm-track"><div class="lm-bar" style="width:' + Math.max(1.2, r.tot / max * 100).toFixed(1) + '%">' +
         seg(r.lend, "lm-lend") + seg(r.wl, "lm-wl") + seg(r.ws, "lm-ws") + "</div></div>" +
       '<div class="lm-val">' + fmtBig(r.tot) + "</div></div>";
@@ -3574,9 +3589,10 @@ function renderLiqmap() {
   const above = rows.filter(r => r.p >= 0).sort((a, b) => b.p - a.p);
   const below = rows.filter(r => r.p < 0).sort((a, b) => b.p - a.p);
   body.innerHTML = legend +
-    '<div class="lm-sum"><b>' + esc(coin) + "</b> · sell-cascade fuel −30%: <b style='color:var(--down)'>" + fmtBig(sumSell) + "</b>" +
+    '<div class="lm-sum"><b>' + esc(coin) + "</b> <span style='color:var(--accent)' title='Mouse wheel over the chart: scroll up = zoom in, scroll down = zoom out'>±" + R + "% 🔍</span>" +
+      " · sell-cascade fuel −" + R + "%: <b style='color:var(--down)'>" + fmtBig(sumSell) + "</b>" +
       " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
-      " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + 2.5) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
+      " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + ST) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
       (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") +
       ((lmSrc === "AGG" || lmSrc === "LEND") && lendDrifted
         ? ' · <span style="color:var(--muted)" title="DefiLlama’s lending snapshot was taken at ' + fmtPrice(d.snapPx) + ' — too far from the live price to be trusted. Rule: old data is not shown, so the lending layer is excluded until a fresh snapshot arrives (perp books are unaffected).">lending excluded — snapshot stale</span>' : "") + "</div>" +
@@ -3622,6 +3638,15 @@ $("lmBody").addEventListener("mousemove", e => {
   if (row) lmPopShow(row, e); else lmPop.style.display = "none";
 });
 $("lmBody").addEventListener("mouseleave", () => { lmPop.style.display = "none"; });
+/* wheel inside the chart = zoom (throttled so one notch = one step); page scroll is suppressed there */
+$("lmBody").addEventListener("wheel", e => {
+  e.preventDefault();
+  const now = Date.now();
+  if (now - lmWheelAt < 180) return;
+  lmWheelAt = now;
+  lmPop.style.display = "none";
+  lmZoom(e.deltaY < 0 ? -1 : 1);
+}, {passive: false});
 function lmAddCoin() {
   const el = $("lmAdd");
   const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
