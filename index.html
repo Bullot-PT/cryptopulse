@@ -267,6 +267,15 @@
   .perp-metric .p { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .perp-metric .l { font-size: 10px; color: var(--muted); }
 
+  /* ---------- OI source buttons ---------- */
+  .src-btn {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--muted); font-size: 9.5px; font-weight: 700; padding: 2px 7px;
+    cursor: pointer; font-family: inherit; letter-spacing: 0.02em;
+  }
+  .src-btn:hover { color: var(--ink); }
+  .src-on { border-color: var(--accent); color: var(--accent); }
+
   /* ---------- OI chart ---------- */
   .oi-box { padding: 10px 14px 8px; border-bottom: 1px solid var(--grid); }
   .oi-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
@@ -439,7 +448,7 @@
     </div>
     <div class="grid-stack-item" gs-id="hyper">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Hyperliquid Perps <span class="sub" id="hyperSub">top 50 by OI · search all markets</span></div>
+        <div class="panel-head">⚡ Aggregated OI <span class="sub" id="hyperSub">HL + Binance + Bybit + OKX · search all</span></div>
         <div class="panel-body" id="hyperOuter">
           <div class="scan-bar"><input class="scan-input" id="hyperSearch" placeholder="🔎 search a token's OI — e.g. BTC, HYPE, DOGE…" spellcheck="false"></div>
           <div id="hyperBody"><div class="empty">Loading perps…</div></div>
@@ -824,32 +833,79 @@ async function fetchHL(body) {
     return await r.json();
   } finally { clearTimeout(t); }
 }
-/* ---- per-token OI history: sampled live by this dashboard (no free API publishes it) ---- */
-const oiCoinStore = {
-  key: "cryptopulse-oi-coins",
+/* ---- multi-exchange per-token OI: Hyperliquid + Binance + Bybit + OKX, aggregated.
+   History is sampled by this dashboard + the repo bot (no free API publishes per-token OI history). ---- */
+const SRC_LABELS = {AGG: "Aggregate", HL: "Hyperliquid", BN: "Binance", BB: "Bybit", OK: "OKX"};
+const oiSrcStore = {
+  key: "cryptopulse-oi-src",
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return this._m || {}; } },
   save(o) { this._m = o; try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
-let perpOiView = "1d";
-try { if (localStorage.getItem("cryptopulse-oi-view") === "7d") perpOiView = "7d"; } catch (e) {}
+let perpOiView = "1d", perpOiSrc = "AGG";
+try {
+  if (localStorage.getItem("cryptopulse-oi-view") === "7d") perpOiView = "7d";
+  const s = localStorage.getItem("cryptopulse-oi-srcsel");
+  if (s && SRC_LABELS[s]) perpOiSrc = s;
+} catch (e) {}
 let hyperRows = [];
-function recordOiSamples(rows) {
-  const store = oiCoinStore.load();
-  const now = Date.now();
-  rows.slice(0, 60).forEach(r => {
-    const e = store[r.coin] || (store[r.coin] = {f: [], c: []});
-    if (!e.f.length || now - e.f[e.f.length - 1][0] > 4 * 60_000) e.f.push([now, Math.round(r.oiUsd)]);
-    e.f = e.f.filter(x => x[0] > now - 25 * 3_600_000);
-    if (!e.c.length || now - e.c[e.c.length - 1][0] > 55 * 60_000) e.c.push([now, Math.round(r.oiUsd)]);
-    e.c = e.c.filter(x => x[0] > now - 7.2 * 86_400_000);
-  });
-  /* cap stored coins so localStorage stays small */
-  const keys = Object.keys(store);
-  if (keys.length > 80) {
-    keys.sort((a, b) => (store[a].f.slice(-1)[0] || [0])[0] - (store[b].f.slice(-1)[0] || [0])[0]);
-    keys.slice(0, keys.length - 80).forEach(k => delete store[k]);
+const bybitNorm = s => { let b = s.slice(0, -4); return b.startsWith("1000") ? "k" + b.slice(4) : b; };
+let srcCache = {tBN: 0, BN: {}};
+async function fetchSrcOI(topCoins, marks, hlSet) {
+  const out = {BB: {}, OK: {}, BN: srcCache.BN};
+  try {
+    const j = await fetchJSON("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000});
+    (j.result && j.result.list || []).forEach(t => {
+      if (!t.symbol || !t.symbol.endsWith("USDT")) return;
+      const b = bybitNorm(t.symbol);
+      const v = parseFloat(t.openInterestValue);
+      if (v > 0) out.BB[b] = (out.BB[b] || 0) + v;
+    });
+  } catch (e) { out.BB = srcCache.BB || {}; }
+  try {
+    const j = await fetchJSON("https://www.okx.com/api/v5/public/open-interest?instType=SWAP", {timeout: 15000});
+    (j.data || []).forEach(d => {
+      const b0 = (d.instId || "").split("-")[0];
+      const b = hlSet.has(b0) ? b0 : (hlSet.has("k" + b0) ? "k" + b0 : b0);
+      const v = parseFloat(d.oiUsd);
+      if (v > 0) out.OK[b] = (out.OK[b] || 0) + v;
+    });
+  } catch (e) { out.OK = srcCache.OK || {}; }
+  if (Date.now() - srcCache.tBN > 110_000) {
+    const bn = {};
+    await Promise.allSettled(topCoins.slice(0, 20).map(async c => {
+      const sym = (c.startsWith("k") ? "1000" + c.slice(1) : c) + "USDT";
+      try {
+        const j = await fetchJSON("https://fapi.binance.com/fapi/v1/openInterest?symbol=" + sym, {timeout: 8000});
+        const v = parseFloat(j.openInterest) * (marks[c] || 0);
+        if (v > 0) bn[c] = v;
+      } catch (e) {}
+    }));
+    if (Object.keys(bn).length) { out.BN = bn; srcCache.tBN = Date.now(); }
   }
-  oiCoinStore.save(store);
+  srcCache = {...srcCache, BB: out.BB, OK: out.OK, BN: out.BN};
+  return out;
+}
+function recordOiSamples(rows) {
+  const store = oiSrcStore.load();
+  const now = Date.now();
+  rows.slice(0, 40).forEach(r => {
+    Object.keys(SRC_LABELS).forEach(s => {
+      const v = Math.round(r.src[s] || 0);
+      if (!v) return;
+      const bySrc = store[s] = store[s] || {};
+      const e = bySrc[r.coin] = bySrc[r.coin] || {f: [], c: []};
+      if (!e.f.length || now - e.f[e.f.length - 1][0] > 4 * 60_000) e.f.push([now, v]);
+      e.f = e.f.filter(x => x[0] > now - 25 * 3_600_000);
+      if (!e.c.length || now - e.c[e.c.length - 1][0] > 55 * 60_000) e.c.push([now, v]);
+      e.c = e.c.filter(x => x[0] > now - 7.2 * 86_400_000);
+    });
+  });
+  Object.keys(store).forEach(s => {
+    const ks = Object.keys(store[s]);
+    if (ks.length > 50) ks.sort((a, b) => (store[s][a].f.slice(-1)[0] || [0])[0] - (store[s][b].f.slice(-1)[0] || [0])[0])
+      .slice(0, ks.length - 50).forEach(k => delete store[s][k]);
+  });
+  oiSrcStore.save(store);
 }
 function oiPopSVG(points) {
   const w = 276, h = 110, padL = 4, padR = 60, padY = 12;
@@ -873,7 +929,6 @@ function oiPopSVG(points) {
   "</svg>";
 }
 let perpPopCoin = null, perpPopRow = null, perpHideTimer = null;
-/* server-side history collected 24/7 by the repo's GitHub Action (data/oi-history.json) */
 let oiHist = {t: 0, data: null};
 async function getOiHistory() {
   if (oiHist.data && Date.now() - oiHist.t < 240_000) return oiHist.data;
@@ -883,28 +938,43 @@ async function getOiHistory() {
   } catch (e) { oiHist = {t: Date.now(), data: oiHist.data || []}; }
   return oiHist.data;
 }
+function remoteSrcVal(s, coin, src) {
+  const hl = s.coins && s.coins[coin];
+  const bb = s.bb && s.bb[coin];
+  const ok = s.ok && s.ok[coin];
+  if (src === "HL") return hl || 0;
+  if (src === "BB") return bb || 0;
+  if (src === "OK") return ok || 0;
+  if (src === "BN") return 0; /* not collectable server-side (geo) */
+  return (hl || 0) + (bb || 0) + (ok || 0);
+}
 async function renderPerpPop() {
   const r = hyperRows.find(x => x.coin === perpPopCoin);
   if (!r || !perpPopRow) return;
-  const store = oiCoinStore.load();
-  const e = store[r.coin] || {f: [], c: []};
   const now = Date.now();
   const windowMs = perpOiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
   const bucket = perpOiView === "1d" ? 4 * 60_000 : 40 * 60_000;
   const remote = (await getOiHistory())
-    .filter(s => s.t > now - windowMs && s.coins && s.coins[r.coin])
-    .map(s => [s.t, s.coins[r.coin]]);
-  if (perpPopCoin !== r.coin) return; /* hover moved while fetching */
+    .filter(s => s.t > now - windowMs)
+    .map(s => [s.t, remoteSrcVal(s, r.coin, perpOiSrc)])
+    .filter(x => x[1] > 0);
+  if (perpPopCoin !== r.coin) return;
+  const store = oiSrcStore.load();
+  const e = (store[perpOiSrc] && store[perpOiSrc][r.coin]) || {f: [], c: []};
   const local = (perpOiView === "1d" ? e.f : e.c).filter(x => x[0] > now - windowMs);
   const merged = remote.concat(local).sort((a, b) => a[0] - b[0]);
   const series = [];
   let lastT = 0;
   merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
-  const label = perpOiView === "1d" ? "OI today" : "OI last 7d";
+  const curVal = r.src[perpOiSrc] || 0;
+  const btns = Object.keys(SRC_LABELS).map(s =>
+    '<button class="src-btn' + (s === perpOiSrc ? " src-on" : "") + '" data-src="' + s + '" title="' + SRC_LABELS[s] + '">' +
+    (s === "AGG" ? "Σ AGG" : s) + "</button>").join(" ");
   pricePop.innerHTML =
     '<div class="pp-head"><span class="pp-name">' + esc(r.coin) + "</span>" +
-    '<span class="pp-px">OI ' + fmtBig(r.oiUsd) + "</span>" +
-    '<span class="pp-tag">' + label + "</span></div>" +
+    '<span class="pp-px">OI ' + fmtBig(curVal) + "</span>" +
+    '<span class="pp-tag">' + esc(SRC_LABELS[perpOiSrc]) + " · " + (perpOiView === "1d" ? "today" : "7d") + "</span></div>" +
+    '<div style="display:flex;gap:4px;margin-bottom:5px">' + btns + "</div>" +
     '<div class="oi-head" style="margin:0 0 4px">' +
     '<span class="oi-side">1D</span>' +
     '<input type="range" id="perpOiSlider" min="0" max="1" step="1" value="' + (perpOiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
@@ -912,9 +982,9 @@ async function renderPerpPop() {
     '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · " +
       (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + "% funding</span></div>" +
     (series.length > 1 ? oiPopSVG(series) +
-      '<div class="pp-hint">open-interest high / low of the window marked · sampled 24/7</div>' :
-      '<div class="empty" style="padding:22px 0">OI history is being collected (24/7 by the repo bot + live while open) — check back soon' +
-      (perpOiView === "7d" ? "; 7D fills over the coming days" : "") + ".</div>");
+      '<div class="pp-hint">' + esc(SRC_LABELS[perpOiSrc]) + " OI · high / low marked · sampled 24/7</div>" :
+      '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history yet — it builds while the dashboard runs" +
+      (perpOiSrc === "BN" ? " (Binance history is browser-collected only)" : "") + ".</div>");
   const sl = document.getElementById("perpOiSlider");
   if (sl) sl.addEventListener("input", () => {
     perpOiView = sl.value === "1" ? "7d" : "1d";
@@ -923,14 +993,21 @@ async function renderPerpPop() {
   });
   const rect = perpPopRow.getBoundingClientRect();
   pricePop.style.display = "block";
-  pricePop.style.pointerEvents = "auto"; /* the slider is clickable */
-  const pw = 300, ph = pricePop.offsetHeight || 190;
+  pricePop.style.pointerEvents = "auto";
+  const pw = 300, ph = pricePop.offsetHeight || 210;
   let x = rect.right + 10;
   if (x + pw > window.innerWidth - 8) x = rect.left - pw - 10;
   if (x < 8) x = Math.max(8, window.innerWidth - pw - 8);
   pricePop.style.left = x + "px";
   pricePop.style.top = Math.min(Math.max(8, rect.top - 24), window.innerHeight - ph - 8) + "px";
 }
+pricePop.addEventListener("click", e => {
+  const b = e.target.closest(".src-btn");
+  if (!b) return;
+  perpOiSrc = b.dataset.src;
+  try { localStorage.setItem("cryptopulse-oi-srcsel", perpOiSrc); } catch (er) {}
+  renderPerpPop();
+});
 function hidePerpPop() {
   pricePop.style.display = "none";
   pricePop.style.pointerEvents = "none";
@@ -969,25 +1046,32 @@ async function loadHyperliquid() {
     }).filter(Boolean).filter(r => r.oiUsd > 0)
       .sort((a, b) => b.oiUsd - a.oiUsd);
     if (!rows.length) throw new Error("empty");
+    const marks = {}, hlSet = new Set();
+    rows.forEach(r => { marks[r.coin] = r.mark; hlSet.add(r.coin); });
+    const src = await fetchSrcOI(rows.map(r => r.coin), marks, hlSet);
+    rows.forEach(r => {
+      const bb = src.BB[r.coin] || 0, ok = src.OK[r.coin] || 0, bn = src.BN[r.coin] || 0;
+      r.src = {HL: r.oiUsd, BB: bb, OK: ok, BN: bn, AGG: r.oiUsd + bb + ok + bn};
+    });
+    rows.sort((a, b) => b.src.AGG - a.src.AGG);
     hyperRows = rows;
-    recordOiSamples(rows); /* build per-token OI history locally */
+    recordOiSamples(rows);
     renderHyperRows();
-    if (perpPopCoin) renderPerpPop(); /* keep an open popup fresh */
+    if (perpPopCoin) renderPerpPop();
     markUpdated();
   } catch (e) {
     if (!body.querySelector(".perp-row"))
-      setError(body, "Hyperliquid feed unavailable right now — retrying automatically.");
+      setError(body, "OI feed unavailable right now — retrying automatically.");
   }
 }
-
 function buildPerpRow(r, i) {
   return '<div class="perp-row" data-coin="' + esc(r.coin) + '">' +
     '<span class="rank">' + (i + 1) + "</span>" +
     '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
-    '<div class="s" style="text-transform:none">OI ' + fmtBig(r.oiUsd) + " · vol " + fmtBig(r.vol) + "</div></div>" +
+    '<div class="s" style="text-transform:none">Σ OI ' + fmtBig(r.src ? r.src.AGG : r.oiUsd) + " · HL vol " + fmtBig(r.vol) + "</div></div>" +
     '<div class="perp-metric"><div class="p">' + fmtPrice(r.mark) + "</div>" + chgSpan(r.chg) + "</div>" +
     '<div class="perp-metric"><div class="p ' + (r.fundingApr >= 0 ? "chg-up" : "chg-down") + '">' +
-      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">funding APR</div></div>' +
+      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">HL funding</div></div>' +
   "</div>";
 }
 function renderHyperRows() {
@@ -996,8 +1080,8 @@ function renderHyperRows() {
   const list = q ? hyperRows.filter(r => r.coin.toUpperCase().includes(q)) : hyperRows.slice(0, 50);
   body.innerHTML = list.length
     ? list.map(buildPerpRow).join("")
-    : '<div class="empty">No Hyperliquid market matching “' + esc(q) + "”.</div>";
-  $("hyperSub").textContent = q ? list.length + " of " + hyperRows.length + " markets" : "top 50 by OI · search all markets";
+    : '<div class="empty">No market matching “' + esc(q) + "”.</div>";
+  $("hyperSub").textContent = q ? list.length + " of " + hyperRows.length + " markets" : "HL + Binance + Bybit + OKX · search all";
 }
 $("hyperSearch").addEventListener("input", () => { if (hyperRows.length) renderHyperRows(); });
 
