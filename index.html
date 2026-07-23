@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CryptoPulse — Live Market Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800&display=swap" rel="stylesheet">
 <style>
   :root {
     color-scheme: dark;
@@ -192,6 +195,10 @@
   .pm-q { font-size: 13px; font-weight: 550; line-height: 1.4; margin-bottom: 7px; }
   .pm-row { display: flex; align-items: center; gap: 10px; }
   .pm-odds { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pm-brand { display: inline-flex; align-items: center; gap: 7px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-weight: 800; letter-spacing: -0.015em; font-size: 14.5px; color: var(--ink); }
+  .pm-brand img { width: 16px; height: 16px; border-radius: 4px; }
   .pm-outcome { font-size: 11.5px; color: var(--muted); }
   .pm-outcome.po-yes { background: rgba(12,163,12,0.18); color: var(--up); border: 1px solid rgba(12,163,12,0.35); border-radius: 5px; padding: 1px 7px; font-weight: 700; }
   .pm-outcome.po-no { background: rgba(208,59,59,0.18); color: var(--down); border: 1px solid rgba(208,59,59,0.4); border-radius: 5px; padding: 1px 7px; font-weight: 700; }
@@ -556,7 +563,7 @@
     </div>
     <div class="grid-stack-item" gs-id="polymarket">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🎯 Prediction Markets <span class="sub" id="pmSub"></span>
+        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" onerror="this.style.display='none'">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button></div>
         <div class="panel-body" id="pmOuter">
