@@ -670,7 +670,7 @@
     </div>
     <div class="grid-stack-item" gs-id="cexliq">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance + Bybit · real-time forced orders</span></div>
+        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance · Bybit · OKX · BitMEX · Deribit · real-time forced orders</span></div>
         <div class="panel-body" id="cxBody"><div class="empty">Connecting to the liquidation streams…</div></div>
       </div></div>
     </div>
@@ -3651,7 +3651,7 @@ setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books
 
 /* ---------------- CEX live liquidations (Binance !forceOrder + Bybit allLiquidation, real-time WS) ---------------- */
 const cxEvents = []; /* newest first: {t, ex, coin, side: 'L'(long liq→forced sell)|'S'(short liq→forced buy), usd, px} */
-let cxDirty = false, cxConnected = {bn: false, by: false};
+let cxDirty = false, cxConnected = {bn: false, by: false, ok: false, bm: false, dr: false};
 const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
 function cxAdd(ev) {
   cxEvents.unshift(ev);
@@ -3674,13 +3674,16 @@ function connectBinanceLiqs() {
   ws.onclose = () => { cxConnected.bn = false; setTimeout(connectBinanceLiqs, 4000); };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
 }
-const CX_BYBIT = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "HYPEUSDT", "SUIUSDT", "ADAUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT"];
+const CX_BYBIT = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "HYPEUSDT", "SUIUSDT", "ADAUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT",
+  "BNBUSDT", "WLDUSDT", "OPUSDT", "ARBUSDT", "NEARUSDT", "APTUSDT", "TIAUSDT", "FILUSDT", "INJUSDT", "TONUSDT", "TRXUSDT", "DOTUSDT",
+  "AAVEUSDT", "UNIUSDT", "ENAUSDT", "ONDOUSDT", "FARTCOINUSDT", "JUPUSDT"];
 function connectBybitLiqs() {
   let ws;
   try { ws = new WebSocket("wss://stream.bybit.com/v5/public/linear"); } catch (e) { setTimeout(connectBybitLiqs, 5000); return; }
   ws.onopen = () => {
     cxConnected.by = true; cxDirty = true;
-    ws.send(JSON.stringify({op: "subscribe", args: CX_BYBIT.map(s => "allLiquidation." + s)}));
+    for (let i = 0; i < CX_BYBIT.length; i += 10)
+      ws.send(JSON.stringify({op: "subscribe", args: CX_BYBIT.slice(i, i + 10).map(s => "allLiquidation." + s)}));
     ws._ping = setInterval(() => { try { ws.send(JSON.stringify({op: "ping"})); } catch (e) {} }, 20000);
   };
   ws.onmessage = e => {
@@ -3694,6 +3697,94 @@ function connectBybitLiqs() {
     });
   };
   ws.onclose = () => { cxConnected.by = false; clearInterval(ws._ping); setTimeout(connectBybitLiqs, 4000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+/* OKX — ALL swap liquidations in one public channel; contract sizes fetched once for correct $ */
+let okxCtVal = null;
+async function okxCtMap() {
+  if (okxCtVal) return okxCtVal;
+  try {
+    const j = await fetchJSONraw("https://www.okx.com/api/v5/public/instruments?instType=SWAP", {timeout: 20000});
+    const m = {};
+    (j.data || []).forEach(i => { m[i.instId] = {v: parseFloat(i.ctVal) || 0, ccy: i.ctValCcy}; });
+    if (Object.keys(m).length) okxCtVal = m;
+  } catch (e) {}
+  return okxCtVal;
+}
+function connectOkxLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://ws.okx.com:8443/ws/v5/public"); } catch (e) { setTimeout(connectOkxLiqs, 6000); return; }
+  ws.onopen = () => {
+    cxConnected.ok = true; cxDirty = true;
+    okxCtMap();
+    ws.send(JSON.stringify({op: "subscribe", args: [{channel: "liquidation-orders", instType: "SWAP"}]}));
+    ws._ping = setInterval(() => { try { ws.send("ping"); } catch (e) {} }, 25000);
+  };
+  ws.onmessage = e => {
+    if (e.data === "pong") return;
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (!m.arg || m.arg.channel !== "liquidation-orders" || !m.data) return;
+    m.data.forEach(d => {
+      const ct = okxCtVal && okxCtVal[d.instId];
+      (d.details || []).forEach(x => {
+        const px = parseFloat(x.bkPx) || 0;
+        if (!ct || !ct.v || !px) return;
+        const usd = ct.ccy === "USD" ? (parseFloat(x.sz) || 0) * ct.v : (parseFloat(x.sz) || 0) * ct.v * px;
+        if (!(usd > 0)) return;
+        /* OKX side = the forced ORDER's side: sell order closes a LONG, buy order closes a SHORT */
+        cxAdd({t: +x.ts || Date.now(), ex: "OKX", coin: cxNorm((d.instId || "").split("-")[0]), side: x.side === "sell" ? "L" : "S", usd, px});
+      });
+    });
+  };
+  ws.onclose = () => { cxConnected.ok = false; clearInterval(ws._ping); setTimeout(connectOkxLiqs, 5000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+/* BitMEX — public liquidation table. Only inverse USD contracts (qty IS the USD notional);
+   linear USDT symbols are skipped so we never publish a wrong $ figure. */
+function connectBitmexLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://ws.bitmex.com/realtime?subscribe=liquidation"); } catch (e) { setTimeout(connectBitmexLiqs, 7000); return; }
+  ws.onopen = () => { cxConnected.bm = true; cxDirty = true; };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (m.table !== "liquidation" || m.action !== "insert" || !m.data) return;
+    m.data.forEach(d => {
+      if (!/USD$/.test(d.symbol || "")) return;
+      const usd = Math.abs(+d.leavesQty || 0);
+      const px = parseFloat(d.price) || 0;
+      if (!(usd > 0) || !px) return;
+      cxAdd({t: Date.now(), ex: "BITMEX", coin: (d.symbol || "").replace(/USD$/, "").replace(/^XBT/, "BTC"),
+        side: d.side === "Sell" ? "L" : "S", usd, px});
+    });
+  };
+  ws.onclose = () => { cxConnected.bm = false; setTimeout(connectBitmexLiqs, 6000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+/* Deribit — perpetual trades carry a liquidation flag; amount on perpetuals IS the USD notional */
+function connectDeribitLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://www.deribit.com/ws/api/v2"); } catch (e) { setTimeout(connectDeribitLiqs, 7000); return; }
+  ws.onopen = () => {
+    cxConnected.dr = true; cxDirty = true;
+    ws.send(JSON.stringify({jsonrpc: "2.0", id: 1, method: "public/subscribe",
+      params: {channels: ["trades.BTC-PERPETUAL.100ms", "trades.ETH-PERPETUAL.100ms"]}}));
+    ws._ping = setInterval(() => { try { ws.send(JSON.stringify({jsonrpc: "2.0", id: 9, method: "public/test", params: {}})); } catch (e) {} }, 25000);
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    const tr = m.params && m.params.data;
+    if (!Array.isArray(tr)) return;
+    tr.forEach(t => {
+      if (!t.liquidation) return; /* 'T' taker liquidated, 'M' maker, 'MT' both */
+      const usd = Math.abs(+t.amount || 0);
+      const px = parseFloat(t.price) || 0;
+      if (!(usd > 0) || !px) return;
+      const sellClose = t.direction === "sell"; /* taker's side */
+      const liqSide = t.liquidation === "M" ? (sellClose ? "S" : "L") : (sellClose ? "L" : "S");
+      cxAdd({t: t.timestamp || Date.now(), ex: "DERIBIT", coin: (t.instrument_name || "").split("-")[0], side: liqSide, usd, px});
+    });
+  };
+  ws.onclose = () => { cxConnected.dr = false; clearInterval(ws._ping); setTimeout(connectDeribitLiqs, 6000); };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
 }
 function renderCx() {
@@ -3710,9 +3801,10 @@ function renderCx() {
     '<span title="Value of SHORT positions force-bought in the last hour">1h shorts liq <b style="color:var(--up)">' + fmtBig(buy1h) + "</b></span>" +
     '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
     "</div>";
+  const nConn = Object.values(cxConnected).filter(Boolean).length;
   if (!shown.length) {
     body.innerHTML = stats + '<div class="empty">' +
-      ((cxConnected.bn || cxConnected.by) ? "Streams live — waiting for the next liquidation ≥ $3k…" : "Connecting to Binance + Bybit…") + "</div>";
+      (nConn ? nConn + "/5 streams live — waiting for the next liquidation ≥ $3k…" : "Connecting to the liquidation streams…") + "</div>";
     return;
   }
   body.innerHTML = stats + shown.map(ev => {
@@ -3729,6 +3821,9 @@ function renderCx() {
 }
 connectBinanceLiqs();
 connectBybitLiqs();
+connectOkxLiqs();
+connectBitmexLiqs();
+connectDeribitLiqs();
 setInterval(() => { if (cxDirty) { cxDirty = false; renderCx(); } }, 600);
 setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without new events */
 
