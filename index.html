@@ -669,16 +669,24 @@ const layoutStore = {
   set(v) { this._mem = v; try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(v)); } catch (e) {} },
   clear() { this._mem = null; try { localStorage.removeItem(LAYOUT_KEY); } catch (e) {} }
 };
-let grid = null;
+let grid = null, applyingLayout = false;
 function applyLayout(items) {
   const byId = {};
   items.forEach(it => { byId[it.id] = it; });
+  applyingLayout = true; /* never let programmatic moves overwrite the user's saved layout */
   grid.batchUpdate();
-  document.querySelectorAll(".grid-stack-item").forEach(el => {
+  /* apply in reading order (top-left first) so float:false collision-pushes can't shuffle panels */
+  const els = [...document.querySelectorAll(".grid-stack-item")].sort((a, b) => {
+    const ia = byId[a.getAttribute("gs-id")] || {y: 999, x: 999};
+    const ib = byId[b.getAttribute("gs-id")] || {y: 999, x: 999};
+    return (ia.y - ib.y) || (ia.x - ib.x);
+  });
+  els.forEach(el => {
     const it = byId[el.getAttribute("gs-id")];
     if (it) grid.update(el, {x: it.x, y: it.y, w: it.w, h: it.h});
   });
   grid.batchUpdate(false);
+  applyingLayout = false;
 }
 function initGrid() {
   grid = GridStack.init({
@@ -692,15 +700,20 @@ function initGrid() {
     columnOpts: {breakpointForWindow: true, breakpoints: [{w: 700, c: 1}, {w: 1150, c: 6}]}
   });
   const saved = layoutStore.get();
+  let target;
   if (Array.isArray(saved) && saved.length) {
     /* merge: keep the user's saved positions, place any newly added panels from defaults */
     const savedIds = new Set(saved.map(it => it.id));
-    applyLayout(saved.concat(DEFAULT_LAYOUT.filter(d => !savedIds.has(d.id))));
+    target = saved.concat(DEFAULT_LAYOUT.filter(d => !savedIds.has(d.id)));
   } else {
-    applyLayout(DEFAULT_LAYOUT);
+    target = DEFAULT_LAYOUT;
   }
-  grid.compact(); /* squeeze out any leftover gaps on load */
+  applyLayout(target);
+  /* second pass a moment later: undo any collision-pushes from the first pass */
+  setTimeout(() => applyLayout(target), 120);
   grid.on("change", () => {
+    if (applyingLayout) return;              /* programmatic — not the user's doing */
+    if (grid.getColumn && grid.getColumn() !== 12) return; /* narrow-screen reflow — don't save 6/1-col coords */
     const items = grid.engine.nodes.map(n => ({
       id: n.el.getAttribute("gs-id"), x: n.x, y: n.y, w: n.w, h: n.h
     }));
@@ -1630,7 +1643,7 @@ function renderWhaleRows(rows, note) {
           (r.fresh ? '<span class="side-badge fresh" title="' + (r.fresh === "week"
             ? "Fresh wallet: ~all of this account’s lifetime trading volume happened in the last 7 days — a newly funded (or long-dormant) account suddenly opening size. Classic footprint of informed money positioning before news."
             : "Recent wallet: ~all of this account’s lifetime trading volume happened within the last month — a young account already running size.") +
-            '">🆕 ' + (r.fresh === "week" ? "NEW" : "1M") + "</span>" : "") +
+            '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "1M") + "</span>" : "") +
           (r.inflow >= 250_000 ? '<span class="side-badge inflow" title="Fresh money on-chain: this wallet received ' + fmtBig(r.inflow) +
             ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">💰 +' +
             fmtBig(r.inflow) + "</span>" : "") +
