@@ -1828,6 +1828,7 @@ async function loadLongShort() {
       (ctxs || []).forEach(c => { if (c) totalOI += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
     } catch (e) {}
     const agg = {long: 0, short: 0, coins: {}, wallets: 0};
+    const book = {}; /* coin -> [[liqPx, valueUsd, +1 long/-1 short], ...] for the Liq Heatmap */
     for (let i = 0; i < top.length; i += 20) {
       const chunk = await Promise.allSettled(top.slice(i, i + 20).map(a => fetchHL({type: "clearinghouseState", user: a})));
       chunk.forEach(c => {
@@ -1841,6 +1842,9 @@ async function loadLongShort() {
           agg[side] += v;
           const co = agg.coins[p.coin] || (agg.coins[p.coin] = {long: 0, short: 0});
           co[side] += v;
+          /* harvest liq levels for the Liq Heatmap — every position, every size */
+          const lq = p.liquidationPx ? parseFloat(p.liquidationPx) : 0;
+          if (lq > 0) (book[p.coin] = book[p.coin] || []).push([lq, v, side === "long" ? 1 : -1]);
         });
       });
       await new Promise(r => setTimeout(r, 250)); /* stay under HL rate limits */
@@ -1851,6 +1855,7 @@ async function loadLongShort() {
     Object.entries(agg.coins).forEach(([coin, c]) => {
       lsSnapshot.coins[coin] = {net: c.long - c.short, long: c.long, short: c.short, markRef: liveMark[coin] || null};
     });
+    hlLiqBook = {t: Date.now(), book}; /* full 500-wallet liq-level book for the heatmap */
     renderLsCrowd();
     markUpdated();
   } catch (e) {
@@ -3052,6 +3057,7 @@ initCustomAlerts();
 
 /* ---------------- whales vs crowd (multi-exchange sentiment, live) ---------------- */
 let lsSnapshot = {t: 0, coins: {}};
+let hlLiqBook = {t: 0, book: {}}; /* every position of the top-500 HL wallets, harvested by the 15-min scan */
 const LSX_DEFAULT = ["BTC", "ETH", "SOL", "XRP", "DOGE"];
 let LSX_COINS = (() => {
   try { const v = JSON.parse(localStorage.getItem("cryptopulse-lsx-coins")); return Array.isArray(v) && v.length ? v : LSX_DEFAULT.slice(); }
@@ -3214,23 +3220,36 @@ function renderLiqmap() {
     if (bp >= px) return; /* above live price = effectively gone; same strict rule as the risk panel */
     const i = bIdx((bp - px) / px * 100); if (i >= 0) BK[i].lend += usd;
   });
-  /* HL whale positions (≥$5M, live-scaled) from the scanner */
-  document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
-    const rc = row.dataset.coin;
-    if (rc !== coin && rc !== "k" + coin) return;
-    const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
-    const mark0 = parseFloat(row.dataset.mark0) || px, v0 = parseFloat(row.dataset.val0) || 0;
-    const v = v0 * (px / mark0);
-    if (!(liq > 0) || !v) return;
-    const i = bIdx((liq - px) / px * 100); if (i < 0) return;
-    if (szi > 0 && liq < px) BK[i].wl += v;
-    else if (szi < 0 && liq > px) BK[i].ws += v;
-  });
+  /* HL positions: full top-500-wallet book (every size) once the 15-min scan has run;
+     falls back to the ≥$5M whale-scanner rows until then */
+  const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
+  if (bookArr && bookArr.length) {
+    const snapC = lsSnapshot.coins[coin] || lsSnapshot.coins["k" + coin] || {};
+    const scale = snapC.markRef ? px / snapC.markRef : 1; /* live-scale $ values */
+    bookArr.forEach(([lq, v0, s]) => {
+      const i = bIdx((lq - px) / px * 100); if (i < 0) return;
+      const v = v0 * scale;
+      if (s > 0 && lq < px) BK[i].wl += v;
+      else if (s < 0 && lq > px) BK[i].ws += v;
+    });
+  } else {
+    document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
+      const rc = row.dataset.coin;
+      if (rc !== coin && rc !== "k" + coin) return;
+      const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
+      const mark0 = parseFloat(row.dataset.mark0) || px, v0 = parseFloat(row.dataset.val0) || 0;
+      const v = v0 * (px / mark0);
+      if (!(liq > 0) || !v) return;
+      const i = bIdx((liq - px) / px * 100); if (i < 0) return;
+      if (szi > 0 && liq < px) BK[i].wl += v;
+      else if (szi < 0 && liq > px) BK[i].ws += v;
+    });
+  }
   const rows = BK.filter(b => b.lend + b.wl + b.ws > 0).map(b => ({...b, tot: b.lend + b.wl + b.ws}));
   const legend = '<div class="lm-legend">' +
-    '<span class="k"><span class="dot" style="background:var(--down)"></span>lending (forced sells)</span>' +
-    '<span class="k"><span class="dot" style="background:#f0908a"></span>whale longs (sells)</span>' +
-    '<span class="k"><span class="dot" style="background:var(--up)"></span>whale shorts (forced buys)</span>' +
+    '<span class="k" title="On-chain lending collateral (DefiLlama — all lenders, all chains) that gets sold if price falls to that level"><span class="dot" style="background:var(--down)"></span>lending (forced sells)</span>' +
+    '<span class="k" title="Longs of the top-500 Hyperliquid wallets (every size, from the 15-min scan) liquidated at that level"><span class="dot" style="background:#f0908a"></span>HL longs (sells)</span>' +
+    '<span class="k" title="Shorts of the top-500 Hyperliquid wallets liquidated at that level — forced BUYING that fuels rallies"><span class="dot" style="background:var(--up)"></span>HL shorts (forced buys)</span>' +
     '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
   if (!rows.length) {
     body.innerHTML = legend + '<div class="empty">' +
@@ -3242,7 +3261,8 @@ function renderLiqmap() {
   const magnet = rows.reduce((m, r) => r.tot > m.tot ? r : m, rows[0]);
   const sumSell = rows.filter(r => r.p < 0).reduce((s, r) => s + r.tot, 0);
   const sumBuy = rows.filter(r => r.p >= 0).reduce((s, r) => s + r.tot, 0);
-  const fpx = v => fmtPrice(v);
+  /* price levels always with 2 decimals (sub-$1 coins keep their finer precision) */
+  const fpx = v => v >= 1 ? "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) : fmtPrice(v);
   const mkRow = r => {
     const seg = (v, cls) => v > 0 ? '<div class="' + cls + '" style="width:' + (v / r.tot * 100).toFixed(1) + '%"></div>' : "";
     return '<div class="lm-row' + (r === magnet ? " magnet" : "") + '">' +
@@ -3267,7 +3287,9 @@ function renderLiqmap() {
       (below.length ? below.map(mkRow).join("") : '<div class="lm-side">nothing at risk below in range</div>') +
     "</div>";
   const sub = $("lmSub");
-  if (sub) sub.textContent = "forced flow by price level · price live" + (d && d.t && !d.none ? " · book " + timeAgo(d.t) : "");
+  if (sub) sub.textContent = "forced flow by price level · price live" +
+    (hlLiqBook.t ? " · HL 500-wallet book " + timeAgo(hlLiqBook.t) : "") +
+    (d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
 }
 function lmAddCoin() {
   const el = $("lmAdd");
