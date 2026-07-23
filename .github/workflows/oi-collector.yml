@@ -1,7 +1,7 @@
 name: Collect Hyperliquid OI samples
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '7,17,27,37,47,57 * * * *' # off-peak minutes — GitHub drops far fewer scheduled runs than at :00/:10
   workflow_dispatch:
 permissions:
   contents: write
