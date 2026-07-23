@@ -455,10 +455,14 @@
         <div class="panel-head">🏛️ SEC Filings <span class="sub">crypto-exposed companies + your alerts</span></div>
         <div class="panel-body" id="secOuter">
           <div class="sec-alert-bar">
+            <input class="scan-input" id="secFTS" placeholder="🔎 full-text search ALL SEC filings — any phrase, Enter" spellcheck="false">
+          </div>
+          <div class="sec-alert-bar" style="padding-top:0">
             <input class="scan-input" id="secKeyword" placeholder="+ keyword alert (form / description / company)" spellcheck="false">
             <input class="scan-input" id="secFiler" placeholder="+ filer alert (CIK number)" spellcheck="false">
           </div>
           <div class="sec-chips" id="secChips"></div>
+          <div id="secFtsBox"></div>
           <div id="secBody"><div class="empty">Loading filings…</div></div>
         </div>
       </div></div>
@@ -1691,6 +1695,43 @@ $("secFiler").addEventListener("keydown", e => {
   e.target.value = ""; renderSecChips(); loadSEC();
 });
 renderSecChips();
+
+/* ---- EDGAR full-text search across ALL filings (efts.sec.gov via CORS proxy) ---- */
+async function edgarFTS(phrase) {
+  const box = $("secFtsBox");
+  box.innerHTML = '<div class="oi-note" style="padding:8px 14px">🔎 searching all SEC filings for “' + esc(phrase) + '”…</div>';
+  try {
+    const q = "https://efts.sec.gov/LATEST/search-index?q=" + encodeURIComponent('"' + phrase + '"');
+    const j = await fetchJSON("https://corsproxy.io/?url=" + encodeURIComponent(q), {timeout: 15000});
+    const hits = (j.hits && j.hits.hits) || [];
+    const total = (j.hits && j.hits.total && j.hits.total.value) || hits.length;
+    if (!hits.length) { box.innerHTML = '<div class="empty">No filings mention “' + esc(phrase) + '”.</div>'; return; }
+    const rows = hits.slice(0, 20).map(h => {
+      const s = h._source || {};
+      const cik = (s.ciks && s.ciks[0]) || "";
+      const name = ((s.display_names && s.display_names[0]) || "").replace(/\s*\(CIK.*$/, "").trim();
+      const acc = (s.adsh || (h._id || "").split(":")[0] || "").replace(/-/g, "");
+      const file = (h._id || "").split(":")[1] || "";
+      const url = cik && acc ? "https://www.sec.gov/Archives/edgar/data/" + String(parseInt(cik, 10)) + "/" + acc + "/" + file : "https://www.sec.gov";
+      return '<a class="sec-item" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<div class="sec-top"><span class="form-badge">' + esc(s.form || s.root_forms && s.root_forms[0] || "?") + '</span>' +
+        '<span class="sec-company">' + esc(name || "Filer") + "</span></div>" +
+        '<div class="sec-meta">' + esc(s.file_description || s.file_type || "") + " · " + esc(s.file_date || "") + "</div></a>";
+    }).join("");
+    box.innerHTML =
+      '<div class="oi-note" style="padding:8px 14px 2px;color:var(--accent)">🔎 “' + esc(phrase) + '” — ' + total.toLocaleString() +
+      ' filings mention this <button class="btn-ghost" id="secFtsClear" style="margin-left:6px;padding:1px 7px">✕ clear</button></div>' +
+      rows;
+    document.getElementById("secFtsClear").addEventListener("click", () => { box.innerHTML = ""; $("secFTS").value = ""; });
+  } catch (e) {
+    box.innerHTML = '<div class="error">Full-text search unavailable right now (proxy busy) — try again in a moment.</div>';
+  }
+}
+$("secFTS").addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const v = e.target.value.trim();
+  if (v.length >= 3) edgarFTS(v);
+});
 
 async function loadSEC() {
   const body = $("secBody");

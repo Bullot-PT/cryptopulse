@@ -1,14 +1,14 @@
 import fs from 'fs';
 
-const res = await fetch('https://api.hyperliquid.xyz/info', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ type: 'metaAndAssetCtxs' })
-});
-const [meta, ctxs] = await res.json();
-const coins = {};
-const hlSet = new Set();
-let total = 0;
+const now = Date.now();
+const jget = (u, o) => fetch(u, o).then(r => r.json());
+const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+const fmtBig = n => n >= 1e9 ? '$' + (n/1e9).toFixed(2) + 'B' : n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : '$' + Math.round(n).toLocaleString();
+const fmtPx = p => p >= 1000 ? '$' + Math.round(p).toLocaleString() : p >= 1 ? '$' + p.toFixed(2) : '$' + p.toPrecision(4);
+
+// ---------------- OI collection (Hyperliquid + Bybit + OKX + CoinGecko) ----------------
+const [meta, ctxs] = await post('https://api.hyperliquid.xyz/info', { type: 'metaAndAssetCtxs' });
+const coins = {}, hlSet = new Set(); let total = 0;
 (meta.universe || []).forEach((u, i) => {
   const c = ctxs[i];
   if (!c || u.isDelisted) return;
@@ -21,7 +21,7 @@ const top = topN(coins, 60);
 
 let bb = {}, ok = {};
 try {
-  const j = await fetch('https://api.bybit.com/v5/market/tickers?category=linear').then(r => r.json());
+  const j = await jget('https://api.bybit.com/v5/market/tickers?category=linear');
   (j.result && j.result.list || []).forEach(t => {
     if (!t.symbol || !t.symbol.endsWith('USDT')) return;
     let b = t.symbol.slice(0, -4);
@@ -31,7 +31,7 @@ try {
   });
 } catch (e) { console.log('bybit failed', e.message); }
 try {
-  const j = await fetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP').then(r => r.json());
+  const j = await jget('https://www.okx.com/api/v5/public/open-interest?instType=SWAP');
   (j.data || []).forEach(d => {
     const b0 = (d.instId || '').split('-')[0];
     const b = hlSet.has(b0) ? b0 : (hlSet.has('k' + b0) ? 'k' + b0 : b0);
@@ -39,12 +39,11 @@ try {
     if (v > 0) ok[b] = (ok[b] || 0) + Math.round(v);
   });
 } catch (e) { console.log('okx failed', e.message); }
-
 let agg = 0, ex = {};
 try {
   const [gxr, spr] = await Promise.all([
-    fetch('https://api.coingecko.com/api/v3/derivatives/exchanges?per_page=100&page=1').then(r => r.json()),
-    fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(r => r.json())
+    jget('https://api.coingecko.com/api/v3/derivatives/exchanges?per_page=100&page=1'),
+    jget('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
   ]);
   const btcPx = spr.bitcoin.usd;
   gxr.forEach(e => {
@@ -53,44 +52,131 @@ try {
   });
 } catch (e) { console.log('gx fetch failed', e.message); }
 
-const path = 'data/oi-history.json';
 let hist = { samples: [] };
-try { hist = JSON.parse(fs.readFileSync(path, 'utf8')); } catch (e) {}
-const sample = { t: Date.now(), total: Math.round(total), coins: top };
+try { hist = JSON.parse(fs.readFileSync('data/oi-history.json', 'utf8')); } catch (e) {}
+const sample = { t: now, total: Math.round(total), coins: top };
 if (Object.keys(bb).length) sample.bb = topN(bb, 40);
 if (Object.keys(ok).length) sample.ok = topN(ok, 40);
 if (agg > 0) { sample.agg = Math.round(agg); sample.ex = topN(ex, 12); }
 hist.samples.push(sample);
-const cutoff = Date.now() - 8 * 86400 * 1000;
-hist.samples = hist.samples.filter(s => s.t > cutoff);
+hist.samples = hist.samples.filter(s => s.t > now - 8 * 86400 * 1000);
 fs.mkdirSync('data', { recursive: true });
-fs.writeFileSync(path, JSON.stringify(hist));
-console.log('samples stored:', hist.samples.length);
+fs.writeFileSync('data/oi-history.json', JSON.stringify(hist));
+console.log('OI samples stored:', hist.samples.length);
 
-// Kalshi mirror — their API blocks browsers, so the bot fetches it server-side.
+// ---------------- Kalshi mirror ----------------
 try {
   let cursor = '', out = [], pages = 0;
   while (pages < 5) {
-    const u = 'https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true' +
-      (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+    const u = 'https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
     const r = await fetch(u, { headers: { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' } });
     if (!r.ok) { console.log('kalshi http', r.status); break; }
     const j = await r.json();
     (j.events || []).forEach(ev => {
-      const mkts = (ev.markets || []).slice(0, 6).map(m => ({
-        tk: m.ticker, ti: m.title || m.yes_sub_title || '',
-        y: m.last_price ?? m.yes_bid ?? null, v: m.volume_24h ?? m.volume ?? 0
-      }));
+      const mkts = (ev.markets || []).slice(0, 6).map(m => ({ tk: m.ticker, ti: m.title || m.yes_sub_title || '', y: m.last_price ?? m.yes_bid ?? null, v: m.volume_24h ?? m.volume ?? 0 }));
       out.push({ t: ev.title, tk: ev.event_ticker, s: ev.series_ticker, m: mkts });
     });
-    cursor = j.cursor;
-    pages++;
+    cursor = j.cursor; pages++;
     if (!cursor || !(j.events || []).length) break;
   }
-  if (out.length) {
-    fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: Date.now(), events: out }));
-    console.log('kalshi events:', out.length);
-  } else {
-    console.log('kalshi: no events returned');
-  }
+  if (out.length) { fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out })); console.log('kalshi events:', out.length); }
 } catch (e) { console.log('kalshi failed', e.message); }
+
+// ================= TELEGRAM ALERTS =================
+const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
+const tgOn = !!(TG_TOKEN && TG_CHAT);
+async function tg(text) {
+  if (!tgOn) return;
+  try {
+    await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHAT, text, parse_mode: 'Markdown', disable_web_page_preview: true })
+    });
+  } catch (e) { console.log('tg send failed', e.message); }
+}
+// state: which alerts we've already sent (dedup). First-ever run seeds silently.
+let st = { whale: [], sec: [], liq: [] }, firstRun = false;
+try { st = JSON.parse(fs.readFileSync('data/alert-state.json', 'utf8')); }
+catch (e) { firstRun = true; }
+const seen = { whale: new Set(st.whale || []), sec: new Set(st.sec || []), liq: new Set(st.liq || []) };
+const queue = [];
+function consider(kind, key, msg) {
+  if (seen[kind].has(key)) return;
+  seen[kind].add(key);
+  if (!firstRun) queue.push(msg); // seed silently on first run
+}
+
+// --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
+try {
+  const lb = (await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || [];
+  const mids = await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
+  const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
+  for (let i = 0; i < top60.length; i += 12) {
+    const chunk = await Promise.allSettled(top60.slice(i, i + 12).map(r =>
+      post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }).then(s => ({ addr: r.ethAddress, s }))
+    ));
+    chunk.forEach(c => {
+      if (c.status !== 'fulfilled') return;
+      (c.value.s.assetPositions || []).forEach(ap => {
+        const p = ap.position;
+        const v = Math.abs(parseFloat(p.positionValue));
+        const liq = parseFloat(p.liquidationPx), mark = parseFloat(mids[p.coin]);
+        if (v < 25e6 || !liq || !mark) return;
+        const szi = parseFloat(p.szi);
+        let dist = null;
+        if (szi > 0 && liq < mark) dist = (mark - liq) / mark * 100;
+        if (szi < 0 && liq > mark) dist = (liq - mark) / mark * 100;
+        if (dist == null || dist > 10) return;
+        const key = c.value.addr + ':' + p.coin;
+        consider('whale', key, '🐋 *Whale liquidation risk*\n' + fmtBig(v) + ' ' + (szi > 0 ? 'LONG' : 'SHORT') + ' ' + p.coin +
+          '\nliq @ ' + fmtPx(liq) + ' · ' + dist.toFixed(1) + '% away\n`' + c.value.addr + '`');
+      });
+    });
+  }
+} catch (e) { console.log('whale alert failed', e.message); }
+
+// --- SEC: new material filings for tracked companies ---
+const SEC_CIKS = [
+  ['0001679788','Coinbase'],['0001050446','Strategy'],['0001507605','MARA Holdings'],
+  ['0001167419','Riot Platforms'],['0001720424','HIVE Digital'],['0001512673','Block'],
+  ['0001783879','Robinhood'],['0001318605','Tesla'],['0001980994','iShares Bitcoin Trust'],
+  ['0001876042','Circle'],['0001859392','Galaxy Digital']
+];
+const MATERIAL = /^(8-K|10-Q|10-K|S-1|424B|6-K|20-F|SC 13D|13D)/i;
+try {
+  for (const [cik, short] of SEC_CIKS) {
+    let j;
+    try { j = await jget('https://data.sec.gov/submissions/CIK' + cik + '.json', { headers: { 'User-Agent': 'cryptopulse-bot bullot@example.com' } }); }
+    catch (e) { continue; }
+    const r = j.filings && j.filings.recent; if (!r || !r.form) continue;
+    for (let i = 0; i < Math.min(r.form.length, 6); i++) {
+      if (!MATERIAL.test(r.form[i])) continue;
+      const acc = r.accessionNumber[i];
+      consider('sec', acc, '📄 *New SEC filing*\n' + short + ' — ' + r.form[i] +
+        '\n' + (r.primaryDocDescription && r.primaryDocDescription[i] || 'filing') + ' · ' + r.filingDate[i]);
+    }
+  }
+} catch (e) { console.log('sec alert failed', e.message); }
+
+// --- Liquidation risk: Morpho positions >= $10M within ~8% of liquidation ---
+try {
+  const q = { query: '{ marketPositions(first:200, orderBy: HealthFactor, orderDirection: Asc, where:{healthFactor_lte:1.08, healthFactor_gte:1.0}) { items { healthFactor state{ collateralUsd } user{ address } market{ collateralAsset{ symbol } loanAsset{ symbol } morphoBlue{ chain{ network } } } } } }' };
+  const j = await post('https://blue-api.morpho.org/graphql', q);
+  const items = ((j.data && j.data.marketPositions.items) || []).filter(i => i.state && i.state.collateralUsd >= 10e6 && i.healthFactor >= 1);
+  items.forEach(i => {
+    const dist = (1 - 1 / i.healthFactor) * 100;
+    const sym = i.market.collateralAsset.symbol, loan = i.market.loanAsset.symbol;
+    const chain = i.market.morphoBlue.chain.network;
+    const key = i.user.address + ':' + sym + '/' + loan;
+    consider('liq', key, '💥 *Liquidation risk*\n' + fmtBig(i.state.collateralUsd) + ' ' + sym + '/' + loan + ' on ' + chain +
+      '\nHF ' + i.healthFactor.toFixed(3) + ' · ' + dist.toFixed(1) + '% from liquidation');
+  });
+} catch (e) { console.log('liq alert failed', e.message); }
+
+// send queued alerts (cap to avoid floods), save state
+for (const msg of queue.slice(0, 12)) { await tg(msg); await new Promise(r => setTimeout(r, 400)); }
+if (queue.length > 12) await tg('… and ' + (queue.length - 12) + ' more alerts this cycle.');
+fs.writeFileSync('data/alert-state.json', JSON.stringify({
+  whale: [...seen.whale].slice(-600), sec: [...seen.sec].slice(-400), liq: [...seen.liq].slice(-600)
+}));
+console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
