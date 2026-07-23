@@ -394,6 +394,40 @@
 
   footer { padding: 6px 20px 20px; font-size: 11px; color: var(--muted); }
   footer a { color: var(--ink-2); }
+
+  /* ---------- custom alerts ---------- */
+  .ca-tg { padding: 9px 14px; border-bottom: 1px solid var(--grid); font-size: 11.5px; }
+  .ca-tg-row { display: flex; align-items: center; gap: 8px; }
+  .ca-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+  .ca-dot.on { background: var(--up); }
+  .ca-tg-label { color: var(--ink-2); }
+  .ca-link { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .ca-link:hover { text-decoration: underline; }
+  .ca-setup { margin-top: 8px; display: none; }
+  .ca-setup.open { display: block; }
+  .ca-setup input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+  .ca-note { font-size: 10.5px; color: var(--muted); line-height: 1.45; margin-top: 4px; }
+  .ca-form { padding: 9px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-wrap: wrap; gap: 6px; }
+  .ca-form select, .ca-form input {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--ink); font-family: inherit; font-size: 11.5px; padding: 5px 8px; outline: none; min-width: 0;
+  }
+  .ca-form select:focus, .ca-form input:focus, .ca-setup input:focus { border-color: var(--accent); }
+  .ca-form .ca-num { width: 74px; flex: 0 0 auto; }
+  .ca-form .ca-coin { width: 70px; flex: 0 0 auto; text-transform: uppercase; }
+  .ca-btn {
+    background: var(--accent); border: none; border-radius: 7px; color: #fff; cursor: pointer;
+    font-family: inherit; font-size: 11.5px; font-weight: 600; padding: 5px 12px;
+  }
+  .ca-btn.ghost { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+  .ca-btn:hover { filter: brightness(1.1); }
+  .ca-rule { padding: 8px 14px; border-bottom: 1px solid var(--grid); display: flex; align-items: center; gap: 8px; }
+  .ca-rule:last-child { border-bottom: none; }
+  .ca-rule-txt { font-size: 11.5px; color: var(--ink); flex: 1; min-width: 0; }
+  .ca-rule-sub { font-size: 10px; color: var(--muted); }
+  .ca-rule-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0 3px; flex: 0 0 auto; }
+  .ca-rule-x:hover { color: var(--down); }
+  .ca-rule.hot { background: rgba(208,59,59,0.10); }
 </style>
 <style id="gridstack-css">.grid-stack{position:relative}.grid-stack-placeholder>.placeholder-content{background-color:rgba(0,0,0,.1);margin:0;position:absolute;width:auto;z-index:0!important}.grid-stack>.grid-stack-item{position:absolute;padding:0;top:0;width:var(--gs-column-width);height:var(--gs-cell-height)}.grid-stack>.grid-stack-item>.grid-stack-item-content{margin:0;position:absolute;width:auto;overflow-x:hidden;overflow-y:auto}.grid-stack>.grid-stack-item.size-to-content:not(.size-to-content-max)>.grid-stack-item-content{overflow-y:hidden}.grid-stack:not(.grid-stack-rtl)>.grid-stack-item{left:0}.grid-stack.grid-stack-rtl>.grid-stack-item{right:0}.grid-stack>.grid-stack-item>.grid-stack-item-content,.grid-stack>.grid-stack-placeholder>.placeholder-content{top:var(--gs-item-margin-top);right:var(--gs-item-margin-right);bottom:var(--gs-item-margin-bottom);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-handle{position:absolute;font-size:.1px;display:block;-ms-touch-action:none;touch-action:none;user-select:none;z-index:100}.grid-stack-item.ui-resizable-autohide>.ui-resizable-handle,.grid-stack-item.ui-resizable-disabled>.ui-resizable-handle{display:none}.grid-stack-item>.ui-resizable-ne,.grid-stack-item>.ui-resizable-nw,.grid-stack-item>.ui-resizable-se,.grid-stack-item>.ui-resizable-sw{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="%23666" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 20 20"><path d="m10 3 2 2H8l2-2v14l-2-2h4l-2 2"/></svg>');background-repeat:no-repeat;background-position:center;z-index:101}.grid-stack-item>.ui-resizable-ne{transform:rotate(45deg)}.grid-stack-item>.ui-resizable-sw{transform:rotate(45deg)}.grid-stack-item>.ui-resizable-nw{transform:rotate(-45deg)}.grid-stack-item>.ui-resizable-se{transform:rotate(-45deg)}.grid-stack-item>.ui-resizable-nw{cursor:nw-resize;width:20px;height:20px;top:var(--gs-item-margin-top);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-n{cursor:n-resize;height:10px;top:var(--gs-item-margin-top);left:25px;right:25px}.grid-stack-item>.ui-resizable-ne{cursor:ne-resize;width:20px;height:20px;top:var(--gs-item-margin-top);right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-e{cursor:e-resize;width:10px;top:15px;bottom:15px;right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-se{cursor:se-resize;width:20px;height:20px;bottom:var(--gs-item-margin-bottom);right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-s{cursor:s-resize;height:10px;left:25px;bottom:var(--gs-item-margin-bottom);right:25px}.grid-stack-item>.ui-resizable-sw{cursor:sw-resize;width:20px;height:20px;bottom:var(--gs-item-margin-bottom);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-w{cursor:w-resize;width:10px;top:15px;bottom:15px;left:var(--gs-item-margin-left)}.grid-stack-item.ui-draggable-dragging>.ui-resizable-handle{display:none!important}.grid-stack-item.ui-draggable-dragging{will-change:left,right,top}.grid-stack-item.ui-resizable-resizing{will-change:width,height}.ui-draggable-dragging,.ui-resizable-resizing{z-index:10000}.ui-draggable-dragging>.grid-stack-item-content,.ui-resizable-resizing>.grid-stack-item-content{box-shadow:1px 4px 6px rgba(0,0,0,.2);opacity:.8}.grid-stack-animate,.grid-stack-animate .grid-stack-item{transition:left .3s,right .3s,top .3s,height .3s,width .3s}.grid-stack-animate .grid-stack-item.grid-stack-placeholder,.grid-stack-animate .grid-stack-item.ui-draggable-dragging,.grid-stack-animate .grid-stack-item.ui-resizable-resizing{transition:left 0s,right 0s,top 0s,height 0s,width 0s}.grid-stack>.grid-stack-item[gs-y="0"]{top:0}.grid-stack:not(.grid-stack-rtl)>.grid-stack-item[gs-x="0"]{left:0}.grid-stack.grid-stack-rtl>.grid-stack-item[gs-x="0"]{right:0}</style>
 </head>
@@ -506,6 +540,45 @@
         </div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="alerts">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🔔 Custom Alerts <span class="sub" id="caSub">your rules · in-page + Telegram</span></div>
+        <div class="panel-body" id="caBody">
+          <div class="ca-tg">
+            <div class="ca-tg-row">
+              <span class="ca-dot" id="caDot"></span>
+              <span class="ca-tg-label" id="caTgLabel">Telegram not connected</span>
+              <a class="ca-link" id="caTgToggle" style="margin-left:auto">connect</a>
+            </div>
+            <div class="ca-setup" id="caSetup">
+              <input id="caToken" placeholder="bot token (from @BotFather)" spellcheck="false" autocomplete="off">
+              <input id="caChat" placeholder="chat id (from @userinfobot)" spellcheck="false" autocomplete="off">
+              <div style="display:flex;gap:6px">
+                <button class="ca-btn" id="caSave">Save &amp; test</button>
+                <button class="ca-btn ghost" id="caDisconnect">Disconnect</button>
+              </div>
+              <div class="ca-note" id="caTgNote">Stored only in this browser — never uploaded. Alerts fire while this tab is open. For alerts with your PC off, the repo bot handles the preset whale/SEC/liquidation alerts.</div>
+            </div>
+          </div>
+          <div class="ca-form">
+            <select id="caMetric">
+              <option value="whale_liq">Whale near liquidation</option>
+              <option value="price_above">Price above</option>
+              <option value="price_below">Price below</option>
+              <option value="chg24_up">24h change above</option>
+              <option value="chg24_dn">24h drop below</option>
+              <option value="funding_above">Funding/h above</option>
+              <option value="funding_below">Funding/h below</option>
+            </select>
+            <input class="ca-coin" id="caCoin" placeholder="coin" spellcheck="false">
+            <input class="ca-num" id="caVal" placeholder="value" spellcheck="false">
+            <input class="ca-num" id="caVal2" placeholder="within %" spellcheck="false" style="display:none">
+            <button class="ca-btn" id="caAdd">Add rule</button>
+          </div>
+          <div id="caRules"><div class="empty">No rules yet. Try: “Whale near liquidation ≥ 25 within 2%”.</div></div>
+        </div>
+      </div></div>
+    </div>
   </div>
 </div>
 
@@ -537,6 +610,7 @@ const DEFAULT_LAYOUT = [
   {id: "fng",        x: 0, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
   {id: "longshort",  x: 2, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
   {id: "whales",     x: 4, y: 0,  w: 3, h: 12, minW: 2, minH: 2},
+  {id: "alerts",     x: 0, y: 18, w: 4, h: 6,  minW: 2, minH: 3},
   {id: "sec",        x: 7, y: 0,  w: 2, h: 12, minW: 2, minH: 2},
   {id: "liqs",       x: 9, y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
   {id: "prices",     x: 0, y: 2,  w: 2, h: 5,  minW: 2, minH: 2},
@@ -740,37 +814,88 @@ function popChartSVG(points, high, low, up) {
     '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="3.5" fill="' + color + '" stroke="var(--surface-2)" stroke-width="2"/>' +
   "</svg>";
 }
-function showPricePop(row) {
+const PRICE_TFS = [
+  {k: "15m", ms: 15 * 60_000}, {k: "1h", ms: 60 * 60_000}, {k: "4h", ms: 4 * 3_600_000},
+  {k: "1D", ms: 24 * 3_600_000}, {k: "1W", ms: 7 * 86_400_000}
+];
+let priceTf = "1D";
+try { const v = localStorage.getItem("cryptopulse-price-tf"); if (PRICE_TFS.some(t => t.k === v)) priceTf = v; } catch (e) {}
+const priceChartCache = {}; /* id -> {day:[[t,p]], week:[[t,p]], t} */
+let pricePopRow = null, pricePopId = null;
+async function showPricePop(row) {
   const c = priceCoins[Number(row.dataset.i)];
   if (!c) return;
-  const series = c.sparkline_in_7d && c.sparkline_in_7d.price;
-  if (!series || series.length < 5) return;
-  const pts = series.slice(-25); /* ~last 24h of hourly points */
-  const chg = c.price_change_percentage_24h || 0;
-  pricePop.innerHTML =
-    '<div class="pp-head"><span class="pp-name">' + esc(c.name) + "</span>" +
-    '<span class="pp-px">' + fmtPrice(c.current_price) + "</span>" +
-    '<span class="pp-tag">last 24h</span></div>' +
-    popChartSVG(pts, c.high_24h, c.low_24h, chg >= 0) +
-    '<div class="pp-hint">session high / low marked · click row for TradingView</div>';
-  const r = row.getBoundingClientRect();
-  pricePop.style.display = "block";
-  const pw = 300, ph = pricePop.offsetHeight || 170;
-  let x = r.right + 10;
-  if (x + pw > window.innerWidth - 8) x = r.left - pw - 10;
-  if (x < 8) x = Math.min(window.innerWidth - pw - 8, Math.max(8, r.left));
-  let y = Math.min(Math.max(8, r.top - 30), window.innerHeight - ph - 8);
-  pricePop.style.left = x + "px";
-  pricePop.style.top = y + "px";
+  pricePopRow = row; pricePopId = c.id;
+  await renderPricePop();
 }
+async function renderPricePop() {
+  const row = pricePopRow;
+  const c = priceCoins.find(x => x && x.id === pricePopId);
+  if (!c || !row) return;
+  const tf = PRICE_TFS.find(t => t.k === priceTf) || PRICE_TFS[3];
+  const chg = c.price_change_percentage_24h || 0;
+  const btns = PRICE_TFS.map(t => '<button class="src-btn tf-btn' + (t.k === priceTf ? " src-on" : "") + '" data-ptf="' + t.k + '">' + t.k + "</button>").join("");
+  const head = '<div class="pp-head"><span class="pp-name">' + esc(c.name) + "</span>" +
+    '<span class="pp-px pp-livepx" data-sym="' + esc((c.symbol||"").toUpperCase()) + '">' + fmtPrice(c.current_price) + "</span>" +
+    '<span class="pp-tag">' + esc(priceTf) + "</span></div>" +
+    '<div style="display:flex;gap:3px;margin-bottom:5px">' + btns + "</div>";
+  const place = () => {
+    const r = row.getBoundingClientRect();
+    pricePop.style.display = "block"; pricePop.style.pointerEvents = "auto";
+    const pw = 300, ph = pricePop.offsetHeight || 190;
+    let x = r.right + 10;
+    if (x + pw > window.innerWidth - 8) x = r.left - pw - 10;
+    if (x < 8) x = Math.min(window.innerWidth - pw - 8, Math.max(8, r.left));
+    pricePop.style.left = x + "px";
+    pricePop.style.top = Math.min(Math.max(8, r.top - 30), window.innerHeight - ph - 8) + "px";
+  };
+  const wireBtns = () => {
+    pricePop.querySelectorAll(".tf-btn").forEach(b => b.addEventListener("click", ev => {
+      ev.stopPropagation(); priceTf = b.dataset.ptf;
+      try { localStorage.setItem("cryptopulse-price-tf", priceTf); } catch (e) {}
+      renderPricePop();
+    }));
+  };
+  const draw = (raw) => {
+    const now = Date.now();
+    const win = raw.filter(p => p[0] > now - tf.ms).map(p => p[1]);
+    let pts = win.length >= 3 ? win : raw.slice(-Math.max(3, Math.round(raw.length * tf.ms / (7 * 86_400_000)))).map(p => p[1]);
+    if (pts.length < 2) pts = raw.map(p => p[1]).slice(-10);
+    const hi = Math.max(...pts), lo = Math.min(...pts);
+    pricePop.innerHTML = head + popChartSVG(pts, hi, lo, pts[pts.length-1] >= pts[0]) +
+      '<div class="pp-hint">' + esc(priceTf) + " · high / low marked · live · click for TradingView</div>";
+    place(); wireBtns();
+  };
+  /* choose data source: week frame -> 7d hourly; else 1d 5-min */
+  const cache = priceChartCache[c.id] || {};
+  const needWeek = tf.k === "1W";
+  const have = needWeek ? cache.week : cache.day;
+  if (have && Date.now() - cache.t < 300_000) { draw(have); return; }
+  pricePop.innerHTML = head + '<div class="empty" style="padding:26px 0">Loading ' + esc(priceTf) + " chart…</div>";
+  place(); wireBtns();
+  try {
+    const days = needWeek ? 7 : 1;
+    const mc = await fetchJSON("https://api.coingecko.com/api/v3/coins/" + encodeURIComponent(c.id) + "/market_chart?vs_currency=usd&days=" + days, {timeout: 12000});
+    const raw = (mc.prices || []).filter(p => isFinite(p[1]));
+    if (pricePopId !== c.id) return;
+    priceChartCache[c.id] = {...cache, [needWeek ? "week" : "day"]: raw, t: Date.now()};
+    if (raw.length >= 2) draw(raw);
+    else if (c.sparkline_in_7d && c.sparkline_in_7d.price) draw(c.sparkline_in_7d.price.map((p, i) => [Date.now() - (168 - i) * 3_600_000, p]));
+  } catch (e) {
+    if (pricePopId !== c.id) return;
+    if (c.sparkline_in_7d && c.sparkline_in_7d.price) draw(c.sparkline_in_7d.price.map((p, i) => [Date.now() - (168 - i) * 3_600_000, p]));
+    else { pricePop.innerHTML = head + '<div class="empty" style="padding:20px 0">Chart unavailable (rate limit) — try again shortly.</div>'; place(); wireBtns(); }
+  }
+}
+pricePop.addEventListener("click", e => { if (e.target.closest(".tf-btn")) e.stopPropagation(); });
 $("pricesBody").addEventListener("mouseover", e => {
   const row = e.target.closest(".price-row");
   if (row && row.dataset.i != null) showPricePop(row);
 });
-$("pricesBody").addEventListener("mouseleave", () => { pricePop.style.display = "none"; });
 $("pricesBody").addEventListener("mouseout", e => {
-  if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".price-row"))
-    pricePop.style.display = "none";
+  const to = e.relatedTarget;
+  if (to && to.closest && (to.closest(".price-row") || to.closest(".price-pop"))) return;
+  pricePop.style.display = "none"; pricePop.style.pointerEvents = "none"; pricePopRow = null; pricePopId = null;
 });
 
 /* ---------------- global stats (CoinGecko) ---------------- */
@@ -2130,7 +2255,7 @@ function pmEventCard(ev, opts) {
   const multi = (ev.markets || []).length > 1;
   const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
   const end = ev.endDate ? new Date(ev.endDate) : null;
-  pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || ""};
+  pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || "", vol: parseFloat(ev.volume24hr) || 0};
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
     '<div class="pm-q">' + esc(ev.title) + "</div>" +
     '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
@@ -2157,10 +2282,13 @@ function trackOddsMoves(oddsNow) {
       const delta = o.pct - base[1];
       if (Math.abs(delta) >= 10 && !oddsAlerted.has(o.slug)) {
         oddsAlerted.add(o.slug);
-        alerts.push({slug: o.slug, title: o.title, label: o.label, pct: o.pct, delta, t: now});
+        /* base[2] = volume24hr snapshot an hour ago; volume only rises within a day */
+        const dvol = base[2] != null ? Math.max(0, (o.vol || 0) - base[2]) : null;
+        alerts.push({slug: o.slug, title: o.title, label: o.label,
+          pct: o.pct, from: base[1], delta, dvol, t: now});
       }
     }
-    if (!arr.length || now - arr[arr.length - 1][0] > 5 * 60_000) arr.push([now, o.pct]);
+    if (!arr.length || now - arr[arr.length - 1][0] > 5 * 60_000) arr.push([now, o.pct, o.vol || 0]);
   });
   watchStore.set("cryptopulse-pm-odds", hist);
   if (alerts.length) {
@@ -2169,13 +2297,20 @@ function trackOddsMoves(oddsNow) {
     playBeep();
   }
   const act = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.t > now - 3 * 3_600_000);
-  pmOddsAlertsHTML = act.map(a =>
-    '<a class="bet-alert flash-red" href="https://polymarket.com/event/' + esc(a.slug) + '" target="_blank" rel="noopener">' +
-      '<div class="b1">📊 <span class="' + (a.delta > 0 ? "chg-up" : "chg-down") + '">' +
-      (a.delta > 0 ? "+" : "") + a.delta.toFixed(0) + "pp in 1h</span> → " + a.pct.toFixed(0) + "% “" + esc(a.label) + "”" +
+  pmOddsAlertsHTML = act.map(a => {
+    const up = a.delta > 0;
+    const move = a.from != null
+      ? a.from.toFixed(0) + "% → " + a.pct.toFixed(0) + "%"
+      : a.pct.toFixed(0) + "%";
+    const volTxt = a.dvol != null && a.dvol > 0 ? " · vol +" + fmtBig(a.dvol) : "";
+    return '<a class="bet-alert flash-red" href="https://polymarket.com/event/' + esc(a.slug) + '" target="_blank" rel="noopener">' +
+      '<div class="b1">📊 <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
+      '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
+      ' “' + esc(a.label) + "”" +
       '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
       '<button class="bet-x" data-odds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
-      '<div class="b2">' + esc(a.title) + "</div></a>").join("");
+      '<div class="b2">' + esc(a.title) + "</div></a>";
+  }).join("");
 }
 $("pmBody").addEventListener("click", e => {
   const x = e.target.closest(".bet-x");
@@ -2441,6 +2576,205 @@ function updateOiLive() {
 }
 setTimeout(() => { connectBinancePrices(); connectHyperMids(); }, 1500);
 
+/* ---------------- custom alerts (in-page + browser→Telegram) ---------------- */
+const CA = {
+  rules: [],
+  tg: {token: "", chat: ""},
+  fired: {},            /* signature -> last-fired ms (cooldown) */
+  COOLDOWN: 15 * 60_000
+};
+function caLoad() {
+  try { CA.rules = JSON.parse(localStorage.getItem("cryptopulse-ca-rules") || "[]"); } catch (e) { CA.rules = []; }
+  try {
+    CA.tg.token = localStorage.getItem("cryptopulse-tg-token") || "";
+    CA.tg.chat  = localStorage.getItem("cryptopulse-tg-chat")  || "";
+  } catch (e) {}
+}
+function caSaveRules() { try { localStorage.setItem("cryptopulse-ca-rules", JSON.stringify(CA.rules)); } catch (e) {} }
+const CA_METRICS = {
+  whale_liq:     {label: "🐋 whale near liquidation", coin: "opt", two: true},
+  price_above:   {label: "📈 price above", coin: "req"},
+  price_below:   {label: "📉 price below", coin: "req"},
+  chg24_up:      {label: "📈 24h change above", coin: "req", pct: true},
+  chg24_dn:      {label: "📉 24h drop below", coin: "req", pct: true},
+  funding_above: {label: "💸 funding/h above", coin: "req", pct: true},
+  funding_below: {label: "💸 funding/h below", coin: "req", pct: true}
+};
+/* one lookup for a coin's live price / 24h change / funding-per-hour */
+function coinData(coin) {
+  const C = String(coin || "").toUpperCase();
+  let price = liveMark[C] != null ? liveMark[C] : null;
+  let chg = null, funding = null;
+  const pc = priceCoins.find(c => (c.symbol || "").toUpperCase() === C);
+  if (pc) { if (price == null) price = pc.current_price; chg = pc.price_change_percentage_24h; }
+  const hr = (typeof hyperRows !== "undefined" ? hyperRows : []).find(r => (r.coin || "").toUpperCase() === C);
+  if (hr) funding = hr.fundingHr;
+  return {price, chg, funding};
+}
+function caRuleText(r) {
+  const m = CA_METRICS[r.metric];
+  if (!m) return "rule";
+  if (r.metric === "whale_liq")
+    return m.label + " ≥ $" + r.value + "M within " + (r.value2 || 5) + "% of liq" + (r.coin ? " · " + r.coin.toUpperCase() : " · any coin");
+  const unit = m.pct ? "%" : "";
+  return (r.coin ? r.coin.toUpperCase() + " " : "") + m.label.replace(/^..\s/, "") + " " + r.value + unit;
+}
+function renderCaRules() {
+  const box = $("caRules");
+  if (!CA.rules.length) { box.innerHTML = '<div class="empty">No rules yet. Try: “Whale near liquidation ≥ 25 within 2%”.</div>'; return; }
+  box.innerHTML = CA.rules.map(r =>
+    '<div class="ca-rule" data-rid="' + esc(r.id) + '">' +
+      '<div class="ca-rule-txt">' + esc(caRuleText(r)) +
+        (r.lastMsg ? '<div class="ca-rule-sub">last: ' + esc(r.lastMsg) + "</div>" : "") + "</div>" +
+      '<button class="ca-rule-x" data-rid="' + esc(r.id) + '" title="Remove">✕</button>' +
+    "</div>").join("");
+}
+function renderCaTg() {
+  const on = !!(CA.tg.token && CA.tg.chat);
+  $("caDot").classList.toggle("on", on);
+  $("caTgLabel").textContent = on ? "Telegram connected" : "Telegram not connected";
+  $("caTgToggle").textContent = on ? "settings" : "connect";
+}
+async function sendTelegram(text) {
+  if (!CA.tg.token || !CA.tg.chat) return {ok: false, reason: "not connected"};
+  const url = "https://api.telegram.org/bot" + encodeURIComponent(CA.tg.token) + "/sendMessage";
+  const body = {chat_id: CA.tg.chat, text: text, parse_mode: "HTML", disable_web_page_preview: true};
+  try {
+    const res = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const j = await res.json();
+    return {ok: !!j.ok, reason: j.description || ""};
+  } catch (e) {
+    /* CORS/read blocked — fire-and-forget so it still delivers */
+    try { await fetch(url, {method: "POST", mode: "no-cors", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}); } catch (e2) {}
+    return {ok: true, reason: "sent (unconfirmed)"};
+  }
+}
+let caNotifyAsked = false;
+function caBrowserNotify(title, body) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") { try { new Notification(title, {body}); } catch (e) {} }
+  else if (Notification.permission !== "denied" && !caNotifyAsked) {
+    caNotifyAsked = true;
+    Notification.requestPermission().then(p => { if (p === "granted") try { new Notification(title, {body}); } catch (e) {} });
+  }
+}
+function fireCustomAlert(rule, sig, msg) {
+  const now = Date.now();
+  const key = rule.id + "|" + sig;
+  if (CA.fired[key] && now - CA.fired[key] < CA.COOLDOWN) return;
+  CA.fired[key] = now;
+  rule.lastMsg = msg; caSaveRules(); renderCaRules();
+  const rowEl = document.querySelector('.ca-rule[data-rid="' + rule.id + '"]');
+  if (rowEl) { rowEl.classList.add("hot"); setTimeout(() => rowEl.classList.remove("hot"), 20_000); }
+  if (!alertMuted) { ensureAudio(); playBeep(); }
+  caBrowserNotify("🔔 CryptoPulse", msg);
+  sendTelegram("🔔 <b>CryptoPulse alert</b>\n" + msg);
+}
+function evalCustomRules() {
+  if (!CA.rules.length) return;
+  const now = Date.now();
+  CA.rules.forEach(r => {
+    if (r.metric === "whale_liq") {
+      const minVal = (parseFloat(r.value) || 0) * 1e6;
+      const withinPct = parseFloat(r.value2) || 5;
+      const wantCoin = (r.coin || "").toUpperCase();
+      document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
+        const coin = row.dataset.coin;
+        if (wantCoin && coin.toUpperCase() !== wantCoin) return;
+        const mark = liveMark[coin]; if (!mark) return;
+        const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
+        const mark0 = parseFloat(row.dataset.mark0) || mark, val0 = parseFloat(row.dataset.val0) || 0;
+        const value = val0 * (mark / mark0);
+        let dist = null;
+        if (liq > 0) {
+          if (szi > 0 && liq < mark) dist = (mark - liq) / mark * 100;
+          if (szi < 0 && liq > mark) dist = (liq - mark) / mark * 100;
+        }
+        if (value >= minVal && dist != null && dist <= withinPct) {
+          const addr = row.dataset.addr || "";
+          const side = szi > 0 ? "long" : "short";
+          fireCustomAlert(r, addr + coin,
+            fmtBig(value) + " " + coin + " " + side + " · " + dist.toFixed(1) + "% from liq @ " + fmtPrice(liq) +
+            (addr ? "\n" + addr.slice(0, 6) + "…" + addr.slice(-4) : ""));
+        }
+      });
+      return;
+    }
+    const d = coinData(r.coin);
+    const v = parseFloat(r.value);
+    if (isNaN(v)) return;
+    if (r.metric === "price_above" && d.price != null && d.price >= v)
+      fireCustomAlert(r, "px", r.coin.toUpperCase() + " " + fmtPrice(d.price) + " ≥ " + fmtPrice(v));
+    else if (r.metric === "price_below" && d.price != null && d.price <= v)
+      fireCustomAlert(r, "px", r.coin.toUpperCase() + " " + fmtPrice(d.price) + " ≤ " + fmtPrice(v));
+    else if (r.metric === "chg24_up" && d.chg != null && d.chg >= v)
+      fireCustomAlert(r, "chg", r.coin.toUpperCase() + " 24h " + d.chg.toFixed(2) + "% ≥ " + v + "%");
+    else if (r.metric === "chg24_dn" && d.chg != null && d.chg <= -Math.abs(v))
+      fireCustomAlert(r, "chg", r.coin.toUpperCase() + " 24h " + d.chg.toFixed(2) + "% ≤ -" + Math.abs(v) + "%");
+    else if (r.metric === "funding_above" && d.funding != null && d.funding >= v)
+      fireCustomAlert(r, "fund", r.coin.toUpperCase() + " funding " + d.funding.toFixed(4) + "%/h ≥ " + v + "%");
+    else if (r.metric === "funding_below" && d.funding != null && d.funding <= v)
+      fireCustomAlert(r, "fund", r.coin.toUpperCase() + " funding " + d.funding.toFixed(4) + "%/h ≤ " + v + "%");
+  });
+}
+function initCustomAlerts() {
+  caLoad(); renderCaRules(); renderCaTg();
+  const metricSel = $("caMetric"), coinIn = $("caCoin"), valIn = $("caVal"), val2In = $("caVal2");
+  function syncForm() {
+    const m = CA_METRICS[metricSel.value] || {};
+    val2In.style.display = m.two ? "" : "none";
+    coinIn.placeholder = m.coin === "opt" ? "coin (any)" : "coin";
+    valIn.placeholder = metricSel.value === "whale_liq" ? "$M ≥" : (m.pct ? "%" : "value");
+    val2In.placeholder = "within %";
+  }
+  metricSel.addEventListener("change", syncForm); syncForm();
+  $("caAdd").addEventListener("click", () => {
+    const metric = metricSel.value, m = CA_METRICS[metric];
+    const coin = (coinIn.value || "").trim();
+    const value = (valIn.value || "").trim();
+    if (m.coin === "req" && !coin) { coinIn.focus(); return; }
+    if (value === "" || isNaN(parseFloat(value))) { valIn.focus(); return; }
+    const rule = {id: "r" + Date.now().toString(36), metric, coin, value: parseFloat(value)};
+    if (m.two) rule.value2 = parseFloat(val2In.value) || 5;
+    CA.rules.push(rule); caSaveRules(); renderCaRules();
+    coinIn.value = ""; valIn.value = ""; val2In.value = "";
+    evalCustomRules();
+  });
+  valIn.addEventListener("keydown", e => { if (e.key === "Enter") $("caAdd").click(); });
+  $("caRules").addEventListener("click", e => {
+    const x = e.target.closest(".ca-rule-x"); if (!x) return;
+    CA.rules = CA.rules.filter(r => r.id !== x.dataset.rid);
+    caSaveRules(); renderCaRules();
+  });
+  /* telegram setup */
+  $("caTgToggle").addEventListener("click", () => {
+    const s = $("caSetup"); s.classList.toggle("open");
+    if (s.classList.contains("open")) { $("caToken").value = CA.tg.token; $("caChat").value = CA.tg.chat; }
+  });
+  $("caSave").addEventListener("click", async () => {
+    CA.tg.token = ($("caToken").value || "").trim();
+    CA.tg.chat  = ($("caChat").value || "").trim();
+    try {
+      localStorage.setItem("cryptopulse-tg-token", CA.tg.token);
+      localStorage.setItem("cryptopulse-tg-chat", CA.tg.chat);
+    } catch (e) {}
+    renderCaTg();
+    const note = $("caTgNote");
+    if (!CA.tg.token || !CA.tg.chat) { note.textContent = "Enter both the bot token and chat id."; return; }
+    note.textContent = "Sending test message…";
+    const res = await sendTelegram("✅ CryptoPulse connected. You'll get your custom alerts here while the dashboard is open.");
+    note.textContent = res.ok ? "✅ Test sent — check Telegram. Custom alerts will arrive here." :
+      ("Couldn't send: " + (res.reason || "check the token/chat id") + ".");
+  });
+  $("caDisconnect").addEventListener("click", () => {
+    CA.tg.token = ""; CA.tg.chat = "";
+    try { localStorage.removeItem("cryptopulse-tg-token"); localStorage.removeItem("cryptopulse-tg-chat"); } catch (e) {}
+    $("caToken").value = ""; $("caChat").value = "";
+    renderCaTg(); $("caTgNote").textContent = "Disconnected. Telegram alerts off (in-page alerts still work).";
+  });
+}
+initCustomAlerts();
+
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
 
@@ -2462,6 +2796,7 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { loadPolymarket(); loadPrices(); loadHyperliquid(); }
 });
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
+every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */
 </script>
 </body>
 </html>
