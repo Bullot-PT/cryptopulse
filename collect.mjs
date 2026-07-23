@@ -64,22 +64,47 @@ fs.mkdirSync('data', { recursive: true });
 fs.writeFileSync('data/oi-history.json', JSON.stringify(hist));
 console.log('OI samples stored:', hist.samples.length);
 
-// ---------------- Kalshi mirror ----------------
+// ---------------- Kalshi mirror (prices from /markets, titles from /events) ----------------
 try {
+  const KH = { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' };
+  // 1) price map from /markets (has last_price / yes_bid / yes_ask / volume, all in cents)
+  const priceByTk = {};
+  let mc = '', mp = 0;
+  while (mp < 8) {
+    const u = 'https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=1000' + (mc ? '&cursor=' + encodeURIComponent(mc) : '');
+    const r = await fetch(u, { headers: KH });
+    if (!r.ok) { console.log('kalshi markets http', r.status); break; }
+    const j = await r.json();
+    (j.markets || []).forEach(m => {
+      let y = m.last_price;
+      if (y == null) {
+        if (m.yes_bid != null && m.yes_ask != null) y = Math.round((m.yes_bid + m.yes_ask) / 2);
+        else y = m.yes_bid ?? m.yes_ask ?? null;
+      }
+      priceByTk[m.ticker] = { y, v: m.volume_24h ?? m.volume ?? 0, ti: m.title || m.yes_sub_title || '' };
+    });
+    mc = j.cursor; mp++;
+    if (!mc || !(j.markets || []).length) break;
+  }
+  // 2) events for titles + structure, merge prices by market ticker
   let cursor = '', out = [], pages = 0;
-  while (pages < 5) {
+  while (pages < 6) {
     const u = 'https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
-    const r = await fetch(u, { headers: { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' } });
-    if (!r.ok) { console.log('kalshi http', r.status); break; }
+    const r = await fetch(u, { headers: KH });
+    if (!r.ok) { console.log('kalshi events http', r.status); break; }
     const j = await r.json();
     (j.events || []).forEach(ev => {
-      const mkts = (ev.markets || []).slice(0, 6).map(m => ({ tk: m.ticker, ti: m.title || m.yes_sub_title || '', y: m.last_price ?? m.yes_bid ?? null, v: m.volume_24h ?? m.volume ?? 0 }));
+      const mkts = (ev.markets || []).slice(0, 10).map(m => {
+        const p = priceByTk[m.ticker] || {};
+        return { tk: m.ticker, ti: m.title || m.yes_sub_title || p.ti || '', y: p.y ?? null, v: p.v ?? 0 };
+      });
       out.push({ t: ev.title, tk: ev.event_ticker, s: ev.series_ticker, m: mkts });
     });
     cursor = j.cursor; pages++;
     if (!cursor || !(j.events || []).length) break;
   }
-  if (out.length) { fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out })); console.log('kalshi events:', out.length); }
+  const withPrice = out.filter(e => (e.m || []).some(m => m.y != null)).length;
+  if (out.length) { fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out })); console.log('kalshi events:', out.length, 'withPrice:', withPrice, 'markets priced:', Object.keys(priceByTk).length); }
 } catch (e) { console.log('kalshi failed', e.message); }
 
 // ================= TELEGRAM ALERTS =================

@@ -862,9 +862,18 @@ const oiSrcStore = {
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return this._m || {}; } },
   save(o) { this._m = o; try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
-let perpOiView = "1d", perpOiSrc = "AGG";
+const OI_VIEWS = [
+  {k: "15m", ms: 15 * 60_000,        bucket: 45_000,       src: "f"},
+  {k: "1h",  ms: 60 * 60_000,        bucket: 55_000,       src: "f"},
+  {k: "4h",  ms: 4 * 3_600_000,      bucket: 3 * 60_000,   src: "f"},
+  {k: "1D",  ms: 24 * 3_600_000,     bucket: 4 * 60_000,   src: "fr"},
+  {k: "7D",  ms: 7 * 86_400_000,     bucket: 40 * 60_000,  src: "cr"}
+];
+let perpOiView = "1D", perpOiSrc = "AGG";
 try {
-  if (localStorage.getItem("cryptopulse-oi-view") === "7d") perpOiView = "7d";
+  const sv = localStorage.getItem("cryptopulse-oi-view");
+  if (OI_VIEWS.some(v => v.k === sv)) perpOiView = sv;
+  else if (sv === "7d") perpOiView = "7D";
   const s = localStorage.getItem("cryptopulse-oi-srcsel");
   if (s && SRC_LABELS[s]) perpOiSrc = s;
 } catch (e) {}
@@ -915,7 +924,7 @@ function recordOiSamples(rows) {
       if (!v) return;
       const bySrc = store[s] = store[s] || {};
       const e = bySrc[r.coin] = bySrc[r.coin] || {f: [], c: []};
-      if (!e.f.length || now - e.f[e.f.length - 1][0] > 4 * 60_000) e.f.push([now, v]);
+      if (!e.f.length || now - e.f[e.f.length - 1][0] > 45_000) e.f.push([now, v]);
       e.f = e.f.filter(x => x[0] > now - 25 * 3_600_000);
       if (!e.c.length || now - e.c[e.c.length - 1][0] > 55 * 60_000) e.c.push([now, v]);
       e.c = e.c.filter(x => x[0] > now - 7.2 * 86_400_000);
@@ -973,16 +982,16 @@ async function renderPerpPop() {
   const r = hyperRows.find(x => x.coin === perpPopCoin);
   if (!r || !perpPopRow) return;
   const now = Date.now();
-  const windowMs = perpOiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
-  const bucket = perpOiView === "1d" ? 4 * 60_000 : 40 * 60_000;
-  const remote = (await getOiHistory())
-    .filter(s => s.t > now - windowMs)
-    .map(s => [s.t, remoteSrcVal(s, r.coin, perpOiSrc)])
-    .filter(x => x[1] > 0);
+  const view = OI_VIEWS.find(v => v.k === perpOiView) || OI_VIEWS[3];
+  const windowMs = view.ms, bucket = view.bucket;
+  const remote = view.src.includes("r")
+    ? (await getOiHistory()).filter(s => s.t > now - windowMs).map(s => [s.t, remoteSrcVal(s, r.coin, perpOiSrc)]).filter(x => x[1] > 0)
+    : [];
   if (perpPopCoin !== r.coin) return;
   const store = oiSrcStore.load();
   const e = (store[perpOiSrc] && store[perpOiSrc][r.coin]) || {f: [], c: []};
-  const local = (perpOiView === "1d" ? e.f : e.c).filter(x => x[0] > now - windowMs);
+  const localArr = view.src.includes("c") ? e.c : e.f;
+  const local = localArr.filter(x => x[0] > now - windowMs);
   const merged = remote.concat(local).sort((a, b) => a[0] - b[0]);
   const series = [];
   let lastT = 0;
@@ -998,13 +1007,13 @@ async function renderPerpPop() {
   pricePop.innerHTML =
     '<div class="pp-head"><span class="pp-name">' + esc(r.coin) + "</span>" +
     '<span class="pp-px">OI ' + fmtBig(curVal) + "</span>" +
-    '<span class="pp-tag">' + esc(SRC_LABELS[perpOiSrc]) + " · " + (perpOiView === "1d" ? "today" : "7d") + "</span></div>" +
+    '<span class="pp-tag">' + esc(SRC_LABELS[perpOiSrc]) + " · " + esc(perpOiView) + "</span></div>" +
     '<div style="display:flex;gap:4px;margin-bottom:5px">' + btns + "</div>" +
+    '<div style="display:flex;gap:3px;margin-bottom:5px">' +
+    OI_VIEWS.map(v => '<button class="src-btn tf-btn' + (v.k === perpOiView ? " src-on" : "") + '" data-tf="' + v.k + '">' + v.k + "</button>").join("") +
+    "</div>" +
     '<div class="oi-head" style="margin:0 0 4px">' +
-    '<span class="oi-side">1D</span>' +
-    '<input type="range" id="perpOiSlider" min="0" max="1" step="1" value="' + (perpOiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
-    '<span class="oi-side">7D</span>' +
-    '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · fund " +
+    '<span style="margin-left:auto" class="wrow-meta"><span class="pp-livepx" data-coin="' + esc(r.coin) + '">' + fmtPrice(r.mark) + "</span> · fund " +
       '<span class="' + (r.fundingHr >= 0 ? "chg-up" : "chg-down") + '">' +
       (r.fundingHr >= 0 ? "+" : "") + r.fundingHr.toFixed(4) + "%/h</span> (" +
       (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(0) + "% APR)</span></div>" +
@@ -1012,12 +1021,12 @@ async function renderPerpPop() {
       '<div class="pp-hint">' + esc(SRC_LABELS[perpOiSrc]) + " OI · high / low marked · sampled 24/7</div>" :
       '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history yet — it builds while the dashboard runs" +
       (perpOiSrc === "BN" ? " (Binance history is browser-collected only)" : "") + ".</div>");
-  const sl = document.getElementById("perpOiSlider");
-  if (sl) sl.addEventListener("input", () => {
-    perpOiView = sl.value === "1" ? "7d" : "1d";
+  pricePop.querySelectorAll(".tf-btn").forEach(b => b.addEventListener("click", ev => {
+    ev.stopPropagation();
+    perpOiView = b.dataset.tf;
     try { localStorage.setItem("cryptopulse-oi-view", perpOiView); } catch (er) {}
     renderPerpPop();
-  });
+  }));
   const rect = perpPopRow.getBoundingClientRect();
   pricePop.style.display = "block";
   pricePop.style.pointerEvents = "auto";
@@ -2387,6 +2396,7 @@ function connectHyperMids() {
     if (nowT - whaleThrottle < 1000) return; /* ~1s cadence */
     whaleThrottle = nowT;
     updateWhaleLive();
+    updateOiLive();
   };
   hlWs.onclose = () => { hlRetry++; setTimeout(connectHyperMids, Math.min(15000, 1000 * hlRetry)); };
   hlWs.onerror = () => { try { hlWs.close(); } catch (e) {} };
@@ -2416,6 +2426,18 @@ function updateWhaleLive() {
     const alert = value >= 25e6 && dist != null && dist <= 10;
     row.classList.toggle("flash-red", alert);
   });
+}
+function updateOiLive() {
+  document.querySelectorAll("#hyperBody .perp-row[data-coin]").forEach(row => {
+    const mark = liveMark[row.dataset.coin];
+    if (!mark) return;
+    const pEl = row.querySelector(".perp-metric .p");
+    if (pEl) pEl.textContent = fmtPrice(mark);
+    const r = hyperRows.find(x => x.coin === row.dataset.coin);
+    if (r) r.mark = mark;
+  });
+  const lp = pricePop.querySelector(".pp-livepx");
+  if (lp && liveMark[lp.dataset.coin]) lp.textContent = fmtPrice(liveMark[lp.dataset.coin]);
 }
 setTimeout(() => { connectBinancePrices(); connectHyperMids(); }, 1500);
 
