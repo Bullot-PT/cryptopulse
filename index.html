@@ -366,6 +366,20 @@
   .side-short { background: rgba(208,59,59,0.15); color: var(--down); }
   .pos-liq { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+  /* ---------- whale watchlist ---------- */
+  .pin-btn {
+    background: none; border: none; cursor: pointer; padding: 0 2px;
+    font-size: 13px; color: var(--muted); line-height: 1; flex: 0 0 auto;
+  }
+  .pin-btn:hover { color: var(--warn); }
+  .pin-on { color: var(--warn); }
+  .watch-box { border-bottom: 1px solid var(--grid); }
+  .watch-head { display: flex; align-items: center; gap: 8px; padding: 8px 14px 4px; font-size: 11px; font-weight: 700; color: var(--warn); }
+  .watch-row { padding: 6px 14px; border-top: 1px solid var(--grid); }
+  .watch-line { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); flex-wrap: wrap; }
+  .watch-chg { font-size: 11px; padding: 3px 0 0 0; color: var(--ink-2); display: flex; gap: 6px; align-items: baseline; }
+  .watch-chg .when { color: var(--muted); font-size: 10px; white-space: nowrap; }
+
   /* ---------- sec filings ---------- */
   .sec-item { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: block; }
   .sec-item:last-child { border-bottom: none; }
@@ -986,8 +1000,10 @@ async function renderPerpPop() {
     '<span class="oi-side">1D</span>' +
     '<input type="range" id="perpOiSlider" min="0" max="1" step="1" value="' + (perpOiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
     '<span class="oi-side">7D</span>' +
-    '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · " +
-      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + "% funding</span></div>" +
+    '<span style="margin-left:auto" class="wrow-meta">' + fmtPrice(r.mark) + " · fund " +
+      '<span class="' + (r.fundingHr >= 0 ? "chg-up" : "chg-down") + '">' +
+      (r.fundingHr >= 0 ? "+" : "") + r.fundingHr.toFixed(4) + "%/h</span> (" +
+      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(0) + "% APR)</span></div>" +
     (series.length > 1 ? oiPopSVG(series) +
       '<div class="pp-hint">' + esc(SRC_LABELS[perpOiSrc]) + " OI · high / low marked · sampled 24/7</div>" :
       '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history yet — it builds while the dashboard runs" +
@@ -1044,10 +1060,12 @@ async function loadHyperliquid() {
       if (!c || u.isDelisted) return null;
       const mark = parseFloat(c.markPx), prev = parseFloat(c.prevDayPx);
       const oiUsd = parseFloat(c.openInterest) * mark;
+      const fr = parseFloat(c.funding);
       return {
         coin: u.name, mark,
         chg: prev ? (mark - prev) / prev * 100 : null,
-        fundingApr: parseFloat(c.funding) * 24 * 365 * 100,
+        fundingHr: fr * 100,                    /* real current funding, % per hour */
+        fundingApr: fr * 24 * 365 * 100,
         oiUsd, vol: parseFloat(c.dayNtlVlm)
       };
     }).filter(Boolean).filter(r => r.oiUsd > 0)
@@ -1077,8 +1095,8 @@ function buildPerpRow(r, i) {
     '<div class="coin-name"><div class="n">' + esc(r.coin) + '</div>' +
     '<div class="s" style="text-transform:none">Σ OI ' + fmtBig(r.src ? r.src.AGG : r.oiUsd) + " · HL vol " + fmtBig(r.vol) + "</div></div>" +
     '<div class="perp-metric"><div class="p">' + fmtPrice(r.mark) + "</div>" + chgSpan(r.chg) + "</div>" +
-    '<div class="perp-metric"><div class="p ' + (r.fundingApr >= 0 ? "chg-up" : "chg-down") + '">' +
-      (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(1) + '%</div><div class="l">HL funding</div></div>' +
+    '<div class="perp-metric"><div class="p ' + (r.fundingHr >= 0 ? "chg-up" : "chg-down") + '">' +
+      (r.fundingHr >= 0 ? "+" : "") + r.fundingHr.toFixed(4) + '%</div><div class="l">funding / h</div></div>' +
   "</div>";
 }
 function renderHyperRows() {
@@ -1296,6 +1314,90 @@ function whaleRow(p, addr, mids) {
   const lev = p.leverage && p.leverage.value;
   return {coin: p.coin, szi, value, mark, liq, dist, upnl, lev, entry: parseFloat(p.entryPx), addr};
 }
+/* ---- whale watchlist: pin wallets, detect position changes between scans ---- */
+const watchStore = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return (this._m && this._m[k]) ?? d; } },
+  set(k, v) { (this._m = this._m || {})[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+const getPinned = () => watchStore.get("cryptopulse-watch", []);
+function togglePin(addr) {
+  let p = getPinned();
+  if (p.includes(addr)) p = p.filter(a => a !== addr);
+  else p = p.concat([addr]).slice(-12);
+  watchStore.set("cryptopulse-watch", p);
+  renderWatchlist();
+  loadWhales();
+}
+$("whalesBody").addEventListener("click", e => {
+  const b = e.target.closest(".pin-btn");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  togglePin(b.dataset.pin);
+});
+function diffWatched(addr, positions, accV) {
+  const snaps = watchStore.get("cryptopulse-watch-snap", {});
+  const old = snaps[addr] && snaps[addr].pos || null;
+  const log = watchStore.get("cryptopulse-watch-log", []);
+  let newEntries = 0;
+  if (old) {
+    const seen = new Set();
+    Object.entries(positions).forEach(([coin, v]) => {
+      seen.add(coin);
+      const o = old[coin];
+      const side = v >= 0 ? "LONG" : "SHORT";
+      if (o == null) {
+        log.push({t: Date.now(), addr, msg: "opened " + side + " " + coin + " " + fmtBig(Math.abs(v))});
+        newEntries++;
+      } else if ((o >= 0) !== (v >= 0)) {
+        log.push({t: Date.now(), addr, msg: "FLIPPED " + coin + " to " + side + " " + fmtBig(Math.abs(v))});
+        newEntries++;
+      } else if (Math.abs(v - o) > Math.max(1_000_000, Math.abs(o) * 0.25)) {
+        const grew = Math.abs(v) > Math.abs(o);
+        log.push({t: Date.now(), addr, msg: (grew ? "increased " : "reduced ") + side + " " + coin +
+          " by " + fmtBig(Math.abs(v - o)) + " → " + fmtBig(Math.abs(v))});
+        newEntries++;
+      }
+    });
+    Object.entries(old).forEach(([coin, o]) => {
+      if (!seen.has(coin)) {
+        log.push({t: Date.now(), addr, msg: "closed " + (o >= 0 ? "LONG " : "SHORT ") + coin + " (" + fmtBig(Math.abs(o)) + ")"});
+        newEntries++;
+      }
+    });
+  }
+  snaps[addr] = {pos: positions, accV, t: Date.now()};
+  watchStore.set("cryptopulse-watch-snap", snaps);
+  watchStore.set("cryptopulse-watch-log", log.slice(-40));
+  return newEntries;
+}
+function renderWatchlist() {
+  const box = document.getElementById("watchBox");
+  if (!box) return;
+  const pinned = getPinned();
+  if (!pinned.length) { box.innerHTML = ""; return; }
+  const snaps = watchStore.get("cryptopulse-watch-snap", {});
+  const log = watchStore.get("cryptopulse-watch-log", []);
+  box.innerHTML = '<div class="watch-box">' +
+    '<div class="watch-head">★ WATCHLIST <span class="wrow-meta" style="font-weight:400">position changes tracked every scan · while dashboard is open</span></div>' +
+    pinned.map(addr => {
+      const s = snaps[addr];
+      const short = addr.slice(0, 6) + "…" + addr.slice(-4);
+      const pos = s ? Object.entries(s.pos).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 4) : [];
+      return '<div class="watch-row">' +
+        '<div class="watch-line">' +
+        '<button class="pin-btn pin-on" data-pin="' + esc(addr) + '" title="Unpin">★</button>' +
+        '<a class="whale-addr" href="https://hypurrscan.io/address/' + esc(addr) + '" target="_blank" rel="noopener">' + esc(short) + "</a>" +
+        (s ? '<span class="wrow-meta">acct ' + fmtBig(s.accV || 0) + "</span>" +
+          pos.map(([c, v]) => '<span class="side-badge ' + (v >= 0 ? "side-long" : "side-short") + '">' +
+            esc(c) + " " + fmtBig(Math.abs(v)) + "</span>").join("")
+          : '<span class="wrow-meta">waiting for next scan…</span>') +
+        "</div>" +
+        log.filter(l => l.addr === addr).slice(-3).reverse().map(l =>
+          '<div class="watch-chg' + (Date.now() - l.t < 300_000 ? " flash-red" : "") + '">' +
+          "<span>" + esc(l.msg) + '</span><span class="when" data-ts="' + l.t + '">' + timeAgo(l.t) + "</span></div>").join("") +
+      "</div>";
+    }).join("") + "</div>";
+}
 const whaleAlert = r => r.value >= 25_000_000 && r.dist != null && r.dist <= 10; /* flashing-red condition */
 function renderWhaleRows(rows, note) {
   return (note ? '<div class="empty" style="padding:8px 14px;text-align:left">' + note + "</div>" : "") +
@@ -1311,6 +1413,8 @@ function renderWhaleRows(rows, note) {
           (r.dist == null ? '<span class="pos-liq wrow-meta">no liq risk this side</span>' : distTxt) +
         "</div>" +
         '<div class="wrow-line">' +
+          '<button class="pin-btn' + (getPinned().includes(r.addr) ? " pin-on" : "") + '" data-pin="' + esc(r.addr) + '" title="Watch this wallet">' +
+            (getPinned().includes(r.addr) ? "★" : "☆") + "</button>" +
           '<span class="whale-addr">' + esc(r.addr.slice(0, 6) + "…" + r.addr.slice(-4)) + "</span>" +
           '<span class="wrow-meta">entry ' + fmtPrice(r.entry) + "</span>" +
           '<span class="pos-liq ' + (r.upnl >= 0 ? "chg-up" : "chg-down") + '">uPnL ' + (r.upnl >= 0 ? "+" : "−") + fmtBig(Math.abs(r.upnl)).slice(1) + "</span>" +
@@ -1327,6 +1431,7 @@ async function loadWhales() {
     const byVal = [...rows].sort((a, b) => val(b) - val(a)).slice(0, 70);
     const byVlm = [...rows].sort((a, b) => wvlm(b) - wvlm(a)).slice(0, 30);
     const seen = new Set(), candidates = [];
+    getPinned().forEach(a => { if (!seen.has(a)) { seen.add(a); candidates.push(a); } });
     byVal.concat(byVlm).forEach(r => {
       if (!seen.has(r.ethAddress)) { seen.add(r.ethAddress); candidates.push(r.ethAddress); }
     });
@@ -1338,11 +1443,18 @@ async function loadWhales() {
       ));
       chunk.forEach(c => {
         if (c.status !== "fulfilled") return;
+        const isPinned = getPinned().includes(c.value.addr);
+        const posMap = {};
         (c.value.s.assetPositions || []).forEach(ap => {
           const p = ap.position;
-          if (Math.abs(parseFloat(p.positionValue)) >= WHALE_MIN)
-            found.push(whaleRow(p, c.value.addr, mids));
+          const v = Math.abs(parseFloat(p.positionValue));
+          if (isPinned && v > 0) posMap[p.coin] = parseFloat(p.szi) >= 0 ? v : -v;
+          if (v >= WHALE_MIN) found.push(whaleRow(p, c.value.addr, mids));
         });
+        if (isPinned) {
+          const accV = parseFloat(c.value.s.marginSummary && c.value.s.marginSummary.accountValue) || 0;
+          if (diffWatched(c.value.addr, posMap, accV) > 0) playBeep();
+        }
       });
     }
     /* biggest position first — a smaller one only outranks it when it's flashing red (>$25M within 10% of liq) */
@@ -1353,8 +1465,12 @@ async function loadWhales() {
       return b.value - a.value;
     });
     $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned";
-    if (!found.length) { body.innerHTML = '<div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>'; return; }
-    body.innerHTML = renderWhaleRows(found.slice(0, 40));
+    if (!found.length) {
+      body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
+      renderWatchlist(); return;
+    }
+    body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
+    renderWatchlist();
     body.dataset.home = "1";
     markUpdated();
   } catch (e) {
@@ -1961,6 +2077,7 @@ function pmEventCard(ev, opts) {
   const multi = (ev.markets || []).length > 1;
   const label = multi ? (m.groupItemTitle || outcomes[li]) : (outcomes[li] || "Yes");
   const end = ev.endDate ? new Date(ev.endDate) : null;
+  pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || ""};
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
     '<div class="pm-q">' + esc(ev.title) + "</div>" +
     '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
@@ -1970,13 +2087,59 @@ function pmEventCard(ev, opts) {
     (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
     "</div></a>";
 }
+/* ---- odds-move detector: >=10pp shift in ~1h = information event ---- */
+let pmOddsAlertsHTML = "";
+const oddsAlerted = new Set(); /* per session, per slug */
+function trackOddsMoves(oddsNow) {
+  const hist = watchStore.get("cryptopulse-pm-odds", {});
+  const now = Date.now();
+  const alerts = [];
+  oddsNow.forEach(o => {
+    if (!o || !o.slug) return;
+    const arr = hist[o.slug] = (hist[o.slug] || []).filter(x => x[0] > now - 2 * 3_600_000);
+    /* baseline: sample closest to 1h ago (45–90 min window) */
+    const base = arr.filter(x => x[0] <= now - 45 * 60_000 && x[0] >= now - 90 * 60_000)
+      .sort((a, b) => Math.abs((now - 3_600_000) - a[0]) - Math.abs((now - 3_600_000) - b[0]))[0];
+    if (base) {
+      const delta = o.pct - base[1];
+      if (Math.abs(delta) >= 10 && !oddsAlerted.has(o.slug)) {
+        oddsAlerted.add(o.slug);
+        alerts.push({slug: o.slug, title: o.title, label: o.label, pct: o.pct, delta, t: now});
+      }
+    }
+    if (!arr.length || now - arr[arr.length - 1][0] > 5 * 60_000) arr.push([now, o.pct]);
+  });
+  watchStore.set("cryptopulse-pm-odds", hist);
+  if (alerts.length) {
+    const stored = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.t > now - 3 * 3_600_000);
+    watchStore.set("cryptopulse-pm-odds-alerts", stored.concat(alerts).slice(-8));
+    playBeep();
+  }
+  const act = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.t > now - 3 * 3_600_000);
+  pmOddsAlertsHTML = act.map(a =>
+    '<a class="bet-alert flash-red" href="https://polymarket.com/event/' + esc(a.slug) + '" target="_blank" rel="noopener">' +
+      '<div class="b1">📊 <span class="' + (a.delta > 0 ? "chg-up" : "chg-down") + '">' +
+      (a.delta > 0 ? "+" : "") + a.delta.toFixed(0) + "pp in 1h</span> → " + a.pct.toFixed(0) + "% “" + esc(a.label) + "”" +
+      '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
+      '<button class="bet-x" data-odds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
+      '<div class="b2">' + esc(a.title) + "</div></a>").join("");
+}
+$("pmBody").addEventListener("click", e => {
+  const x = e.target.closest(".bet-x");
+  if (!x || !x.dataset.odds) return;
+  e.preventDefault(); e.stopPropagation();
+  const rest = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.slug !== x.dataset.odds);
+  watchStore.set("cryptopulse-pm-odds-alerts", rest);
+  const al = x.closest(".bet-alert");
+  if (al) al.remove();
+});
 let pmSearchTimer = null, pmSearchToken = 0;
 function renderPmRows() {
   const body = $("pmBody");
   const q = ($("pmSearch").value || "").trim();
   const Q = q.toUpperCase();
   const list = Q ? pmCards.filter(c => c.t.toUpperCase().includes(Q)) : pmCards.slice(0, 10);
-  body.innerHTML = pmAlertsHTML +
+  body.innerHTML = pmAlertsHTML + pmOddsAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
       (pmCards.length && !Q ? "" : "")) +
     (Q.length >= 3 ? '<div id="pmRemote"><div class="empty">Searching all of Polymarket…</div></div>' :
@@ -2053,11 +2216,16 @@ async function loadPolymarket() {
     );
     if (!Array.isArray(events) || !events.length) throw new Error("empty");
     const cards = [];
+    const oddsNow = [];
     for (const ev of events) {
       if (!pmTopicOk(ev)) continue;
       const h = pmEventCard(ev, {skipDecided: true});
-      if (h) cards.push({t: ev.title || "", slug: ev.slug, h});
+      if (h) {
+        cards.push({t: ev.title || "", slug: ev.slug, h});
+        oddsNow.push(pmEventCard.last);
+      }
     }
+    trackOddsMoves(oddsNow);
     if (!cards.length && !alertsHTML) throw new Error("no markets");
     pmCards = cards; pmAlertsHTML = alertsHTML;
     renderPmRows();
