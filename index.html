@@ -2243,13 +2243,20 @@ async function loadGlobalOI() {
     await renderGlobalOI(rows, total);
     markUpdated();
   } catch (e) {
-    if (!body.querySelector(".goi-hero")) {
-      let shown = false;
-      try {
-        const c = JSON.parse(localStorage.getItem("cryptopulse-goi-cache"));
-        if (c && Array.isArray(c.rows) && c.rows.length) { await renderGlobalOI(c.rows, c.total, c.t); shown = true; }
-      } catch (er) {}
-      if (!shown) setError(body, "Global OI unavailable right now — retrying automatically.");
+    /* CoinGecko down? Still show something real: cached CG rows topped up with the LIVE direct DEX feeds */
+    try {
+      let base = null; try { base = JSON.parse(localStorage.getItem("cryptopulse-goi-cache")); } catch (er) {}
+      const rows = (base && Array.isArray(base.rows) ? base.rows.slice() : []);
+      (await fetchDirectDexOi()).forEach(dx => {
+        const i = rows.findIndex(r => (r.name || "").toLowerCase().includes(dx.m));
+        if (i >= 0) rows.splice(i, 1);
+        rows.push(dx);
+      });
+      rows.sort((a, b) => b.oi - a.oi);
+      if (rows.length) await renderGlobalOI(rows, rows.reduce((s, r) => s + r.oi, 0), base ? base.t : null);
+      else if (!body.querySelector(".goi-hero")) setError(body, "Global OI unavailable right now — retrying automatically.");
+    } catch (e2) {
+      if (!body.querySelector(".goi-hero")) setError(body, "Global OI unavailable right now — retrying automatically.");
     }
     retrySoon(loadGlobalOI, "goi");
   }
