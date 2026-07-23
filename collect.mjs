@@ -221,6 +221,57 @@ try {
   console.log('dydx book:', dSubs, 'subaccounts with positions,', dPos, 'positions >= $10k,', Object.keys(dbook).length, 'coins, host:', host);
 } catch (e) { console.log('dydx book failed', e.message); }
 
+// ---------------- Jupiter Perps (Solana): full position book via getProgramAccounts ----------------
+// Needs the SOLANA_RPC secret (free Helius/other RPC URL that allows getProgramAccounts). Skips when absent.
+const SOLANA_RPC = process.env.SOLANA_RPC;
+if (SOLANA_RPC) {
+  try {
+    const CUST = { // Jupiter custody accounts (hex of the 32-byte pubkeys)
+      '67595dd846c007f26896f2aed31ba7b55fd12ccc158e0b007a9d8fe846b69fe9': 'SOL',
+      '8baa4a4864226cc022484dc8281e1a168f5cf4e8053f1ae5066d916a88b9df9f': 'ETH',
+      '414d81486af13e6eec9e2d5bcf459132e3a4664709b66d38d064779124c6ce3e': 'BTC'
+    };
+    const res = await post(SOLANA_RPC, { jsonrpc: '2.0', id: 1, method: 'getProgramAccounts',
+      params: ['PERPHjGBqRHArX4DySjwM6UJHiR3sWAatqfdBS2qQJu',
+        { encoding: 'base64', filters: [{ memcmp: { offset: 0, bytes: 'VZMoMoKgZQb' } }] }] });
+    if (res.error) throw new Error(JSON.stringify(res.error).slice(0, 120));
+    const accs = res.result || [];
+    const jbook = {}; let jPos = 0;
+    const u64 = (b, o) => Number(b.readBigUInt64LE(o));
+    accs.forEach(a => {
+      const b = Buffer.from(a.account.data[0], 'base64');
+      if (b.length < 210) return;
+      const base = CUST[b.subarray(72, 104).toString('hex')];
+      if (!base) return;
+      const side = b[152];                 // 1 = long, 2 = short
+      const entry = u64(b, 153) / 1e6;
+      const sizeUsd = u64(b, 161) / 1e6;
+      const collUsd = u64(b, 169) / 1e6;
+      if (!(sizeUsd >= 10000) || !(entry > 0) || (side !== 1 && side !== 2)) return;
+      const px = parseFloat(MIDS[base]) || entry; // live ref from HL mids
+      /* Jupiter liq (official formula, approx — excludes accrued borrow fees):
+         maxLoss = size*(1/maxLev + closeFeeBps); diff = |maxLoss − collateral|·entry/size */
+      const maxLoss = sizeUsd * (0.002 + 0.0006);
+      const diff = Math.abs(maxLoss - collUsd) * entry / sizeUsd;
+      let liq;
+      if (side === 1) liq = maxLoss > collUsd ? entry + diff : entry - diff;
+      else liq = maxLoss > collUsd ? entry - diff : entry + diff;
+      if (!(liq > 0) || liq < px * 0.3 || liq > px * 3) return;
+      const co = jbook[base] || (jbook[base] = { px, step: px * 0.005, bins: {} });
+      const bIx = Math.round(liq / co.step);
+      const cell = co.bins[bIx] || (co.bins[bIx] = [0, 0]);
+      if (side === 1) cell[0] += sizeUsd; else cell[1] += sizeUsd;
+      jPos++;
+    });
+    Object.values(jbook).forEach(co => { Object.keys(co.bins).forEach(b2 => { co.bins[b2] = [Math.round(co.bins[b2][0]), Math.round(co.bins[b2][1])]; }); });
+    let lbj2 = { t: now };
+    try { lbj2 = JSON.parse(fs.readFileSync('data/liq-book.json', 'utf8')); } catch (e) {}
+    lbj2.jup = { t: now, accounts: accs.length, positions: jPos, coins: jbook };
+    fs.writeFileSync('data/liq-book.json', JSON.stringify(lbj2));
+    console.log('jupiter book:', accs.length, 'position accounts,', jPos, 'open positions >= $10k,', Object.keys(jbook).length, 'coins');
+  } catch (e) { console.log('jupiter book failed', e.message); }
+} else console.log('jupiter book skipped (no SOLANA_RPC secret yet)');
+
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
 const tgOn = !!(TG_TOKEN && TG_CHAT);

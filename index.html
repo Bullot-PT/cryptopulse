@@ -3187,6 +3187,7 @@ const LM_SOURCES = [
   {k: "AGG", label: "Σ Aggregate", tip: "All sources combined"},
   {k: "HL", label: "Hyperliquid", tip: "Hyperliquid perps only — full wallet book (bot, 15-min cycle)"},
   {k: "DYDX", label: "dYdX", tip: "dYdX v4 perps only — COMPLETE on-chain book, every subaccount on the chain (bot, 15-min cycle)"},
+  {k: "JUP", label: "Jupiter", tip: "Jupiter Perps (Solana) only — full on-chain position book (SOL/ETH/WBTC). Needs the free SOLANA_RPC secret; liq prices exclude accrued borrow fees (slightly conservative)."},
   {k: "LEND", label: "Lending", tip: "On-chain lending books only (all lenders, all chains via DefiLlama)"}
 ];
 let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
@@ -3240,7 +3241,22 @@ function renderLiqmap() {
   });
   /* HL positions, best source available: bot's FULL leaderboard book (≤2500 wallets, 15-min cycle)
      → browser 500-wallet book → ≥$5M whale-scanner rows */
-  let hlSrcUsed = null, dydxUsed = false;
+  let hlSrcUsed = null, dydxUsed = false, jupUsed = false;
+  /* Jupiter Perps: full position book from the bot (when SOLANA_RPC secret exists) */
+  if (lmSrc === "AGG" || lmSrc === "JUP") {
+    const jx = lmBotBook.jup;
+    const jj = jx && jx.coins && (jx.coins[coin] || jx.coins["k" + coin]);
+    if (jj && Date.now() - (jx.t || 0) < 60 * 60_000) {
+      jupUsed = true;
+      const scale = jj.px ? px / jj.px : 1;
+      Object.entries(jj.bins || {}).forEach(([b, cell]) => {
+        const bp = (+b) * jj.step;
+        const i = bIdx((bp - px) / px * 100); if (i < 0) return;
+        if (cell[0] && bp < px) BK[i].wl += cell[0] * scale;
+        if (cell[1] && bp > px) BK[i].ws += cell[1] * scale;
+      });
+    }
+  }
   /* dYdX: complete chain book from the bot */
   if (lmSrc === "AGG" || lmSrc === "DYDX") {
     const dx = lmBotBook.dydx;
@@ -3335,10 +3351,12 @@ function renderLiqmap() {
     "</div>";
   const sub = $("lmSub");
   if (sub) sub.textContent = "forced flow by price level · price live" +
-    (lmSrc !== "AGG" ? " · " + (lmSrc === "HL" ? "Hyperliquid only" : lmSrc === "DYDX" ? "dYdX only" : "lending only") : "") +
+    (lmSrc !== "AGG" ? " · " + (lmSrc === "HL" ? "Hyperliquid only" : lmSrc === "DYDX" ? "dYdX only" : lmSrc === "JUP" ? "Jupiter only" : "lending only") : "") +
     (hlSrcUsed === "bot" ? " · HL (" + (lmBotBook.wallets || "?") + "w) " + timeAgo(lmBotBook.t)
       : hlSrcUsed === "scan" ? " · HL 500w " + timeAgo(hlLiqBook.t) : "") +
     (dydxUsed ? " · dYdX (" + (lmBotBook.dydx.subs || "?") + " accts) " + timeAgo(lmBotBook.dydx.t) : "") +
+    (jupUsed ? " · Jupiter (" + (lmBotBook.jup.positions || "?") + " pos) " + timeAgo(lmBotBook.jup.t) : "") +
+    (lmSrc === "JUP" && !(lmBotBook.jup && lmBotBook.jup.t) ? " · ⚠ waiting for the SOLANA_RPC secret (free Helius key — see chat)" : "") +
     ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
 }
 function lmAddCoin() {
