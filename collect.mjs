@@ -272,6 +272,65 @@ if (SOLANA_RPC) {
   } catch (e) { console.log('jupiter book failed', e.message); }
 } else console.log('jupiter book skipped (no SOLANA_RPC secret yet)');
 
+// ---------------- Lighter: position book via trade-tape account discovery ----------------
+// No bulk positions endpoint (735k accounts), but trades expose account ids and each
+// account payload includes exchange-computed liquidation_price. Coverage builds over runs.
+try {
+  const LG = 'https://mainnet.zklighter.elliot.ai/api/v1';
+  const ob = await jget(LG + '/orderBooks');
+  const markets = (ob.order_books || []).filter(m => m.market_type === 'perp' && m.status === 'active');
+  const found = new Set();
+  for (const m of markets) {
+    try {
+      const tr = await jget(LG + '/recentTrades?market_id=' + m.market_id + '&limit=100');
+      (tr.trades || []).forEach(t => {
+        if (t.ask_account_id != null) found.add(t.ask_account_id);
+        if (t.bid_account_id != null) found.add(t.bid_account_id);
+      });
+    } catch (e) {}
+    await new Promise(r2 => setTimeout(r2, 50));
+  }
+  let prevB = {};
+  try { prevB = JSON.parse(fs.readFileSync('data/liq-book.json', 'utf8')); } catch (e) {}
+  ((prevB.lighter && prevB.lighter.accts) || []).forEach(a => found.add(a)); // remember past holders
+  const list = [...found].slice(0, 2500);
+  const lbook = {}; let lPos = 0, lScanned = 0; const keep = [];
+  const norm = s => (s || '').startsWith('1000') ? 'k' + s.slice(4) : s; // 1000PEPE -> kPEPE (HL naming)
+  for (let i = 0; i < list.length; i += 10) {
+    const chunk = await Promise.allSettled(list.slice(i, i + 10).map(a =>
+      jget(LG + '/account?by=index&value=' + a).then(j => ({a, j}))));
+    chunk.forEach(c => {
+      if (c.status !== 'fulfilled' || !c.value.j || !(c.value.j.accounts || [])[0]) return;
+      lScanned++;
+      const acc = c.value.j.accounts[0];
+      let hadPos = false;
+      (acc.positions || []).forEach(p => {
+        const v = Math.abs(parseFloat(p.position_value));
+        const liq = parseFloat(p.liquidation_price);
+        if (!(v >= 10000) || !(liq > 0)) return;
+        const base = norm(p.symbol);
+        const px = parseFloat(MIDS[base]) || parseFloat(p.avg_entry_price) || 0;
+        if (!(px > 0) || liq < px * 0.3 || liq > px * 3) return;
+        hadPos = true;
+        const co = lbook[base] || (lbook[base] = { px, step: px * 0.005, bins: {} });
+        const b = Math.round(liq / co.step);
+        const cell = co.bins[b] || (co.bins[b] = [0, 0]);
+        /* side inferred from geometry (robust to sign conventions): liq below px = long = sell fuel */
+        if (liq < px) cell[0] += v; else cell[1] += v;
+        lPos++;
+      });
+      if (hadPos) keep.push(c.value.a);
+    });
+    await new Promise(r2 => setTimeout(r2, 100));
+  }
+  Object.values(lbook).forEach(co => { Object.keys(co.bins).forEach(b2 => { co.bins[b2] = [Math.round(co.bins[b2][0]), Math.round(co.bins[b2][1])]; }); });
+  let lbj3 = { t: now };
+  try { lbj3 = JSON.parse(fs.readFileSync('data/liq-book.json', 'utf8')); } catch (e) {}
+  lbj3.lighter = { t: now, scanned: lScanned, positions: lPos, coins: lbook, accts: keep.slice(0, 2000) };
+  fs.writeFileSync('data/liq-book.json', JSON.stringify(lbj3));
+  console.log('lighter book:', found.size, 'accounts known,', lScanned, 'scanned,', lPos, 'positions >= $10k,', Object.keys(lbook).length, 'coins');
+} catch (e) { console.log('lighter book failed', e.message); }
+
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
 const tgOn = !!(TG_TOKEN && TG_CHAT);
