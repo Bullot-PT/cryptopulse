@@ -518,15 +518,15 @@ const LAYOUT_KEY = "cryptopulse-layout-v1";
 const DEFAULT_LAYOUT = [
   {id: "fng",        x: 0, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
   {id: "longshort",  x: 2, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
-  {id: "globaloi",   x: 9, y: 16, w: 3, h: 5,  minW: 2, minH: 2},
   {id: "whales",     x: 4, y: 0,  w: 3, h: 12, minW: 2, minH: 2},
   {id: "sec",        x: 7, y: 0,  w: 2, h: 12, minW: 2, minH: 2},
   {id: "liqs",       x: 9, y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
   {id: "prices",     x: 0, y: 2,  w: 2, h: 5,  minW: 2, minH: 2},
   {id: "hyper",      x: 2, y: 2,  w: 2, h: 10, minW: 2, minH: 2},
   {id: "listings",   x: 0, y: 7,  w: 2, h: 5,  minW: 2, minH: 2},
-  {id: "polymarket", x: 9, y: 7,  w: 3, h: 9,  minW: 2, minH: 2},
-  {id: "trending",   x: 0, y: 12, w: 9, h: 4,  minW: 2, minH: 2}
+  {id: "polymarket", x: 9, y: 7,  w: 3, h: 11, minW: 2, minH: 2},
+  {id: "trending",   x: 0, y: 12, w: 5, h: 6,  minW: 2, minH: 2},
+  {id: "globaloi",   x: 5, y: 12, w: 4, h: 6,  minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -1883,8 +1883,11 @@ function ensureAudio() {
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
   }
-  if (audioCtx.state === "suspended") audioCtx.resume();
-  if (beepPending && audioCtx.state === "running") { beepPending = false; playBeep(); }
+  const flush = () => {
+    if (beepPending && audioCtx.state === "running") { beepPending = false; playBeep(); }
+  };
+  if (audioCtx.state === "suspended") audioCtx.resume().then(flush).catch(() => {});
+  else flush();
 }
 document.addEventListener("pointerdown", ensureAudio);
 document.addEventListener("keydown", ensureAudio);
@@ -1914,12 +1917,8 @@ $("pmSound").addEventListener("click", e => {
   if (!alertMuted) { ensureAudio(); playBeep(); } /* audible confirmation */
 });
 refreshSoundBtn();
-/* remember which big bets we've already alerted on (survives reloads) */
-const pmSeen = {
-  key: "cryptopulse-pm-seen",
-  load() { try { return new Set(JSON.parse(localStorage.getItem(this.key)) || []); } catch (e) { return new Set(); } },
-  save(set) { try { localStorage.setItem(this.key, JSON.stringify([...set].slice(-300))); } catch (e) {} }
-};
+/* alerts announced this session — an active alert chimes once per visit */
+const pmSeenSession = new Set();
 /* alerts the user dismissed with ✕ — never shown again */
 const pmDismissed = {
   key: "cryptopulse-pm-dismissed",
@@ -2025,12 +2024,10 @@ async function loadPolymarket() {
       .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || "") && !PM_EXCLUDE.test(t.title || ""))
       .filter(t => !dismissed.has(pmAlertId(t)))
       .sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
-    /* sound on alerts we haven't announced before */
-    const seen = pmSeen.load();
-    const fresh = hits.filter(t => !seen.has(pmAlertId(t)));
+    /* sound on alerts not yet announced this session */
+    const fresh = hits.filter(t => !pmSeenSession.has(pmAlertId(t)));
     if (fresh.length) {
-      fresh.forEach(t => seen.add(pmAlertId(t)));
-      pmSeen.save(seen);
+      fresh.forEach(t => pmSeenSession.add(pmAlertId(t)));
       playBeep();
     }
     if (hits.length) {
