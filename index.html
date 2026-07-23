@@ -441,7 +441,8 @@
   .lsx-tag-div { background: rgba(250,178,25,0.15); color: var(--warn); }
   .lsx-tag-al { background: var(--surface-2); color: var(--muted); }
   .lsx-note { margin-left: auto; font-size: 10.5px; color: var(--muted); text-align: right; }
-  .lsx-src { display: grid; grid-template-columns: 104px 1fr 78px; align-items: center; gap: 8px; padding: 3px 0; }
+  .lsx-src { display: grid; grid-template-columns: 104px 1fr minmax(78px, auto); align-items: center; gap: 8px; padding: 3px 0; }
+  .lsx-pct { white-space: nowrap; }
   .lsx-label { font-size: 11px; color: var(--ink-2); display: flex; flex-direction: column; line-height: 1.25; }
   .lsx-label .who { font-weight: 600; color: var(--ink); }
   .lsx-label .kind { font-size: 9.5px; color: var(--muted); }
@@ -2887,7 +2888,8 @@ function renderLsCrowd() {
     if (whaleShare != null) {
       const cls = whaleLong ? "up" : "dn";
       srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">HL whales</span><span class="kind">on-chain net</span></div>' +
-        lsxBar(whaleShare) + '<div class="lsx-pct ' + cls + '">' + (whaleLong ? "▲" : "▼") + " " + fmtBig(Math.abs(whaleNet)) + "</div></div>");
+        lsxBar(whaleShare) + '<div class="lsx-pct">' + lsxPct(whaleShare) +
+        ' <span class="' + cls + '">' + (whaleLong ? "▲" : "▼") + " " + fmtBig(Math.abs(whaleNet)) + "</span></div></div>");
     }
     if (cex.bnG != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">retail ratio</span></div>' + lsxBar(cex.bnG) + '<div class="lsx-pct">' + lsxPct(cex.bnG) + "</div></div>");
     if (cex.bnT != null) srcs.push('<div class="lsx-src"><div class="lsx-label"><span class="who">Binance</span><span class="kind">top traders</span></div>' + lsxBar(cex.bnT) + '<div class="lsx-pct">' + lsxPct(cex.bnT) + "</div></div>");
