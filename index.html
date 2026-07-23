@@ -2146,26 +2146,57 @@ function renderPmRows() {
       (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
   $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
 }
+let kalshiCache = {t: 0, data: null};
+async function getKalshi() {
+  if (kalshiCache.data && Date.now() - kalshiCache.t < 600_000) return kalshiCache.data;
+  try {
+    const j = await fetchJSON("data/kalshi.json?b=" + Math.floor(Date.now() / 600_000), {timeout: 15000});
+    kalshiCache = {t: Date.now(), data: j};
+  } catch (e) { kalshiCache = {t: Date.now(), data: kalshiCache.data}; }
+  return kalshiCache.data;
+}
+function kalshiCard(ev) {
+  const m = (ev.m || []).slice().sort((a, b) => (b.v || 0) - (a.v || 0))[0];
+  if (!m || m.y == null) return null;
+  const pct = m.y; /* cents = % */
+  const link = "https://kalshi.com/markets/" + encodeURIComponent((ev.s || ev.tk || "").toLowerCase());
+  return '<a class="pm-item" style="display:block" href="' + link + '" target="_blank" rel="noopener">' +
+    '<div class="pm-q"><span class="proto-badge" style="margin-right:6px">KALSHI</span>' + esc(ev.t) + "</div>" +
+    '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(0) + '%</span>' +
+    '<span class="pm-outcome">' + esc(m.ti || "Yes") + "</span>" +
+    '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
+  "</a>";
+}
 async function pmRemoteSearch(q) {
   const token = ++pmSearchToken;
   try {
-    const j = await fetchJSON("https://gamma-api.polymarket.com/public-search?q=" + encodeURIComponent(q) +
-      "&events_status=active&limit_per_type=12", {timeout: 15000});
+    const [j, kal] = await Promise.all([
+      fetchJSON("https://gamma-api.polymarket.com/public-search?q=" + encodeURIComponent(q) +
+        "&events_status=active&limit_per_type=12", {timeout: 15000}),
+      getKalshi()
+    ]);
     if (token !== pmSearchToken) return;
     const box = document.getElementById("pmRemote");
     if (!box) return;
     const localSlugs = new Set(pmCards.map(c => c.slug));
     const cards = (j.events || []).filter(ev => !localSlugs.has(ev.slug))
       .map(ev => pmEventCard(ev)).filter(Boolean);
+    const Q = q.toUpperCase();
+    const kalCards = kal && kal.events
+      ? kal.events.filter(ev => (ev.t + " " + (ev.m || []).map(x => x.ti).join(" ")).toUpperCase().includes(Q))
+        .slice(0, 8).map(kalshiCard).filter(Boolean)
+      : null;
+    const kalAge = kal && kal.t ? timeAgo(kal.t) : null;
     box.innerHTML =
       '<div class="oi-note" style="padding:6px 14px 2px">🔎 all of Polymarket — “' + esc(q) + "”</div>" +
       (cards.length ? cards.join("") : '<div class="empty">Nothing on Polymarket for “' + esc(q) + "”.</div>") +
-      '<a class="liq-pos" style="padding:8px 14px" target="_blank" rel="noopener" ' +
-      'href="https://www.google.com/search?q=' + encodeURIComponent("site:kalshi.com " + q) + '">' +
-      '<span class="proto-badge">KALSHI</span><span>search “' + esc(q) + "” on Kalshi ↗ (their API blocks browser access)</span></a>";
+      (kalCards === null
+        ? '<div class="oi-note" style="padding:6px 14px">Kalshi mirror not built yet — the repo bot creates it on its next run.</div>'
+        : '<div class="oi-note" style="padding:6px 14px 2px">🔎 Kalshi (mirrored ' + kalAge + " by the bot)</div>" +
+          (kalCards.length ? kalCards.join("") : '<div class="empty">Nothing on Kalshi for “' + esc(q) + "”.</div>"));
   } catch (e) {
     const box = document.getElementById("pmRemote");
-    if (box && token === pmSearchToken) box.innerHTML = '<div class="empty">Polymarket search unavailable right now.</div>';
+    if (box && token === pmSearchToken) box.innerHTML = '<div class="empty">Market search unavailable right now.</div>';
   }
 }
 $("pmSearch").addEventListener("input", () => {
