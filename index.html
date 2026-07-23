@@ -476,6 +476,22 @@
   .lm-now .rule { border-top: 2px solid var(--accent); position: relative; }
   .lm-now .rule::after { content: "current price · live"; position: absolute; right: 0; top: -15px; font-size: 9px; color: var(--accent); }
   .lm-side { padding: 1px 0 1px 116px; font-size: 10px; color: var(--muted); font-style: italic; }
+  .lm-pop { position: fixed; z-index: 9999; display: none; pointer-events: none; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; font-size: 11.5px; line-height: 1.6;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.55); min-width: 175px; }
+  .lm-pop .t { font-weight: 700; color: var(--ink); margin-bottom: 2px; }
+  .lm-pop .r { display: flex; justify-content: space-between; gap: 14px; }
+  .lm-pop .r b { font-variant-numeric: tabular-nums; }
+  /* CEX live liquidations feed */
+  .cx-stats { padding: 8px 14px; border-bottom: 1px solid var(--grid); font-size: 11.5px; color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; }
+  .cx-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cx-row { display: flex; align-items: center; gap: 8px; padding: 3.5px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 11.5px; }
+  .cx-row .when { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; width: 52px; }
+  .cx-row .ex { font-size: 9.5px; font-weight: 700; color: var(--muted); width: 48px; letter-spacing: .02em; }
+  .cx-row .c { font-weight: 700; width: 56px; }
+  .cx-row .v { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 650; }
+  .cx-row .px { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; width: 76px; text-align: right; }
+  .cx-row.big { background: rgba(250,178,25,0.06); }
   .lm-legend { display: flex; gap: 11px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10px; color: var(--ink-2); flex-wrap: wrap; }
   .lm-legend .k { display: inline-flex; align-items: center; gap: 4px; }
   .lm-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -652,6 +668,12 @@
         </div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="cexliq">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance + Bybit · real-time forced orders</span></div>
+        <div class="panel-body" id="cxBody"><div class="empty">Connecting to the liquidation streams…</div></div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
@@ -706,7 +728,8 @@ const DEFAULT_LAYOUT = [
   {id: "trending",   x: 2, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
   {id: "globaloi",   x: 4, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
   {id: "alerts",     x: 6, y: 12, w: 3, h: 6,  minW: 2, minH: 3},
-  {id: "liqmap",     x: 0, y: 18, w: 6, h: 7,  minW: 3, minH: 3} /* new panels ALWAYS go to the bottom */
+  {id: "liqmap",     x: 0, y: 18, w: 6, h: 7,  minW: 3, minH: 3},
+  {id: "cexliq",     x: 6, y: 18, w: 6, h: 7,  minW: 2, minH: 3} /* beside the heatmap; other new panels go to the bottom */
 ];
 const layoutStore = {
   _mem: null,
@@ -889,7 +912,13 @@ async function loadPrices() {
   } catch (e) {
     if (!body.querySelector(".price-row")) {
       let shown = false;
-      try {
+      /* CG refused the browser → bot mirror (≤10 min old) → last local snapshot */
+      const mir = await fetchCgMirror();
+      if (mir && Array.isArray(mir.markets) && mir.markets.length) {
+        priceCoins = mir.markets; renderPriceRows(); shown = true;
+        $("pricesSub").textContent = "via bot " + timeAgo(mir.t) + " · refreshing…";
+      }
+      if (!shown) try {
         const c = JSON.parse(localStorage.getItem("cryptopulse-prices-cache"));
         if (c && Array.isArray(c.d) && c.d.length) {
           priceCoins = c.d; renderPriceRows(); shown = true;
@@ -1043,7 +1072,9 @@ $("pricesBody").addEventListener("mouseout", e => {
 /* ---------------- global stats (CoinGecko) ---------------- */
 async function loadGlobal() {
   try {
-    const g = (await fetchJSON("https://api.coingecko.com/api/v3/global")).data;
+    let g;
+    try { g = (await fetchJSON("https://api.coingecko.com/api/v3/global")).data; }
+    catch (e1) { const mir = await fetchCgMirror(); g = mir && mir.global; if (!g) throw e1; }
     const mcap = g.total_market_cap && g.total_market_cap.usd;
     const vol = g.total_volume && g.total_volume.usd;
     const btcDom = g.market_cap_percentage && g.market_cap_percentage.btc;
@@ -2344,6 +2375,17 @@ function trendReason(c, pos) {
   if (!c.market_cap_rank || c.market_cap_rank > 500) parts.push("micro-cap momentum");
   return parts.slice(0, 3).join(" · ");
 }
+/* CoinGecko mirror: the repo bot re-publishes trending/global/markets from GitHub's servers every run,
+   so the dashboard has fresh CG data even when CoinGecko blocks the user's browser entirely */
+let cgMirror = null, cgMirrorT = 0;
+async function fetchCgMirror() {
+  if (cgMirror && Date.now() - cgMirrorT < 120_000) return cgMirror;
+  try {
+    cgMirror = await fetchJSONraw("data/cg-mirror.json?b=" + Math.floor(Date.now() / 120_000), {timeout: 15000});
+    cgMirrorT = Date.now();
+  } catch (e) {}
+  return cgMirror;
+}
 /* trending renders instantly from the last good snapshot (localStorage) while the live fetch
    waits its turn in the CoinGecko queue — no more empty panel after a page refresh */
 function renderTrending(items, cachedAt) {
@@ -2381,6 +2423,9 @@ async function loadTrending() {
     markUpdated();
   } catch (e) {
     retrySoon(loadTrending, "trending");
+    /* CG refused the browser → bot mirror (≤10 min old, from GitHub's servers) → last local snapshot */
+    const mir = await fetchCgMirror();
+    if (mir && mir.trending && mir.trending.length) { renderTrending(mir.trending, mir.t); return; }
     if (!body.querySelector(".trend-row")) {
       const c = (() => { try { return JSON.parse(localStorage.getItem("cryptopulse-trending-cache")); } catch (e2) { return null; } })();
       if (c && c.items && c.items.length) renderTrending(c.items, c.t);
@@ -3297,7 +3342,7 @@ const lmData = {}; /* coin -> {step, bins:{binIdx:usd}, snapPx, t} | {none:true}
 let lmBotBook = {t: 0, coins: null, wallets: 0}; /* FULL leaderboard book (up to 2500 wallets) from the repo bot */
 async function fetchLmBotBook() {
   try {
-    const j = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 300000), {timeout: 20000});
+    const j = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 120000), {timeout: 20000});
     if (j && j.coins) { lmBotBook = j; renderLiqmap(); }
   } catch (e) { /* not published yet — browser 500-wallet book covers it */ }
 }
@@ -3373,7 +3418,10 @@ function renderLiqmap() {
   /* display buckets: 2.5% steps, −30%..+30%, re-based to the LIVE price every render */
   const BK = []; for (let p = -30; p < 30; p += 2.5) BK.push({p, lend: 0, wl: 0, ws: 0});
   const bIdx = pct => { const i = Math.floor((pct + 30) / 2.5); return i >= 0 && i < BK.length ? i : -1; };
-  if ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
+  /* STALE-DATA RULE: a lending snapshot taken at a very different price is old information —
+     old information is NOT shown. Excluded entirely (no approximate bars), noted in the sum line. */
+  const lendDrifted = d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15;
+  if ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.bins && !lendDrifted) Object.entries(d.bins).forEach(([b, usd]) => {
     const bp = (+b) * d.step;
     if (bp >= px) return; /* above live price = effectively gone; same strict rule as the risk panel */
     const i = bIdx((bp - px) / px * 100); if (i >= 0) BK[i].lend += usd;
@@ -3470,7 +3518,8 @@ function renderLiqmap() {
     '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
   if (!rows.length) {
     body.innerHTML = legend + '<div class="empty">' +
-      (d && d.none ? "No on-chain lending book for " + esc(coin) + " and no mapped whale positions — the map fills in as whales appear."
+      (lendDrifted && lmSrc === "LEND" ? "Lending snapshot for " + esc(coin) + " is stale (taken at " + fmtPrice(d.snapPx) + ") — excluded by the no-old-data rule. It returns when DefiLlama publishes a fresh one."
+        : d && d.none ? "No on-chain lending book for " + esc(coin) + " and no mapped whale positions — the map fills in as whales appear."
                    : "Nothing liquidatable mapped in ±30% for " + esc(coin) + " right now.") + "</div>";
     return;
   }
@@ -3482,10 +3531,11 @@ function renderLiqmap() {
   const fpx = v => v >= 1 ? "$" + v.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}) : fmtPrice(v);
   const mkRow = r => {
     const seg = (v, cls) => v > 0 ? '<div class="' + cls + '" style="width:' + (v / r.tot * 100).toFixed(1) + '%"></div>' : "";
-    return '<div class="lm-row' + (r === magnet ? " magnet" : "") + '">' +
+    return '<div class="lm-row' + (r === magnet ? " magnet" : "") + '" data-lmpop="1" data-lvl="' + fpx(px * (1 + r.p / 100)) +
+      '" data-pct="' + (r.p > 0 ? "+" : "") + r.p + '" data-lend="' + Math.round(r.lend) + '" data-wl="' + Math.round(r.wl) +
+      '" data-ws="' + Math.round(r.ws) + '" data-tot="' + Math.round(r.tot) + '">' +
       '<div class="lm-lvl">' + fpx(px * (1 + r.p / 100)) + ' <span class="pct">' + (r.p > 0 ? "+" : "") + r.p + "%</span></div>" +
-      '<div class="lm-track"><div class="lm-bar" style="width:' + Math.max(1.2, r.tot / max * 100).toFixed(1) + '%" title="' +
-        (r.lend ? "lending " + fmtBig(r.lend) + "  " : "") + (r.wl ? "whale longs " + fmtBig(r.wl) + "  " : "") + (r.ws ? "whale shorts " + fmtBig(r.ws) : "") + '">' +
+      '<div class="lm-track"><div class="lm-bar" style="width:' + Math.max(1.2, r.tot / max * 100).toFixed(1) + '%">' +
         seg(r.lend, "lm-lend") + seg(r.wl, "lm-wl") + seg(r.ws, "lm-ws") + "</div></div>" +
       '<div class="lm-val">' + fmtBig(r.tot) + "</div></div>";
   };
@@ -3496,8 +3546,8 @@ function renderLiqmap() {
       " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
       " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + 2.5) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
       (d && d.none ? ' · <span style="color:var(--muted)">no lending book — HL whales only</span>' : "") +
-      ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15
-        ? ' · <span style="color:var(--warn)" title="DefiLlama’s snapshot was taken at a very different price (' + fmtPrice(d.snapPx) + '). Some below-price bars may include positions already liquidated — treat magnitudes as approximate until the book refreshes.">⚠ book snapshot drifted</span>' : "") + "</div>" +
+      ((lmSrc === "AGG" || lmSrc === "LEND") && lendDrifted
+        ? ' · <span style="color:var(--muted)" title="DefiLlama’s lending snapshot was taken at ' + fmtPrice(d.snapPx) + ' — too far from the live price to be trusted. Rule: old data is not shown, so the lending layer is excluded until a fresh snapshot arrives (perp books are unaffected).">lending excluded — snapshot stale</span>' : "") + "</div>" +
     '<div class="lm-chart">' +
       (above.length ? above.map(mkRow).join("") : '<div class="lm-side">no forced buys mapped above</div>') +
       '<div class="lm-now"><div class="l">' + fpx(px) + '</div><div class="rule"></div><div></div></div>' +
@@ -3514,6 +3564,32 @@ function renderLiqmap() {
     (lmSrc === "JUP" && !(lmBotBook.jup && lmBotBook.jup.t) ? " · ⚠ waiting for the SOLANA_RPC secret (free Helius key — see chat)" : "") +
     ((lmSrc === "AGG" || lmSrc === "LEND") && d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
 }
+/* hover popup: full $ breakdown per price level (survives the 1s re-render — data lives on the row) */
+const lmPop = document.createElement("div");
+lmPop.className = "lm-pop";
+document.body.appendChild(lmPop);
+function lmPopShow(row, ev) {
+  const g = k => +row.dataset[k] || 0;
+  const line = (label, v, color) => v > 0 ?
+    '<div class="r"><span style="color:' + color + '">' + label + '</span><b>' + fmtBig(v) + "</b></div>" : "";
+  lmPop.innerHTML =
+    '<div class="t">' + esc(row.dataset.lvl) + ' <span style="color:var(--muted);font-weight:400">(' + esc(row.dataset.pct) + '%)</span></div>' +
+    line("lending (forced sells)", g("lend"), "var(--down)") +
+    line("perp longs (sells)", g("wl"), "#f0908a") +
+    line("perp shorts (forced buys)", g("ws"), "var(--up)") +
+    '<div class="r" style="border-top:1px solid var(--grid);margin-top:3px;padding-top:3px"><span>total at this level</span><b>' + fmtBig(g("tot")) + "</b></div>";
+  lmPop.style.display = "block";
+  const w = lmPop.offsetWidth || 200, h = lmPop.offsetHeight || 90;
+  let x = ev.clientX + 14, y = ev.clientY + 12;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - 12;
+  lmPop.style.left = x + "px"; lmPop.style.top = y + "px";
+}
+$("lmBody").addEventListener("mousemove", e => {
+  const row = e.target.closest("[data-lmpop]");
+  if (row) lmPopShow(row, e); else lmPop.style.display = "none";
+});
+$("lmBody").addEventListener("mouseleave", () => { lmPop.style.display = "none"; });
 function lmAddCoin() {
   const el = $("lmAdd");
   const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -3565,9 +3641,92 @@ $("lmTabs").addEventListener("drop", e => {
 $("lmTabs").addEventListener("dragend", () => { lmDragCoin = null; });
 setTimeout(() => lmCoins.forEach(fetchLiqmapCoin), 4000);
 setTimeout(fetchLmBotBook, 2500);
-setInterval(fetchLmBotBook, 300_000); /* bot refreshes the full book every 15 min */
+setInterval(fetchLmBotBook, 120_000); /* bot refreshes the full book every 10 min — check every 2 */
 setInterval(renderLiqmap, 1000);              /* live price + whale $ re-based every second */
 setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books refresh ~hourly upstream */
+
+/* ---------------- CEX live liquidations (Binance !forceOrder + Bybit allLiquidation, real-time WS) ---------------- */
+const cxEvents = []; /* newest first: {t, ex, coin, side: 'L'(long liq→forced sell)|'S'(short liq→forced buy), usd, px} */
+let cxDirty = false, cxConnected = {bn: false, by: false};
+const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
+function cxAdd(ev) {
+  cxEvents.unshift(ev);
+  if (cxEvents.length > 400) cxEvents.length = 400;
+  cxDirty = true;
+}
+function connectBinanceLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://fstream.binance.com/ws/!forceOrder@arr"); } catch (e) { setTimeout(connectBinanceLiqs, 5000); return; }
+  ws.onopen = () => { cxConnected.bn = true; cxDirty = true; };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    const o = m.o; if (!o) return;
+    const p = parseFloat(o.ap) || parseFloat(o.p) || 0;
+    const usd = (parseFloat(o.q) || 0) * p;
+    if (!(usd > 0)) return;
+    /* order side SELL = a long got liquidated (engine sells); BUY = short liquidated (engine buys) */
+    cxAdd({t: o.T || Date.now(), ex: "BINANCE", coin: cxNorm(o.s), side: o.S === "SELL" ? "L" : "S", usd, px: p});
+  };
+  ws.onclose = () => { cxConnected.bn = false; setTimeout(connectBinanceLiqs, 4000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+const CX_BYBIT = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "HYPEUSDT", "SUIUSDT", "ADAUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT"];
+function connectBybitLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://stream.bybit.com/v5/public/linear"); } catch (e) { setTimeout(connectBybitLiqs, 5000); return; }
+  ws.onopen = () => {
+    cxConnected.by = true; cxDirty = true;
+    ws.send(JSON.stringify({op: "subscribe", args: CX_BYBIT.map(s => "allLiquidation." + s)}));
+    ws._ping = setInterval(() => { try { ws.send(JSON.stringify({op: "ping"})); } catch (e) {} }, 20000);
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (!m.topic || m.topic.indexOf("allLiquidation") !== 0) return;
+    (m.data || []).forEach(d => {
+      const p = parseFloat(d.p) || 0;
+      const usd = (parseFloat(d.v) || 0) * p;
+      if (!(usd > 0)) return;
+      cxAdd({t: d.T || Date.now(), ex: "BYBIT", coin: cxNorm(d.s), side: d.S === "Sell" ? "L" : "S", usd, px: p});
+    });
+  };
+  ws.onclose = () => { cxConnected.by = false; clearInterval(ws._ping); setTimeout(connectBybitLiqs, 4000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+function renderCx() {
+  const body = $("cxBody"); if (!body) return;
+  const now = Date.now();
+  let sell1h = 0, buy1h = 0, v60 = 0, n60 = 0;
+  cxEvents.forEach(ev => {
+    if (now - ev.t < 3600_000) { if (ev.side === "L") sell1h += ev.usd; else buy1h += ev.usd; }
+    if (now - ev.t < 60_000) { n60++; v60 += ev.usd; }
+  });
+  const shown = cxEvents.filter(ev => ev.usd >= 3000).slice(0, 60);
+  const stats = '<div class="cx-stats">' +
+    '<span title="Value of LONG positions force-sold in the last hour (both exchanges)">1h longs liq <b style="color:var(--down)">' + fmtBig(sell1h) + "</b></span>" +
+    '<span title="Value of SHORT positions force-bought in the last hour">1h shorts liq <b style="color:var(--up)">' + fmtBig(buy1h) + "</b></span>" +
+    '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
+    "</div>";
+  if (!shown.length) {
+    body.innerHTML = stats + '<div class="empty">' +
+      ((cxConnected.bn || cxConnected.by) ? "Streams live — waiting for the next liquidation ≥ $3k…" : "Connecting to Binance + Bybit…") + "</div>";
+    return;
+  }
+  body.innerHTML = stats + shown.map(ev => {
+    const long = ev.side === "L";
+    return '<div class="cx-row' + (ev.usd >= 250_000 ? " big" : "") + (ev.usd >= 1_000_000 && now - ev.t < 60_000 ? " flash-red" : "") + '">' +
+      '<span class="when">' + new Date(ev.t).toLocaleTimeString("en-GB") + "</span>" +
+      '<span class="ex">' + ev.ex + "</span>" +
+      '<span class="side-badge ' + (long ? "side-short\" title=\"A LONG was liquidated — forced SELL hit the market\">LONG LIQ" : "side-long\" title=\"A SHORT was liquidated — forced BUY hit the market\">SHORT LIQ") + "</span>" +
+      '<span class="c">' + esc(ev.coin) + "</span>" +
+      '<span class="px">@ ' + fmtPrice(ev.px) + "</span>" +
+      '<span class="v" style="color:' + (long ? "var(--down)" : "var(--up)") + '">' + fmtBig(ev.usd) + "</span>" +
+    "</div>";
+  }).join("");
+}
+connectBinanceLiqs();
+connectBybitLiqs();
+setInterval(() => { if (cxDirty) { cxDirty = false; renderCx(); } }, 600);
+setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without new events */
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }

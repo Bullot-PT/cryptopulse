@@ -64,6 +64,29 @@ fs.mkdirSync('data', { recursive: true });
 fs.writeFileSync('data/oi-history.json', JSON.stringify(hist));
 console.log('OI samples stored:', hist.samples.length);
 
+// ---------------- CoinGecko mirror (browser IPs get rate-limited/blocked; GitHub's servers don't) ----------------
+// The dashboard falls back to this file whenever CoinGecko refuses the user's browser.
+try {
+  const mir = { t: now };
+  try {
+    const tr = await jget('https://api.coingecko.com/api/v3/search/trending');
+    mir.trending = (tr.coins || []).slice(0, 8).map(w => w.item);
+  } catch (e) { console.log('cg mirror trending failed', e.message); }
+  await new Promise(r => setTimeout(r, 1500));
+  try { mir.global = (await jget('https://api.coingecko.com/api/v3/global')).data || null; } catch (e) { console.log('cg mirror global failed', e.message); }
+  await new Promise(r => setTimeout(r, 1500));
+  try {
+    const mk = await jget('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h');
+    mir.markets = (Array.isArray(mk) ? mk : []).map(c => ({
+      id: c.id, symbol: c.symbol, name: c.name, image: c.image,
+      current_price: c.current_price, market_cap: c.market_cap, market_cap_rank: c.market_cap_rank,
+      total_volume: c.total_volume, price_change_percentage_24h: c.price_change_percentage_24h
+    }));
+  } catch (e) { console.log('cg mirror markets failed', e.message); }
+  fs.writeFileSync('data/cg-mirror.json', JSON.stringify(mir));
+  console.log('cg mirror:', (mir.trending || []).length, 'trending,', (mir.markets || []).length, 'markets,', mir.global ? 'global ok' : 'no global');
+} catch (e) { console.log('cg mirror failed', e.message); }
+
 // ---------------- Kalshi mirror (group /markets by event_ticker; titles from /events) ----------------
 try {
   const KH = { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' };
@@ -280,7 +303,7 @@ try {
   // Lighter rate-limits hard (~100-req token bucket, slow refill for datacenter IPs).
   // Strategy: paced single requests + 429 backoff + hard 5-min time budget, and a
   // cumulative per-account position cache so the book keeps building across runs.
-  const lgEnd = Date.now() + 5 * 60_000;
+  const lgEnd = Date.now() + 3.5 * 60_000; /* tighter budget — the cron now runs every 10 min */
   let lg429 = 0, lgDelay = 200; /* adaptive pacing: speed up while clean, back off on 429 */
   const lgGet = async (path) => {
     for (let att = 0; att < 4; att++) {
