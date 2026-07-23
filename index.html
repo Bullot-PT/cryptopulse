@@ -3175,6 +3175,21 @@ let lmCoins = (() => {
 let lmCur = (() => { try { return localStorage.getItem("cryptopulse-liqmap-cur") || lmCoins[0]; } catch (e) { return lmCoins[0]; } })();
 function lmSave() { try { localStorage.setItem("cryptopulse-liqmap-coins", JSON.stringify(lmCoins)); localStorage.setItem("cryptopulse-liqmap-cur", lmCur); } catch (e) {} }
 const lmData = {}; /* coin -> {step, bins:{binIdx:usd}, snapPx, t} | {none:true} */
+let lmBotBook = {t: 0, coins: null, wallets: 0}; /* FULL leaderboard book (up to 2500 wallets) from the repo bot */
+async function fetchLmBotBook() {
+  try {
+    const j = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 300000), {timeout: 20000});
+    if (j && j.coins) { lmBotBook = j; renderLiqmap(); }
+  } catch (e) { /* not published yet — browser 500-wallet book covers it */ }
+}
+/* source selector: aggregate + one button per DEX (more perp DEXes plug in here one by one) */
+const LM_SOURCES = [
+  {k: "AGG", label: "Σ Aggregate", tip: "All sources combined"},
+  {k: "HL", label: "Hyperliquid", tip: "Hyperliquid perps only — full wallet book"},
+  {k: "LEND", label: "Lending", tip: "On-chain lending books only (all lenders, all chains via DefiLlama)"}
+];
+let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
+if (!LM_SOURCES.some(s => s.k === lmSrc)) lmSrc = "AGG";
 async function fetchLiqmapCoin(coin) {
   const key = LIQMAP_KEY[coin] || coin.toLowerCase();
   try {
@@ -3205,45 +3220,61 @@ function lmLivePx(coin) {
 }
 function renderLiqmap() {
   const body = $("lmBody"); if (!body) return;
-  /* tabs */
+  /* tabs (draggable to reorder) + source buttons */
   $("lmTabs").innerHTML = lmCoins.map(c =>
-    '<span class="lm-tab' + (c === lmCur ? " on" : "") + '" data-lm="' + esc(c) + '">' + esc(c) +
-    '<span class="x" data-lmx="' + esc(c) + '" title="Remove">✕</span></span>').join("");
+    '<span class="lm-tab' + (c === lmCur ? " on" : "") + '" draggable="true" title="Drag to reorder" data-lm="' + esc(c) + '">' + esc(c) +
+    '<span class="x" data-lmx="' + esc(c) + '" title="Remove">✕</span></span>').join("") +
+    '<span style="margin-left:auto;display:inline-flex;gap:4px;align-items:center">' +
+    LM_SOURCES.map(s => '<button class="src-btn' + (s.k === lmSrc ? " src-on" : "") + '" data-lmsrc="' + s.k + '" title="' + esc(s.tip) + '">' + s.label + "</button>").join("") + "</span>";
   const coin = lmCur, d = lmData[coin];
   const px = lmLivePx(coin);
   if (!px) { body.innerHTML = '<div class="empty">Waiting for a live price for ' + esc(coin) + "…</div>"; return; }
   /* display buckets: 2.5% steps, −30%..+30%, re-based to the LIVE price every render */
   const BK = []; for (let p = -30; p < 30; p += 2.5) BK.push({p, lend: 0, wl: 0, ws: 0});
   const bIdx = pct => { const i = Math.floor((pct + 30) / 2.5); return i >= 0 && i < BK.length ? i : -1; };
-  if (d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
+  if (lmSrc !== "HL" && d && d.bins) Object.entries(d.bins).forEach(([b, usd]) => {
     const bp = (+b) * d.step;
     if (bp >= px) return; /* above live price = effectively gone; same strict rule as the risk panel */
     const i = bIdx((bp - px) / px * 100); if (i >= 0) BK[i].lend += usd;
   });
-  /* HL positions: full top-500-wallet book (every size) once the 15-min scan has run;
-     falls back to the ≥$5M whale-scanner rows until then */
-  const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
-  if (bookArr && bookArr.length) {
-    const snapC = lsSnapshot.coins[coin] || lsSnapshot.coins["k" + coin] || {};
-    const scale = snapC.markRef ? px / snapC.markRef : 1; /* live-scale $ values */
-    bookArr.forEach(([lq, v0, s]) => {
-      const i = bIdx((lq - px) / px * 100); if (i < 0) return;
-      const v = v0 * scale;
-      if (s > 0 && lq < px) BK[i].wl += v;
-      else if (s < 0 && lq > px) BK[i].ws += v;
-    });
-  } else {
-    document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
-      const rc = row.dataset.coin;
-      if (rc !== coin && rc !== "k" + coin) return;
-      const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
-      const mark0 = parseFloat(row.dataset.mark0) || px, v0 = parseFloat(row.dataset.val0) || 0;
-      const v = v0 * (px / mark0);
-      if (!(liq > 0) || !v) return;
-      const i = bIdx((liq - px) / px * 100); if (i < 0) return;
-      if (szi > 0 && liq < px) BK[i].wl += v;
-      else if (szi < 0 && liq > px) BK[i].ws += v;
-    });
+  /* HL positions, best source available: bot's FULL leaderboard book (≤2500 wallets, 15-min cycle)
+     → browser 500-wallet book → ≥$5M whale-scanner rows */
+  let hlSrcUsed = null;
+  if (lmSrc !== "LEND") {
+    const bot = lmBotBook.coins && (lmBotBook.coins[coin] || lmBotBook.coins["k" + coin]);
+    const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
+    if (bot && Date.now() - lmBotBook.t < 45 * 60_000) {
+      hlSrcUsed = "bot";
+      const scale = bot.px ? px / bot.px : 1; /* live-scale $ values */
+      Object.entries(bot.bins || {}).forEach(([b, cell]) => {
+        const bp = (+b) * bot.step;
+        const i = bIdx((bp - px) / px * 100); if (i < 0) return;
+        if (cell[0] && bp < px) BK[i].wl += cell[0] * scale; /* longs → sell fuel below */
+        if (cell[1] && bp > px) BK[i].ws += cell[1] * scale; /* shorts → buy fuel above */
+      });
+    } else if (bookArr && bookArr.length) {
+      hlSrcUsed = "scan";
+      const snapC = lsSnapshot.coins[coin] || lsSnapshot.coins["k" + coin] || {};
+      const scale = snapC.markRef ? px / snapC.markRef : 1;
+      bookArr.forEach(([lq, v0, s]) => {
+        const i = bIdx((lq - px) / px * 100); if (i < 0) return;
+        const v = v0 * scale;
+        if (s > 0 && lq < px) BK[i].wl += v;
+        else if (s < 0 && lq > px) BK[i].ws += v;
+      });
+    } else {
+      document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
+        const rc = row.dataset.coin;
+        if (rc !== coin && rc !== "k" + coin) return;
+        const liq = parseFloat(row.dataset.liq), szi = parseFloat(row.dataset.szi);
+        const mark0 = parseFloat(row.dataset.mark0) || px, v0 = parseFloat(row.dataset.val0) || 0;
+        const v = v0 * (px / mark0);
+        if (!(liq > 0) || !v) return;
+        const i = bIdx((liq - px) / px * 100); if (i < 0) return;
+        if (szi > 0 && liq < px) BK[i].wl += v;
+        else if (szi < 0 && liq > px) BK[i].ws += v;
+      });
+    }
   }
   const rows = BK.filter(b => b.lend + b.wl + b.ws > 0).map(b => ({...b, tot: b.lend + b.wl + b.ws}));
   const legend = '<div class="lm-legend">' +
@@ -3288,8 +3319,12 @@ function renderLiqmap() {
     "</div>";
   const sub = $("lmSub");
   if (sub) sub.textContent = "forced flow by price level · price live" +
-    (hlLiqBook.t ? " · HL 500-wallet book " + timeAgo(hlLiqBook.t) : "") +
-    (d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
+    (lmSrc !== "AGG" ? " · " + (lmSrc === "HL" ? "Hyperliquid only" : "lending only") : "") +
+    (lmSrc !== "LEND"
+      ? (hlSrcUsed === "bot" ? " · HL full book (" + (lmBotBook.wallets || "?") + " wallets) " + timeAgo(lmBotBook.t)
+        : hlSrcUsed === "scan" ? " · HL 500-wallet book " + timeAgo(hlLiqBook.t) : "")
+      : "") +
+    (lmSrc !== "HL" && d && d.t && !d.none ? " · lending " + timeAgo(d.t) : "");
 }
 function lmAddCoin() {
   const el = $("lmAdd");
@@ -3302,6 +3337,12 @@ function lmAddCoin() {
 $("lmAddBtn").addEventListener("click", lmAddCoin);
 $("lmAdd").addEventListener("keydown", e => { if (e.key === "Enter") lmAddCoin(); });
 $("lmTabs").addEventListener("click", e => {
+  const sb = e.target.closest("[data-lmsrc]");
+  if (sb) {
+    lmSrc = sb.dataset.lmsrc;
+    try { localStorage.setItem("cryptopulse-liqmap-src", lmSrc); } catch (err) {}
+    renderLiqmap(); return;
+  }
   const x = e.target.closest("[data-lmx]");
   if (x) {
     e.stopPropagation();
@@ -3313,7 +3354,29 @@ $("lmTabs").addEventListener("click", e => {
   const t = e.target.closest("[data-lm]");
   if (t) { lmCur = t.dataset.lm; lmSave(); renderLiqmap(); }
 });
+/* drag a tab onto another to reorder — order persists */
+let lmDragCoin = null;
+$("lmTabs").addEventListener("dragstart", e => {
+  const t = e.target.closest("[data-lm]");
+  if (!t) return;
+  lmDragCoin = t.dataset.lm;
+  try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", lmDragCoin); } catch (err) {}
+});
+$("lmTabs").addEventListener("dragover", e => { if (lmDragCoin) e.preventDefault(); });
+$("lmTabs").addEventListener("drop", e => {
+  e.preventDefault();
+  const t = e.target.closest("[data-lm]");
+  const dragged = lmDragCoin; lmDragCoin = null;
+  if (!t || !dragged || t.dataset.lm === dragged) return;
+  const from = lmCoins.indexOf(dragged), to = lmCoins.indexOf(t.dataset.lm);
+  if (from < 0 || to < 0) return;
+  lmCoins.splice(to, 0, lmCoins.splice(from, 1)[0]);
+  lmSave(); renderLiqmap();
+});
+$("lmTabs").addEventListener("dragend", () => { lmDragCoin = null; });
 setTimeout(() => lmCoins.forEach(fetchLiqmapCoin), 4000);
+setTimeout(fetchLmBotBook, 2500);
+setInterval(fetchLmBotBook, 300_000); /* bot refreshes the full book every 15 min */
 setInterval(renderLiqmap, 1000);              /* live price + whale $ re-based every second */
 setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books refresh ~hourly upstream */
 

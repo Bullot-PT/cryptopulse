@@ -75,6 +75,7 @@ try {
     const r = await fetch(u, { headers: KH });
     if (!r.ok) { console.log('kalshi markets http', r.status); break; }
     const j = await r.json();
+    if (mp === 0) { try { fs.writeFileSync('data/_kdebug.json', JSON.stringify({sample: (j.markets||[]).slice(0,3), keys: (j.markets||[])[0] ? Object.keys(j.markets[0]) : []})); } catch(e){} }
     (j.markets || []).forEach(m => {
       let y = m.last_price;
       if (y == null) {
@@ -112,6 +113,45 @@ try {
   if (out.length) { fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out })); console.log('kalshi events:', out.length, 'withPrice:', withPrice, 'eventTitles:', Object.keys(titleByEt).length); }
 } catch (e) { console.log('kalshi failed', e.message); }
 
+// ---------------- Full-leaderboard liquidation book (feeds the DEX Liq Heatmap) ----------------
+// Scans up to 2500 wallets (account >= $25k) — every position >= $10k, bucketed by liq price.
+let LB = [], MIDS = {};
+try {
+  LB = (await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || [];
+  MIDS = await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
+  const wallets = LB.filter(r => (parseFloat(r.accountValue) || 0) >= 25000)
+    .sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 2500);
+  const book = {}; // coin -> {px, step, bins:{binIdx:[sellFuelUsd, buyFuelUsd]}}
+  let scanned = 0, positions = 0;
+  for (let i = 0; i < wallets.length; i += 15) {
+    const chunk = await Promise.allSettled(wallets.slice(i, i + 15).map(r =>
+      post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress })));
+    chunk.forEach(c => {
+      if (c.status !== 'fulfilled' || !c.value) return;
+      scanned++;
+      (c.value.assetPositions || []).forEach(ap => {
+        const p = ap.position;
+        const v = Math.abs(parseFloat(p.positionValue));
+        const liq = parseFloat(p.liquidationPx);
+        const px = parseFloat(MIDS[p.coin]);
+        if (!(v >= 10000) || !(liq > 0) || !(px > 0)) return;
+        if (liq < px * 0.3 || liq > px * 3) return; // sanity band
+        const co = book[p.coin] || (book[p.coin] = { px, step: px * 0.005, bins: {} });
+        const b = Math.round(liq / co.step);
+        const cell = co.bins[b] || (co.bins[b] = [0, 0]);
+        if (parseFloat(p.szi) > 0) cell[0] += v; else cell[1] += v; // longs = sell fuel, shorts = buy fuel
+        positions++;
+      });
+    });
+    await new Promise(r => setTimeout(r, 120)); // stay friendly with HL rate limits
+  }
+  Object.values(book).forEach(co => {
+    Object.keys(co.bins).forEach(b => { co.bins[b] = [Math.round(co.bins[b][0]), Math.round(co.bins[b][1])]; });
+  });
+  fs.writeFileSync('data/liq-book.json', JSON.stringify({ t: now, wallets: scanned, positions, coins: book }));
+  console.log('liq-book:', scanned, 'wallets,', positions, 'positions,', Object.keys(book).length, 'coins');
+} catch (e) { console.log('liq-book failed', e.message); }
+
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
 const tgOn = !!(TG_TOKEN && TG_CHAT);
@@ -138,8 +178,8 @@ function consider(kind, key, msg) {
 
 // --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
 try {
-  const lb = (await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || [];
-  const mids = await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
+  const lb = LB.length ? LB : ((await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || []);
+  const mids = Object.keys(MIDS).length ? MIDS : await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
   const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
   for (let i = 0; i < top60.length; i += 12) {
     const chunk = await Promise.allSettled(top60.slice(i, i + 12).map(r =>
