@@ -2156,19 +2156,30 @@ async function getKalshi() {
   return kalshiCache.data;
 }
 function kalshiCard(ev) {
-  /* prefer the highest-volume market that has a price; else any market */
-  const mkts = (ev.m || []).slice().sort((a, b) => (b.v || 0) - (a.v || 0));
-  const m = mkts.find(x => x.y != null) || mkts[0];
-  if (!m) return null;
-  const pct = m.y != null ? m.y : null; /* cents = % */
+  const mkts = (ev.m || []).filter(x => x.y != null);
   const link = "https://kalshi.com/markets/" + encodeURIComponent((ev.s || ev.tk || "").toLowerCase());
+  let pct = null, winner = null;
+  if (mkts.length > 1) {
+    /* multi-candidate event: the leader is the market with the highest Yes price */
+    const top = mkts.slice().sort((a, b) => (b.y || 0) - (a.y || 0))[0];
+    pct = top.y; winner = top.ti || "Yes";
+  } else if (mkts.length === 1) {
+    /* binary market: whichever side is above 50% is winning */
+    const y = mkts[0].y;
+    if (y >= 50) { pct = y; winner = mkts[0].ti || "Yes"; }
+    else { pct = 100 - y; winner = "No"; }
+  }
+  if (pct == null) {
+    const any = (ev.m || [])[0];
+    return '<a class="pm-item" style="display:block" href="' + link + '" target="_blank" rel="noopener">' +
+      '<div class="pm-q"><span class="proto-badge" style="margin-right:6px">KALSHI</span>' + esc(ev.t) + "</div>" +
+      '<div class="pm-meta"><span>' + esc((any && any.ti) || "open market") + " · odds on Kalshi ↗</span></div></a>";
+  }
   return '<a class="pm-item" style="display:block" href="' + link + '" target="_blank" rel="noopener">' +
     '<div class="pm-q"><span class="proto-badge" style="margin-right:6px">KALSHI</span>' + esc(ev.t) + "</div>" +
-    (pct != null
-      ? '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(0) + '%</span>' +
-        '<span class="pm-outcome">' + esc(m.ti || "Yes") + "</span>" +
-        '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>'
-      : '<div class="pm-meta"><span>' + esc(m.ti || "open market") + " · odds on Kalshi ↗</span></div>") +
+    '<div class="pm-row"><span class="pm-odds chg-up">' + pct.toFixed(0) + '%</span>' +
+    '<span class="pm-outcome">🏆 ' + esc(winner) + " leading</span>" +
+    '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%;background:var(--up)"></div></div></div>' +
   "</a>";
 }
 async function pmRemoteSearch(q) {
