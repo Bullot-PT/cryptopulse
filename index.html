@@ -447,6 +447,7 @@
   .lsx-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 2px; flex: 0 0 auto; }
   .lsx-del:hover { color: var(--down); }
   .side-badge.fresh { background: rgba(250,178,25,0.15); color: var(--warn); cursor: help; }
+  .side-badge.dormant { background: rgba(147,112,219,0.18); color: #b48ae0; cursor: help; }
   .side-badge.inflow { background: rgba(57,135,229,0.15); color: var(--accent); cursor: help; }
   #pmVol { width: 72px; height: 4px; accent-color: var(--accent); cursor: pointer; margin-left: auto; }
 
@@ -1629,6 +1630,21 @@ async function walletInflow48h(addr) {
   depCache[addr] = {t: now, v};
   return v;
 }
+/* account age: first record in the wallet's on-chain ledger (first deposit/transfer ever).
+   Used to split FRESH (genuinely new account) from DORMANT (old account waking up). */
+const ageCache = {}; /* addr -> {t, age} — 1h cache */
+async function walletFirstSeen(addr) {
+  const c = ageCache[addr];
+  if (c && Date.now() - c.t < 3600_000) return c.age;
+  let age = null;
+  try {
+    const j = await fetchHL({type: "userNonFundingLedgerUpdates", user: addr, startTime: 0, endTime: Date.now()});
+    if (Array.isArray(j) && j.length) age = j.reduce((m, u) => Math.min(m, u.time || Infinity), Infinity);
+    if (!isFinite(age)) age = null;
+  } catch (e) { return c ? c.age : null; }
+  ageCache[addr] = {t: Date.now(), age};
+  return age;
+}
 /* ---- whale watchlist: pin wallets, detect position changes between scans ---- */
 const watchStore = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return (this._m && this._m[k]) ?? d; } },
@@ -1725,10 +1741,16 @@ function renderWhaleRows(rows, note) {
         '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
         '<div class="wrow-line">' +
           '<span class="side-badge ' + (r.szi > 0 ? "side-long\">LONG" : "side-short\">SHORT") + "</span>" +
-          (r.fresh ? '<span class="side-badge fresh" title="' + (r.fresh === "week"
-            ? "Fresh wallet: ~all of this account’s lifetime trading volume happened in the last 7 days — a newly funded (or long-dormant) account suddenly opening size. Classic footprint of informed money positioning before news."
-            : "Recent wallet: ~all of this account’s lifetime trading volume happened within the last month — a young account already running size.") +
-            '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "1M") + "</span>" : "") +
+          (r.fresh ? (function () {
+            const ageTxt = r.ageDays == null ? null : r.ageDays >= 60 ? Math.round(r.ageDays / 30) + " months" : Math.max(1, Math.round(r.ageDays)) + " days";
+            if (r.dormant) return '<span class="side-badge dormant" title="Dormant wallet waking up: this account was first funded ' +
+              (ageTxt ? ageTxt + " ago" : "long ago") + ', but ~all of its lifetime trading volume happened in the last ' +
+              (r.fresh === "week" ? "7 days" : "month") + ' — an old wallet that sat idle and is suddenly opening size. Often informed money reactivating before news.">💤 DORMANT</span>';
+            return '<span class="side-badge fresh" title="' + (r.fresh === "week"
+              ? "Fresh wallet: genuinely new account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " — ~all of its lifetime trading volume happened in the last 7 days, opening size straight away. Classic footprint of informed money positioning before news."
+              : "Recent wallet: young account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " with ~all of its lifetime volume within the last month — already running size.") +
+              '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "1M") + "</span>";
+          })() : "") +
           (r.inflow >= 250_000 ? '<span class="side-badge inflow" title="Fresh money on-chain: this wallet received ' + fmtBig(r.inflow) +
             ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">💰 +' +
             fmtBig(r.inflow) + "</span>" : "") +
@@ -1791,6 +1813,18 @@ async function loadWhales() {
       await Promise.allSettled(uniqAddrs.slice(i, i + 10).map(a => walletInflow48h(a)));
     }
     found.forEach(r => { r.inflow = (depCache[r.addr] || {}).v || 0; });
+    /* age pass: split FRESH (account itself is new) vs DORMANT (old account, volume suddenly all-recent) */
+    const freshAddrs = [...new Set(found.filter(r => r.fresh).map(r => r.addr))].slice(0, 20);
+    for (let i = 0; i < freshAddrs.length; i += 10) {
+      await Promise.allSettled(freshAddrs.slice(i, i + 10).map(a => walletFirstSeen(a)));
+    }
+    found.forEach(r => {
+      if (!r.fresh) return;
+      const age = (ageCache[r.addr] || {}).age;
+      r.ageDays = age ? (Date.now() - age) / 86_400_000 : null;
+      /* older account than its trading burst implies → it was sitting idle: DORMANT */
+      if (r.ageDays != null && r.ageDays > (r.fresh === "week" ? 14 : 45)) r.dormant = true;
+    });
     /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
        🆕/💰 badges still show on rows wherever they sit. */
     found.sort((a, b) => {
