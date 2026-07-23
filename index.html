@@ -193,6 +193,8 @@
   .pm-row { display: flex; align-items: center; gap: 10px; }
   .pm-odds { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .pm-outcome { font-size: 11.5px; color: var(--muted); }
+  .pm-outcome.po-yes { background: rgba(12,163,12,0.18); color: var(--up); border: 1px solid rgba(12,163,12,0.35); border-radius: 5px; padding: 1px 7px; font-weight: 700; }
+  .pm-outcome.po-no { background: rgba(208,59,59,0.18); color: var(--down); border: 1px solid rgba(208,59,59,0.4); border-radius: 5px; padding: 1px 7px; font-weight: 700; }
   .pm-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
   .pm-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
   .pm-meta { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; }
@@ -2639,6 +2641,13 @@ $("pmBody").addEventListener("click", e => {
 });
 
 let pmCards = [], pmAlertsHTML = "";
+/* YES → green box, NO → red box (matches the trailing side word, so "Trump · Yes" also colors) */
+function pmSideClass(s) {
+  const t = (s || "").trim().toUpperCase();
+  if (/(?:^|[\s·])YES$/.test(t)) return " po-yes";
+  if (/(?:^|[\s·])NO$/.test(t)) return " po-no";
+  return "";
+}
 function pmEventCard(ev, opts) {
   opts = opts || {};
   const mkts = (ev.markets || []).filter(m => m.outcomePrices);
@@ -2665,7 +2674,7 @@ function pmEventCard(ev, opts) {
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
     '<div class="pm-q">' + esc(ev.title) + "</div>" +
     '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
-    '<span class="pm-outcome">' + esc(label) + "</span>" +
+    '<span class="pm-outcome' + pmSideClass(label) + '">' + esc(label) + "</span>" +
     '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
     '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
     (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
@@ -2723,7 +2732,7 @@ function trackOddsMoves(oddsNow) {
     return '<a class="bet-alert flash-red" href="https://polymarket.com/event/' + esc(a.slug) + '" target="_blank" rel="noopener">' +
       '<div class="b1">📊 <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
       '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
-      ' “' + esc(a.label) + "”" +
+      ' <span class="pm-outcome' + pmSideClass(a.label) + '">' + esc(a.label) + "</span>" +
       '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
       '<button class="bet-x" data-odds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
       '<div class="b2">' + esc(a.title) + "</div></a>";
@@ -2787,7 +2796,7 @@ function kalshiCard(ev) {
   return '<a class="pm-item" style="display:block" href="' + link + '" target="_blank" rel="noopener">' +
     '<div class="pm-q"><span class="proto-badge" style="margin-right:6px">KALSHI</span>' + esc(ev.t) + "</div>" +
     '<div class="pm-row"><span class="pm-odds chg-up">' + pct.toFixed(0) + '%</span>' +
-    '<span class="pm-outcome">🏆 ' + esc(winner) + " leading</span>" +
+    '<span class="pm-outcome' + pmSideClass(winner) + '">🏆 ' + esc(winner) + " leading</span>" +
     '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%;background:var(--up)"></div></div></div>' +
   "</a>";
 }
