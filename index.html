@@ -606,7 +606,7 @@
     </div>
     <div class="grid-stack-item" gs-id="globaloi">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges · ⚡ = direct from the DEX API (HL · dYdX · Lighter · Aster)</span></div>
+        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges · ⚡ = direct from the DEX API (HL · dYdX · Lighter · Aster · GMX)</span></div>
         <div class="panel-body" id="goiBody"><div class="empty">Loading global open interest…</div></div>
       </div></div>
     </div>
@@ -2242,6 +2242,16 @@ async function fetchDirectDexOi() {
       const j = await fetchJSONraw("https://mainnet.zklighter.elliot.ai/api/v1/orderBookDetails", {timeout: 20000});
       const oi = (j.order_book_details || []).reduce((s, d) => s + (parseFloat(d.open_interest) || 0) * (parseFloat(d.mark_price) || 0), 0);
       if (oi > 0) out.push({name: "Lighter", oi, live: 1, m: "lighter"});
+    })(),
+    (async () => { /* GMX v2 — exact OI (USD, 1e30 precision), Arbitrum + Avalanche in two calls */
+      const chains = ["https://arbitrum-api.gmxinfra.io", "https://avalanche-api.gmxinfra.io"];
+      let oi = 0;
+      const rs = await Promise.allSettled(chains.map(u => fetchJSONraw(u + "/markets/info", {timeout: 20000})));
+      rs.forEach(r => {
+        if (r.status !== "fulfilled") return;
+        (r.value.markets || []).forEach(m => { oi += ((parseFloat(m.openInterestLong) || 0) + (parseFloat(m.openInterestShort) || 0)) / 1e30; });
+      });
+      if (oi > 0) out.push({name: "GMX", oi, live: 1, m: "gmx"});
     })(),
     (async () => { /* Aster — Binance-clone API only exposes OI per symbol; top 30 by volume covers the bulk */
       const tk = await fetchJSONraw("https://fapi.asterdex.com/fapi/v1/ticker/24hr", {timeout: 20000});
