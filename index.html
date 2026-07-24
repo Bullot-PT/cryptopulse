@@ -504,6 +504,15 @@
   .cx-row .v { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 650; }
   .cx-row .px { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; width: 76px; text-align: right; }
   .cx-row.big { background: rgba(250,178,25,0.06); }
+  /* size tiers — flashing backgrounds: ≥$1M light yellow, ≥$5M strong yellow, ≥$10M light red, ≥$25M heavy red */
+  .cx-row.t1 { animation: cxT1 1.2s ease-in-out infinite; }
+  .cx-row.t2 { animation: cxT2 1.0s ease-in-out infinite; }
+  .cx-row.t3 { animation: cxT3 0.9s ease-in-out infinite; }
+  .cx-row.t4 { animation: cxT4 0.7s ease-in-out infinite; }
+  @keyframes cxT1 { 0%, 100% { background: rgba(250,204,21,0.07); } 50% { background: rgba(250,204,21,0.22); } }
+  @keyframes cxT2 { 0%, 100% { background: rgba(245,158,11,0.16); } 50% { background: rgba(245,158,11,0.42); } }
+  @keyframes cxT3 { 0%, 100% { background: rgba(239,68,68,0.12); } 50% { background: rgba(239,68,68,0.32); } }
+  @keyframes cxT4 { 0%, 100% { background: rgba(220,38,38,0.24); } 50% { background: rgba(220,38,38,0.58); } }
   .lm-legend { display: flex; gap: 11px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10px; color: var(--ink-2); flex-wrap: wrap; }
   .lm-legend .k { display: inline-flex; align-items: center; gap: 4px; }
   .lm-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -4103,15 +4112,16 @@ function renderCx() {
   }
   body.innerHTML = stats + shown.map(ev => {
     const long = ev.side === "L";
-    return '<div class="cx-row' + (ev.usd >= 250_000 ? " big" : "") + (ev.usd >= 1_000_000 && now - ev.t < 60_000 ? " flash-red" : "") + '">' +
+    const tier = ev.usd >= 25_000_000 ? " t4" : ev.usd >= 10_000_000 ? " t3" : ev.usd >= 5_000_000 ? " t2" : ev.usd >= 1_000_000 ? " t1" : ev.usd >= 250_000 ? " big" : "";
+    return '<div class="cx-row' + tier + '">' +
       '<span class="when">' + new Date(ev.t).toLocaleTimeString("en-GB") + "</span>" +
       '<span class="ex"' + (ev.oc ? ' style="color:var(--accent)" title="' +
         (ev.det ? "DETECTED on-chain: this tracked Hyperliquid whale position crossed its liquidation price and vanished from the book (size = last known value)"
                 : "on-chain DEX liquidation") + '"' : "") + '>' + ev.ex + (ev.det ? "*" : "") + "</span>" +
-      '<span class="side-badge ' + (long ? "side-short\" title=\"A LONG was liquidated — forced SELL hit the market\">LONG LIQ" : "side-long\" title=\"A SHORT was liquidated — forced BUY hit the market\">SHORT LIQ") + "</span>" +
+      '<span class="side-badge ' + (long ? "side-long\" title=\"A LONG was liquidated — forced SELL hit the market\">LONG LIQ" : "side-short\" title=\"A SHORT was liquidated — forced BUY hit the market\">SHORT LIQ") + "</span>" +
       '<span class="c">' + esc(ev.coin) + "</span>" +
       '<span class="px">' + (ev.px > 0 ? "@ " + fmtPrice(ev.px) : "") + "</span>" +
-      '<span class="v" style="color:' + (long ? "var(--down)" : "var(--up)") + '">' + fmtBig(ev.usd) + "</span>" +
+      '<span class="v" style="color:' + (long ? "var(--up)" : "var(--down)") + '">' + fmtBig(ev.usd) + "</span>" +
     "</div>";
   }).join("");
 }
