@@ -513,6 +513,17 @@
   @keyframes cxT2 { 0%, 100% { background: rgba(245,158,11,0.16); } 50% { background: rgba(245,158,11,0.42); } }
   @keyframes cxT3 { 0%, 100% { background: rgba(239,68,68,0.12); } 50% { background: rgba(239,68,68,0.32); } }
   @keyframes cxT4 { 0%, 100% { background: rgba(220,38,38,0.24); } 50% { background: rgba(220,38,38,0.58); } }
+  /* Cascade Radar */
+  .rd-row { padding: 6px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: help; }
+  .rd-top { display: flex; align-items: center; gap: 10px; }
+  .rd-rank { color: var(--muted); width: 16px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .rd-coin { font-weight: 700; width: 64px; font-size: 12.5px; }
+  .rd-dir { font-weight: 800; font-size: 10.5px; width: 66px; letter-spacing: .02em; }
+  .rd-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+  .rd-bar i { display: block; height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .rd-score { width: 32px; text-align: right; font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .rd-why { color: var(--muted); font-size: 10px; margin: 3px 0 0 26px; }
+  .rd-why b { color: var(--ink-2); font-weight: 600; }
   .lm-legend { display: flex; gap: 11px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10px; color: var(--ink-2); flex-wrap: wrap; }
   .lm-legend .k { display: inline-flex; align-items: center; gap: 4px; }
   .lm-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -704,6 +715,12 @@
         <div class="panel-body" id="cxBody"><div class="empty">Connecting to the liquidation streams…</div></div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="radar">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown.">where the next forced move is most likely · 0-100 · live</span></div>
+        <div class="panel-body" id="rdBody"><div class="empty">Computing pressure scores…</div></div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
@@ -759,7 +776,8 @@ const DEFAULT_LAYOUT = [
   {id: "globaloi",   x: 4, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
   {id: "alerts",     x: 6, y: 12, w: 3, h: 6,  minW: 2, minH: 3},
   {id: "liqmap",     x: 0, y: 18, w: 6, h: 7,  minW: 3, minH: 3},
-  {id: "cexliq",     x: 6, y: 18, w: 6, h: 7,  minW: 2, minH: 3} /* beside the heatmap; other new panels go to the bottom */
+  {id: "cexliq",     x: 6, y: 18, w: 6, h: 7,  minW: 2, minH: 3}, /* beside the heatmap */
+  {id: "radar",      x: 0, y: 25, w: 12, h: 5, minW: 3, minH: 3} /* full-width row below everything — easy to inspect/tweak/remove */
 ];
 const layoutStore = {
   _mem: null,
@@ -4187,6 +4205,111 @@ setTimeout(pollLighterLiqs, 8000);
 setInterval(pollLighterLiqs, 25_000);
 setInterval(() => { if (cxDirty) { cxDirty = false; renderCx(); } }, 600);
 setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without new events */
+
+/* ---------------- Cascade Radar — pressure score per coin, all real live inputs ----------------
+   W (0-40): liq walls within ±5% of price across ALL DEX books, normalized by the coin's OI.
+   F (0-20): |funding| — extreme funding = crowded side paying to stay in.
+   V (0-25): liquidation velocity last 15 min (market-wide 🌐 via Coinalyze minute mirror; live feed as fallback).
+   OI (0-15): 24h open-interest momentum from our own oi-history samples. */
+let rdHl = null, rdBook = null, rdOiRef = null;
+async function rdFetchHl() {
+  try {
+    const r = await fetch("https://api.hyperliquid.xyz/info", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({type: "metaAndAssetCtxs"})});
+    const [mu, cxs] = await r.json();
+    const m = {};
+    (mu.universe || []).forEach((u, i) => {
+      const c = cxs[i]; if (!c || u.isDelisted) return;
+      m[u.name] = {px: +c.markPx, fund: +c.funding, oi: +c.openInterest * +c.markPx};
+    });
+    if (Object.keys(m).length) rdHl = m;
+  } catch (e) {}
+}
+async function rdFetchBook() {
+  try { rdBook = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 120_000), {timeout: 20000}); } catch (e) {}
+}
+async function rdFetchOiRef() {
+  try {
+    const h = await fetchJSONraw("data/oi-history.json?b=" + Math.floor(Date.now() / 300_000), {timeout: 20000});
+    const tgt = Date.now() - 86_400_000;
+    let best = null;
+    (h.samples || []).forEach(s => { if (!best || Math.abs(s.t - tgt) < Math.abs(best.t - tgt)) best = s; });
+    rdOiRef = (best && Math.abs(best.t - tgt) < 3 * 3600_000) ? (best.coins || {}) : null;
+  } catch (e) {}
+}
+function renderRadar() {
+  const body = $("rdBody"); if (!body || !rdHl) return;
+  const walls = {};
+  const addBook = coinsObj => {
+    if (!coinsObj) return;
+    Object.entries(coinsObj).forEach(([coin, b]) => {
+      if (!b || !b.bins || !b.step) return;
+      const live = (rdHl[coin] && rdHl[coin].px) || (+liveMark[coin] || 0) || b.px;
+      if (!(live > 0)) return;
+      const w = walls[coin] || (walls[coin] = {below: 0, above: 0, nbUsd: 0, nbPct: null, naUsd: 0, naPct: null});
+      Object.entries(b.bins).forEach(([idx, v]) => {
+        const rel = ((+idx) * b.step - live) / live;
+        if (rel <= -0.0005 && rel >= -0.05) { w.below += v[0] || 0; if ((v[0] || 0) > w.nbUsd) { w.nbUsd = v[0]; w.nbPct = rel * 100; } }
+        else if (rel >= 0.0005 && rel <= 0.05) { w.above += v[1] || 0; if ((v[1] || 0) > w.naUsd) { w.naUsd = v[1]; w.naPct = rel * 100; } }
+      });
+    });
+  };
+  if (rdBook) { addBook(rdBook.coins); addBook(rdBook.dydx && rdBook.dydx.coins); addBook(rdBook.jup && rdBook.jup.coins); addBook(rdBook.lighter && rdBook.lighter.coins); addBook(rdBook.gmx && rdBook.gmx.coins); }
+  const nowS = Date.now() / 1000;
+  const vel = {};
+  const cmn = (cxTotals && cxTotals.coinsMin) || {};
+  Object.entries(cmn).forEach(([coin, buckets]) => {
+    let L = 0, S = 0;
+    Object.entries(buckets).forEach(([ts, v]) => { if (+ts >= nowS - 900) { L += v[0] || 0; S += v[1] || 0; } });
+    if (L || S) vel[coin] = {L, S};
+  });
+  cxEvents.forEach(ev => {
+    if (Date.now() - ev.t >= 900_000 || cmn[ev.coin]) return;
+    const v = vel[ev.coin] || (vel[ev.coin] = {L: 0, S: 0});
+    v[ev.side] += ev.usd;
+  });
+  const rows = [];
+  Object.entries(rdHl).forEach(([coin, h]) => {
+    if (h.oi < 5e6) return; /* micro-caps: too easy to top the board with noise */
+    const w = walls[coin] || {below: 0, above: 0, nbUsd: 0, nbPct: null, naUsd: 0, naPct: null};
+    const v = vel[coin] || vel[coin.replace(/^k/, "")] || {L: 0, S: 0};
+    const wallScore = Math.min(40, 40 * Math.max(w.below, w.above) / (h.oi * 0.08));
+    const fScore = Math.min(20, 20 * Math.abs(h.fund) / 0.0001);
+    const V = v.L + v.S;
+    const vScore = Math.min(25, 25 * V / Math.max(h.oi * 0.001, 200_000));
+    let mScore = 0, dOi = 0;
+    if (rdOiRef && rdOiRef[coin] > 0) { dOi = (h.oi - rdOiRef[coin]) / rdOiRef[coin] * 100; mScore = Math.min(15, Math.abs(dOi) * 1.5); }
+    const down = (w.below + v.L * 30 + (h.fund > 0.00002 ? h.oi * 0.02 : 0)) >= (w.above + v.S * 30 + (h.fund < -0.00002 ? h.oi * 0.02 : 0));
+    rows.push({coin, h, w, v, V, dOi, down, score: Math.round(wallScore + fScore + vScore + mScore),
+      parts: [Math.round(wallScore), Math.round(fScore), Math.round(vScore), Math.round(mScore)]});
+  });
+  rows.sort((a, b) => b.score - a.score);
+  const top = rows.slice(0, 10);
+  if (!top.length) { body.innerHTML = '<div class="empty">Waiting for the position books…</div>'; return; }
+  body.innerHTML = top.map((r, i) => {
+    const wall = r.down ? r.w.below : r.w.above;
+    const big = r.down ? r.w.nbUsd : r.w.naUsd, bigPct = r.down ? r.w.nbPct : r.w.naPct;
+    const why = [];
+    if (wall > 1000) why.push("<b>" + fmtBig(wall) + "</b> in liq walls" + (bigPct != null ? " (biggest " + fmtBig(big) + " at " + bigPct.toFixed(1) + "%)" : ""));
+    why.push("funding <b>" + (r.h.fund * 100).toFixed(4) + "%/h</b>");
+    if (r.V > 0) why.push("liqs 15m <b>" + fmtBig(r.V) + "</b> (L " + fmtBig(r.v.L) + " · S " + fmtBig(r.v.S) + ")");
+    if (r.dOi) why.push("OI 24h <b>" + (r.dOi > 0 ? "+" : "") + r.dOi.toFixed(1) + "%</b>");
+    const col = r.score >= 70 ? "var(--down)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
+    return '<div class="rd-row" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum">' +
+      '<div class="rd-top"><span class="rd-rank">' + (i + 1) + '</span><span class="rd-coin">' + esc(r.coin) + '</span>' +
+      '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '">' + (r.down ? "🔻 DOWN" : "🔺 UP") + "</span>" +
+      '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
+      '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +
+      '<div class="rd-why">' + why.join(" · ") + "</div></div>";
+  }).join("");
+  const sub = $("rdSub");
+  if (sub) sub.textContent = "where the next forced move is most likely · " + rows.length + " coins scored · live";
+}
+rdFetchHl(); rdFetchBook(); rdFetchOiRef();
+setInterval(rdFetchHl, 90_000);
+setInterval(rdFetchBook, 120_000);
+setInterval(rdFetchOiRef, 300_000);
+setTimeout(renderRadar, 2500);
+setInterval(renderRadar, 30_000);
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
