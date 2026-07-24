@@ -600,8 +600,9 @@
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" onerror="this.style.display='none'">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
-          <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button></div>
-        <div class="panel-body" id="pmOuter">
+          <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button>
+          <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
+        <div class="panel-body" id="pmOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
           <div id="pmBody"><div class="empty">Loading markets…</div></div>
         </div>
@@ -2695,30 +2696,73 @@ const pmBlocked = {
   save(o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
 let pmBlockedOpen = false;
-$("pmBody").addEventListener("click", e => {
-  const blk = e.target.closest("[data-blockslug]");
-  if (blk) {
-    e.preventDefault(); e.stopPropagation();
-    const o = pmBlocked.load();
-    o[blk.dataset.blockslug] = {title: blk.dataset.blocktitle || blk.dataset.blockslug, t: Date.now()};
-    pmBlocked.save(o);
-    const rest = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.slug !== blk.dataset.blockslug);
-    watchStore.set("cryptopulse-pm-odds-alerts", rest);
-    const al = blk.closest(".bet-alert"); if (al) al.remove();
-    renderPmRows();
-    return;
+/* overlay list (opens over the panel via the 🚫 head button; closes on the same button or ✕) */
+function pmBlkPaint() {
+  const b = $("pmBlkBtn");
+  if (b) b.textContent = "🚫 " + Object.keys(pmBlocked.load()).length;
+}
+function pmBlkOverlay() {
+  let ov = $("pmBlkOverlay");
+  if (!pmBlockedOpen) { if (ov) ov.remove(); return; }
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "pmBlkOverlay";
+    ov.style.cssText = "position:absolute;inset:0;background:rgba(10,12,16,0.97);z-index:30;overflow:auto;padding:6px 0";
+    $("pmOuter").appendChild(ov);
   }
-  if (e.target.closest("#pmBlkBar")) {
+  const blkO = pmBlocked.load(), entries = Object.entries(blkO);
+  ov.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
+    '<b style="font-size:12px">🚫 Blocked markets (' + entries.length + ')</b>' +
+    '<span style="color:var(--muted);font-size:10px">these never fire alerts again</span>' +
+    '<button class="btn-ghost" id="pmBlkClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>' +
+    (entries.length ? entries.map(([slug, o]) =>
+      '<div class="pm-blk-row"><button class="pm-unblock" data-unblock="' + esc(slug) + '" title="Unblock — this market can be suggested as an alert again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
+    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the 🚫 button on any alert</div>');
+}
+(() => {
+  const b = $("pmBlkBtn");
+  if (!b) return;
+  ["mousedown", "pointerdown"].forEach(ev => b.addEventListener(ev, e => e.stopPropagation()));
+  b.addEventListener("click", e => {
     e.preventDefault(); e.stopPropagation();
-    pmBlockedOpen = !pmBlockedOpen; renderPmRows(); return;
+    pmBlockedOpen = !pmBlockedOpen;
+    pmBlkOverlay();
+  });
+})();
+$("pmOuter").addEventListener("click", e => {
+  if (e.target.closest("#pmBlkClose")) {
+    e.preventDefault(); e.stopPropagation();
+    pmBlockedOpen = false; pmBlkOverlay(); return;
   }
   const ub = e.target.closest("[data-unblock]");
   if (ub) {
     e.preventDefault(); e.stopPropagation();
     const o = pmBlocked.load(); delete o[ub.dataset.unblock]; pmBlocked.save(o);
-    renderPmRows(); return;
+    pmBlkPaint(); pmBlkOverlay(); return;
   }
 });
+$("pmBody").addEventListener("click", e => {
+  const blk = e.target.closest("[data-blockslug]");
+  if (!blk) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  const o = pmBlocked.load();
+  o[blk.dataset.blockslug] = {title: blk.dataset.blocktitle || blk.dataset.blockslug, t: Date.now()};
+  pmBlocked.save(o);
+  const rest = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.slug !== blk.dataset.blockslug);
+  watchStore.set("cryptopulse-pm-odds-alerts", rest);
+  const al = blk.closest(".bet-alert"); if (al) al.remove();
+  /* purge the CACHED alert HTML too — otherwise the card resurrects on the next re-render */
+  pmBlkStrip(blk.dataset.blockslug, blk.dataset.blocktitle);
+  pmBlkPaint();
+  renderPmRows();
+});
+function pmBlkStrip(slug, title) {
+  const gone = h => h.includes('data-blockslug="' + slug + '"');
+  const split = h => h ? h.split('<a class="bet-alert').map((p, i) => i ? '<a class="bet-alert' + p : p) : [""];
+  const rejoin = parts => parts[0] + parts.slice(1).filter(p => !gone(p)).join("");
+  pmAlertsHTML = rejoin(split(pmAlertsHTML));
+  pmOddsAlertsHTML = rejoin(split(pmOddsAlertsHTML));
+}
 $("pmBody").addEventListener("click", e => {
   const x = e.target.closest(".bet-x");
   if (!x) return;
@@ -2853,17 +2897,12 @@ function renderPmRows() {
   const q = ($("pmSearch").value || "").trim();
   const Q = q.toUpperCase();
   const list = Q ? pmCards.filter(c => c.t.toUpperCase().includes(Q)) : pmCards.slice(0, 10);
-  const blkO = pmBlocked.load(), blkN = Object.keys(blkO).length;
-  const blkBar = '<div class="pm-blk-bar" id="pmBlkBar" title="Markets you blocked from alerts — click to manage">🚫 blocked markets (' + blkN + ") " + (pmBlockedOpen ? "▾" : "▸") + "</div>" +
-    (pmBlockedOpen ? (blkN ? Object.entries(blkO).map(([slug, o]) =>
-        '<div class="pm-blk-row"><button class="pm-unblock" data-unblock="' + esc(slug) + '" title="Unblock — this market can be suggested as an alert again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
-      : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use 🚫 on any alert</div>') : "");
   body.innerHTML = pmAlertsHTML + pmOddsAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
       (pmCards.length && !Q ? "" : "")) +
     (Q.length >= 3 ? '<div id="pmRemote"><div class="empty">Searching all of Polymarket…</div></div>' :
-      (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : "")) +
-    blkBar;
+      (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
+  pmBlkPaint();
   $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
 }
 let kalshiCache = {t: 0, data: null};
@@ -3507,6 +3546,13 @@ async function fetchLmBotBook() {
     const j = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 120000), {timeout: 20000});
     if (j && j.coins) { lmBotBook = j; renderLiqmap(); }
   } catch (e) { /* not published yet — browser 500-wallet book covers it */ }
+  /* Lighter now has its own dedicated scanner pipeline (own file) — graft whichever copy is fresher */
+  try {
+    const lg = await fetchJSONraw("data/liq-book-lighter.json?b=" + Math.floor(Date.now() / 120000), {timeout: 20000});
+    if (lg && lg.lighter && (!lmBotBook.lighter || (lg.lighter.t || 0) >= (lmBotBook.lighter.t || 0))) {
+      lmBotBook.lighter = lg.lighter; renderLiqmap();
+    }
+  } catch (e) {}
 }
 /* source selector: aggregate + one button per DEX (more perp DEXes plug in here one by one) */
 const LM_SOURCES = [
@@ -3534,6 +3580,10 @@ async function lmForceReload() {
   try {
     const j = await fetchJSONraw("data/liq-book.json?b=" + Date.now(), {timeout: 20000});
     if (j && j.coins) lmBotBook = j;
+  } catch (e) {}
+  try {
+    const lg = await fetchJSONraw("data/liq-book-lighter.json?b=" + Date.now(), {timeout: 20000});
+    if (lg && lg.lighter && (!lmBotBook.lighter || (lg.lighter.t || 0) >= (lmBotBook.lighter.t || 0))) lmBotBook.lighter = lg.lighter;
   } catch (e) {}
   try {
     const mids = await fetchHL({type: "allMids"});
@@ -4287,6 +4337,10 @@ async function rdFetchHl() {
 }
 async function rdFetchBook() {
   try { rdBook = await fetchJSONraw("data/liq-book.json?b=" + Math.floor(Date.now() / 120_000), {timeout: 20000}); } catch (e) {}
+  try {
+    const lg = await fetchJSONraw("data/liq-book-lighter.json?b=" + Math.floor(Date.now() / 120_000), {timeout: 20000});
+    if (rdBook && lg && lg.lighter && (!rdBook.lighter || (lg.lighter.t || 0) >= (rdBook.lighter.t || 0))) rdBook.lighter = lg.lighter;
+  } catch (e) {}
 }
 async function rdFetchOiRef() {
   try {
