@@ -3,7 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CryptoPulse — Live Market Feed</title>
+<title>Cryptomacho — Live Market Feed</title>
+<meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
+<meta name="theme-color" content="#0b0e13">
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'">
+<link rel="canonical" href="https://cryptomacho.io/">
+<meta property="og:title" content="Cryptomacho — Live Market Feed">
+<meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cryptomacho.io/">
+<meta property="og:image" content="https://cryptomacho.io/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Cryptomacho — Live Market Feed">
+<meta name="twitter:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
+<meta name="twitter:image" content="https://cryptomacho.io/icon-512.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0e13'/%3E%3Cpath d='M14 48V18l10 0 8 14 8-14 10 0v30h-8V31l-8 13h-4l-8-13v17z' fill='%2312a33a'/%3E%3Crect x='47' y='10' width='4' height='10' rx='2' fill='%23d03b3b'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800&display=swap" rel="stylesheet">
@@ -601,7 +617,7 @@
 <body>
 <header>
   <div class="logo">◆</div>
-  <h1>CryptoPulse</h1>
+  <h1>Cryptomacho</h1>
   <div class="header-stats" id="globalStats"></div>
   <div class="spacer"></div>
   <span class="hint">drag panels by their header · drag edges to resize</span>
@@ -3512,8 +3528,8 @@ function fireCustomAlert(rule, sig, msg) {
   const rowEl = document.querySelector('.ca-rule[data-rid="' + rule.id + '"]');
   if (rowEl) { rowEl.classList.add("hot"); setTimeout(() => rowEl.classList.remove("hot"), 20_000); }
   if (!alertMuted) { ensureAudio(); playBeep(); }
-  caBrowserNotify("🔔 CryptoPulse", msg);
-  sendTelegram("🔔 <b>CryptoPulse alert</b>\n" + msg);
+  caBrowserNotify("🔔 Cryptomacho", msg);
+  sendTelegram("🔔 <b>Cryptomacho alert</b>\n" + msg);
 }
 function evalCustomRules() {
   if (!CA.rules.length) return;
@@ -3622,7 +3638,7 @@ function initCustomAlerts() {
     const note = $("caTgNote");
     if (!CA.tg.token || !CA.tg.chat) { note.textContent = "Enter both the bot token and chat id."; return; }
     note.textContent = "Sending test message…";
-    const res = await sendTelegram("✅ CryptoPulse connected. You'll get your custom alerts here while the dashboard is open.");
+    const res = await sendTelegram("✅ Cryptomacho connected. You'll get your custom alerts here while the dashboard is open.");
     note.textContent = res.ok ? "✅ Test sent — check Telegram. Custom alerts will arrive here." :
       ("Couldn't send: " + (res.reason || "check the token/chat id") + ".");
   });
