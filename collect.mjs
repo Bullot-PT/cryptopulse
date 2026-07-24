@@ -256,11 +256,14 @@ try {
   const withPrice = out.filter(e => (e.m || []).some(m => m.y != null)).length;
   const umbrella = out.filter(e => titleByEt[e.tk]).length;
   /* /events failing → zero umbrella titles → the mirror would be junk. Keep the previous good file. */
-  if (out.length && umbrella > 0) {
+  /* /events has been flaky — accept a mirror without umbrella titles as long as the per-market
+     titles are real (junk leg-joins already filtered) and a healthy share carries prices */
+  if (out.length >= 30 && (umbrella > 0 || withPrice >= Math.min(50, Math.floor(out.length * 0.3)))) {
     fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out }));
     console.log('kalshi events:', out.length, 'withPrice:', withPrice, 'umbrella:', umbrella, 'eventTitles:', Object.keys(titleByEt).length);
+    console.log('kalshi sample titles:', out.slice(0, 3).map(e => e.t).join(' | '));
   } else {
-    console.log('kalshi mirror NOT written (events:', out.length, ', umbrella titles:', umbrella, ') — keeping the previous good file');
+    console.log('kalshi mirror NOT written (events:', out.length, ', umbrella:', umbrella, ', withPrice:', withPrice, ') — keeping the previous file');
   }
 } catch (e) { console.log('kalshi failed', e.message); }
 
