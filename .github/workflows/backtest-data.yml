@@ -1,0 +1,22 @@
+name: Backtest data (one-off, 3y daily)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch 3y daily history
+        run: node backtest-fetch.mjs
+        env:
+          COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
+      - name: Commit
+        run: |
+          git config user.name "oi-collector-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/backtest-3y.json
+          git commit -m "backtest 3y data [skip ci]" || echo "nothing to commit"
+          git pull --rebase origin main || true
+          git push
