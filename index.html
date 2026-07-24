@@ -4117,6 +4117,7 @@ async function lmForceReload() {
   renderLiqmap();
 }
 async function fetchLiqmapCoin(coin) {
+  if (coin.startsWith("xyz:")) return; /* RWA markets: walls come from the HL bot book, not DefiLlama */
   const key = LIQMAP_KEY[coin] || coin.toLowerCase();
   try {
     const d = await fetchJSONraw("https://defillama-datasets.llama.fi/liqs/" + encodeURIComponent(key) + "/latest.json", {timeout: 40000});
@@ -4136,7 +4137,33 @@ async function fetchLiqmapCoin(coin) {
   } catch (e) { lmData[coin] = {none: true, t: Date.now()}; }
   renderLiqmap();
 }
+/* xyz builder-dex (RWA/stocks) live marks — no WebSocket for builder dexs, so we poll allMids
+   every 10s while an xyz coin is on the map. Also doubles as the directory for name resolution. */
+const xyzMidsCache = {t: 0, mids: {}};
+async function fetchXyzMids(force) {
+  if (!force && Date.now() - xyzMidsCache.t < 10_000) return;
+  xyzMidsCache.t = Date.now();
+  try {
+    const m = await fetchHL({type: "allMids", dex: "xyz"});
+    const out = {};
+    Object.entries(m || {}).forEach(([k, v]) => { out[k.startsWith("xyz:") ? k : "xyz:" + k] = parseFloat(v); });
+    if (Object.keys(out).length) xyzMidsCache.mids = out;
+  } catch (e) {}
+}
+setTimeout(() => fetchXyzMids(true).then(() => {
+  /* heal previously-typed names ("XYZGOLD") into canonical keys ("xyz:GOLD") now that the directory is loaded */
+  let changed = false;
+  lmCoins = lmCoins.map(c => { const r = lmResolveCoin(c); if (r !== c) changed = true; return r; });
+  if (changed) {
+    lmCur = lmResolveCoin(lmCur);
+    lmSave(); renderLiqmap();
+  }
+}), 2500); /* boot: also feeds the add-token name resolver */
+setInterval(() => {
+  if ((lmCur || "").startsWith("xyz:") || lmCoins.some(c => c.startsWith("xyz:"))) fetchXyzMids().then(() => renderLiqmap());
+}, 10_000);
 function lmLivePx(coin) {
+  if (coin.startsWith("xyz:") && xyzMidsCache.mids[coin] > 0) return xyzMidsCache.mids[coin];
   if (liveMark[coin]) return liveMark[coin];
   if (liveMark["k" + coin]) return liveMark["k" + coin];
   const pc = priceCoins.find(c => (c.symbol || "").toUpperCase() === coin);
@@ -4150,7 +4177,7 @@ let lmOb = {coin: null, t: 0, bids: [], asks: []}, lmObBusy = false;
 async function fetchLmOb() {
   const coin = lmCur;
   try {
-    const j = await fetchHL({type: "l2Book", coin});
+    const j = await fetchHL(coin.startsWith("xyz:") ? {type: "l2Book", coin, dex: "xyz"} : {type: "l2Book", coin});
     const lv = (j && j.levels) || [];
     lmOb = {coin, t: Date.now(),
       bids: (lv[0] || []).map(x => ({px: parseFloat(x.px), usd: parseFloat(x.px) * parseFloat(x.sz)})),
@@ -4395,10 +4422,22 @@ $("lmBody").addEventListener("wheel", e => {
   const now = Date.now();
   if (now - lmSaveT > 700) { lmSaveT = now; try { localStorage.setItem("cryptopulse-liqmap-range", String(lmRange)); } catch (err) {} }
 }, {passive: false});
+function lmResolveCoin(c) {
+  /* map typed names to xyz RWA markets: "XYZGOLD", "GOLD" or "xyz:GOLD" all resolve to "xyz:GOLD"
+     (only when the name is NOT already a crypto coin we know — BTC stays BTC) */
+  const known = new Set(Object.keys(liveMark));
+  if (known.has(c)) return c;
+  const norm = x => x.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const dir = new Set(Object.keys(xyzMidsCache.mids).concat(Object.keys((lmBotBook.coins) || {}).filter(k => k.startsWith("xyz:"))));
+  for (const k of dir) { const nk = norm(k); if (nk === c || nk === "XYZ" + c) return k; }
+  return c;
+}
 function lmAddCoin() {
   const el = $("lmAdd");
-  const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!c) return;
+  c = lmResolveCoin(c);
+  if (c.startsWith("xyz:")) fetchXyzMids(true).then(() => renderLiqmap());
   if (!lmCoins.includes(c)) { lmCoins.push(c); lmCur = c; lmSave(); renderLiqmap(); fetchLiqmapCoin(c); }
   else { lmCur = c; lmSave(); renderLiqmap(); }
   el.value = "";
