@@ -2170,10 +2170,21 @@ async function loadWhales() {
       if (!seen.has(r.ethAddress)) { seen.add(r.ethAddress); candidates.push(r.ethAddress); }
     });
     const mids = await fetchHL({type: "allMids"});
+    try { /* xyz builder-dex (RWA/stocks) marks — merged with a prefix guard either way the API keys them */
+      const xm = await fetchHL({type: "allMids", dex: "xyz"});
+      Object.entries(xm || {}).forEach(([k, v]) => { mids[k] = v; if (!k.startsWith("xyz:")) mids["xyz:" + k] = v; });
+    } catch (e) {}
     const found = [];
     for (let i = 0; i < candidates.length; i += 10) {
       const chunk = await Promise.allSettled(candidates.slice(i, i + 10).map(a =>
-        fetchHL({type: "clearinghouseState", user: a}).then(s => ({addr: a, s}))
+        Promise.all([
+          fetchHL({type: "clearinghouseState", user: a}),
+          fetchHL({type: "clearinghouseState", user: a, dex: "xyz"}).catch(() => null)
+        ]).then(([s, sx]) => {
+          if (sx && Array.isArray(sx.assetPositions) && sx.assetPositions.length)
+            s = Object.assign({}, s, {assetPositions: (s.assetPositions || []).concat(sx.assetPositions)});
+          return {addr: a, s};
+        })
       ));
       chunk.forEach(c => {
         if (c.status !== "fulfilled") return;
@@ -2249,7 +2260,13 @@ async function loadLongShort() {
     const agg = {long: 0, short: 0, coins: {}, wallets: 0};
     const book = {}; /* coin -> [[liqPx, valueUsd, +1 long/-1 short], ...] for the Liq Heatmap */
     for (let i = 0; i < top.length; i += 20) {
-      const chunk = await Promise.allSettled(top.slice(i, i + 20).map(a => fetchHL({type: "clearinghouseState", user: a})));
+      const chunk = await Promise.allSettled(top.slice(i, i + 20).map(a =>
+        Promise.all([
+          fetchHL({type: "clearinghouseState", user: a}),
+          fetchHL({type: "clearinghouseState", user: a, dex: "xyz"}).catch(() => null)
+        ]).then(([s, sx]) => (sx && Array.isArray(sx.assetPositions) && sx.assetPositions.length
+          ? Object.assign({}, s, {assetPositions: (s.assetPositions || []).concat(sx.assetPositions)}) : s))
+      ));
       chunk.forEach(c => {
         if (c.status !== "fulfilled") return;
         agg.wallets++;
@@ -2266,10 +2283,10 @@ async function loadLongShort() {
           if (lq > 0) (book[p.coin] = book[p.coin] || []).push([lq, v, side === "long" ? 1 : -1]);
         });
       });
-      await new Promise(r => setTimeout(r, 250)); /* stay under HL rate limits */
+      await new Promise(r => setTimeout(r, 400)); /* stay under HL rate limits (2 dexes per wallet now) */
     }
     renderLongShort(agg, totalOI);
-    { const el = $("lsHeadSub"); if (el) el.textContent = "top 500 wallets · on-chain" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : ""); }
+    { const el = $("lsHeadSub"); if (el) el.textContent = "top 500 wallets · on-chain · incl. xyz RWA" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : ""); }
     /* expose per-coin whale net + reference mark for the Whales-vs-Crowd panel (live-scaled each second) */
     lsSnapshot = {t: Date.now(), coins: {}};
     Object.entries(agg.coins).forEach(([coin, c]) => {

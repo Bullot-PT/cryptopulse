@@ -283,6 +283,10 @@ try {
     } catch (e2) {}
   }
   MIDS = await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
+  try { // xyz builder-dex (RWA/stocks) marks
+    const MX = await post('https://api.hyperliquid.xyz/info', { type: 'allMids', dex: 'xyz' });
+    Object.entries(MX || {}).forEach(([k, v]) => { MIDS[k] = v; if (!k.startsWith('xyz:')) MIDS['xyz:' + k] = v; });
+  } catch (e) {}
   const wallets = LB.filter(r => (parseFloat(r.accountValue) || 0) >= 25000)
     .sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 2500);
   // publish the wallet list itself (top 700) — the browser falls back to it when stats-data hangs client-side
@@ -295,8 +299,14 @@ try {
   const book = {}; // coin -> {px, step, bins:{binIdx:[sellFuelUsd, buyFuelUsd]}}
   let scanned = 0, positions = 0;
   for (let i = 0; i < wallets.length; i += 15) {
-    const chunk = await Promise.allSettled(wallets.slice(i, i + 15).map(r =>
-      post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress })));
+    const chunk = await Promise.allSettled(wallets.slice(i, i + 15).map((r, ci) =>
+      (i + ci < 1200
+        ? Promise.all([
+            post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }),
+            post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress, dex: 'xyz' }).catch(() => null)
+          ]).then(([s, sx]) => (sx && (sx.assetPositions || []).length
+            ? { ...s, assetPositions: (s.assetPositions || []).concat(sx.assetPositions) } : s))
+        : post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }))));
     chunk.forEach(c => {
       if (c.status !== 'fulfilled' || !c.value) return;
       scanned++;
@@ -537,7 +547,11 @@ try {
   const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
   for (let i = 0; i < top60.length; i += 12) {
     const chunk = await Promise.allSettled(top60.slice(i, i + 12).map(r =>
-      post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }).then(s => ({ addr: r.ethAddress, s }))
+      Promise.all([
+        post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }),
+        post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress, dex: 'xyz' }).catch(() => null)
+      ]).then(([s, sx]) => ({ addr: r.ethAddress, s: (sx && (sx.assetPositions || []).length
+        ? { ...s, assetPositions: (s.assetPositions || []).concat(sx.assetPositions) } : s) }))
     ));
     chunk.forEach(c => {
       if (c.status !== 'fulfilled') return;
