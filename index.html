@@ -589,6 +589,8 @@
   .ac-x { color: var(--ink-2); }
   /* Funding & Basis */
   .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .fd-grip { cursor: grab; color: var(--muted); margin-right: 5px; user-select: none; font-size: 10px; }
+  tr[data-fdc]:hover .fd-grip { color: var(--ink-2); }
   .fd-table th { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px; text-align: right; position: sticky; top: 0; background: var(--surface-2, #11151b); cursor: help; z-index: 2; }
   .fd-table th:first-child { text-align: left; padding-left: 14px; }
   .fd-coin { font-weight: 700; padding: 4px 6px 4px 14px; }
@@ -5224,7 +5226,20 @@ const fdCustom = {
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a.slice(0, 20))); } catch (e) {} }
 };
-const fdCoins = () => FD_COINS.concat(fdCustom.load().filter(c => !FD_COINS.includes(c)));
+const fdOrder = {
+  key: "cryptopulse-fd-order",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
+};
+const fdCoins = () => {
+  const base = FD_COINS.concat(fdCustom.load().filter(c => !FD_COINS.includes(c)));
+  const ord = fdOrder.load();
+  if (!ord.length) return base;
+  const set = new Set(base);
+  const ordered = ord.filter(c => set.has(c));
+  base.forEach(c => { if (!ordered.includes(c)) ordered.push(c); }); /* new coins append at the end */
+  return ordered;
+};
 let fdData = null;
 async function loadFunding() {
   try {
@@ -5286,7 +5301,8 @@ function renderFunding() {
     const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
       : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
     const custom = !FD_COINS.includes(c);
-    return '<tr><td class="fd-coin">' + c + (custom ? ' <button class="bet-x" data-fdrm="' + c + '" title="Remove this token from the table" style="padding:0 4px;font-size:10px">✕</button>' : "") + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
+    return '<tr draggable="true" data-fdc="' + c + '" title="Drag to reorder the table — the order is saved">' +
+      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + (custom ? ' <button class="bet-x" data-fdrm="' + c + '" title="Remove this token from the table" style="padding:0 4px;font-size:10px">✕</button>' : "") + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
   }).join("");
   body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
 }
@@ -5310,6 +5326,34 @@ setInterval(loadFunding, 120_000);
     fdCustom.save(fdCustom.load().filter(c => c !== x.dataset.fdrm));
     renderFunding(); loadFunding();
   });
+  /* row drag-to-reorder — persists in cryptopulse-fd-order */
+  let fdDrag = null;
+  if (outer) {
+    outer.addEventListener("dragstart", e => {
+      const tr = e.target.closest("tr[data-fdc]"); if (!tr) return;
+      fdDrag = tr.dataset.fdc;
+      try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", fdDrag); } catch (er) {}
+      tr.style.opacity = "0.45";
+    });
+    outer.addEventListener("dragover", e => {
+      if (!fdDrag) return;
+      const tr = e.target.closest("tr[data-fdc]"); if (!tr || tr.dataset.fdc === fdDrag) return;
+      e.preventDefault();
+      const dragEl = outer.querySelector('tr[data-fdc="' + fdDrag + '"]');
+      if (!dragEl || dragEl === tr) return;
+      const rows = [...tr.parentNode.children];
+      const before = rows.indexOf(dragEl) > rows.indexOf(tr);
+      tr.parentNode.insertBefore(dragEl, before ? tr : tr.nextSibling);
+    });
+    outer.addEventListener("drop", e => { if (fdDrag) e.preventDefault(); });
+    outer.addEventListener("dragend", () => {
+      if (!fdDrag) return;
+      const dragEl = outer.querySelector('tr[data-fdc="' + fdDrag + '"]');
+      if (dragEl) dragEl.style.opacity = "";
+      fdDrag = null;
+      fdOrder.save([...outer.querySelectorAll("tr[data-fdc]")].map(tr => tr.dataset.fdc));
+    });
+  }
 })();
 
 /* ---------------- schedule ---------------- */
