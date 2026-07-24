@@ -549,6 +549,8 @@
   .rd-bang { color: #fff; background: #e5484d; font-weight: 900; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 10px; animation: rdA3 0.45s linear infinite; }
   .rd-bang.up { background: #1d9e55; animation: rdA3up 0.45s linear infinite; }
   @keyframes rdA3up { 0%, 100% { background: rgba(29,158,85,0.55); } 50% { background: rgba(18,199,94,0.95); } }
+  .rd-burst { color: #111; background: #f5a623; font-weight: 900; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 10px; cursor: help; animation: rdBu 0.85s ease-in-out infinite; }
+  @keyframes rdBu { 0%, 100% { background: #d98e12; } 50% { background: #ffc14d; } }
   /* polymarket blocked-markets manager */
   .pm-blk-bar { cursor: pointer; color: var(--muted); font-size: 10.5px; padding: 6px 14px; border-top: 1px solid var(--grid); user-select: none; }
   .pm-blk-bar:hover { color: var(--ink-2); }
@@ -752,7 +754,7 @@
     </div>
     <div class="grid-stack-item" gs-id="radar">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
+        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
           <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
           <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:2px 8px">🔔</button></div>
         <div class="panel-body" id="rdOuter">
@@ -4567,11 +4569,13 @@ function renderRadar() {
      lvl 1 ≥50 · lvl 2 ≥61 · lvl 3 ≥75 OR V-component ≥15 (backtest: V alone caught 43% of
      cascades — it means the cascade is CONFIRMED even if the total score lags) */
   rows.forEach(r => {
-    r.lvl = r.score >= 75 ? 3 : r.score >= 61 ? 2 : r.score >= 50 ? 1 : 0; /* CASCADE only at 75 — user's call (the V≥15 shortcut fired too easily in real bursts) */
+    r.lvl = r.score >= 75 ? 3 : r.score >= 61 ? 2 : r.score >= 50 ? 1 : 0; /* CASCADE only at 75 — user's call */
+    r.burst = r.parts[2] >= 15; /* ⚡ BURST: heavy forced flow RIGHT NOW (V alone) — warns at klaxon level, never cries cascade */
+    r.eff = Math.max(r.lvl, r.burst ? 2 : 0);
     const st = rdAlState[r.coin] || (rdAlState[r.coin] = {lvl: 0, muted: 0, lastT: {}});
-    if (r.lvl > st.lvl && r.lvl > st.muted) rdSound(r.lvl, r.coin);
-    if (r.lvl < st.muted) st.muted = 0; /* dropped below the silenced level → re-arm the sound */
-    st.lvl = r.lvl;
+    if (r.eff > st.lvl && r.eff > st.muted) rdSound(r.eff, r.coin);
+    if (r.eff < st.muted) st.muted = 0; /* dropped below the silenced level → re-arm the sound */
+    st.lvl = r.eff;
   });
   rows.forEach((r, idx) => { r.rank = idx + 1; });
   const q = (rdQuery || "").trim().toUpperCase();
@@ -4592,10 +4596,11 @@ function renderRadar() {
     if (r.V > 0) why.push("liqs 15m <b>" + fmtBig(r.V) + "</b> (L " + fmtBig(r.v.L) + " · S " + fmtBig(r.v.S) + ")");
     if (r.dOi) why.push("OI 24h <b>" + (r.dOi > 0 ? "+" : "") + r.dOi.toFixed(1) + "%</b>");
     const col = r.lvl >= 2 ? "var(--down)" : r.lvl >= 1 ? "var(--warn)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
-    return '<div class="rd-row' + (r.lvl ? " al" + r.lvl : "") + '" data-coin="' + esc(r.coin) + '" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum' + (r.lvl ? " — click to silence the sound (keeps flashing)" : "") + '">' +
+    return '<div class="rd-row' + (r.eff ? " al" + r.eff : "") + '" data-coin="' + esc(r.coin) + '" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum' + (r.lvl ? " — click to silence the sound (keeps flashing)" : "") + '">' +
       '<div class="rd-top"><span class="rd-rank">' + r.rank + '</span><a class="rd-coin" href="https://www.tradingview.com/chart/?symbol=BINANCE%3A' + esc(r.coin.replace(/^k/, "1000")) + 'USDT.P" target="_blank" rel="noopener" title="Open the ' + esc(r.coin) + ' chart on TradingView">' + esc(r.coin) + "</a>" +
       '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '" title="' + (r.down ? "SHORT setup — the dominant fuel points DOWN (longs at risk of liquidation)" : "LONG setup — the dominant fuel points UP (shorts at risk of liquidation)") + '">' + (r.down ? "🔻 SHORT" : "🔺 LONG") + "</span>" +
-      (r.lvl >= 3 ? '<span class="rd-bang' + (r.down ? "" : " up") + '">!! ' + (r.down ? "SHORT" : "LONG") + " CASCADE</span>" : "") +
+      (r.lvl >= 3 ? '<span class="rd-bang' + (r.down ? "" : " up") + '">!! ' + (r.down ? "SHORT" : "LONG") + " CASCADE</span>"
+        : r.burst ? '<span class="rd-burst" title="Heavy forced flow happening RIGHT NOW — liquidation velocity spiked. Not (yet) a full cascade: the total score is below 75.">⚡ BURST</span>' : "") +
       '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
       '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +
       '<div class="rd-why">' + why.join(" · ") + "</div></div>";

@@ -613,13 +613,15 @@ try {
   const rdSt = st.radar || {};
   const rdNew = {};
   rowsR.forEach(r => {
-    const lvl = r.score >= 75 ? 3 : r.score >= 61 ? 2 : 0; /* CASCADE only at 75 (user's call) */
+    const burst = r.vv >= 15; /* heavy forced flow right now — warns, never cries cascade */
+    const lvl = r.score >= 75 ? 3 : (r.score >= 61 || burst) ? 2 : 0;
     if (lvl < 2) return;
     const prev = rdSt[r.coin] || { lvl: 0, t: 0 };
     const fire = lvl > prev.lvl || now - prev.t > 6 * 3600000;
     rdNew[r.coin] = { lvl, t: fire ? now : prev.t };
     if (fire && !firstRun) {
-      const head = lvl >= 3 ? '\ud83d\udea8 *' + (r.down ? 'SHORT' : 'LONG') + ' CASCADE \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*';
+      const head = lvl >= 3 ? '\ud83d\udea8 *' + (r.down ? 'SHORT' : 'LONG') + ' CASCADE \u2014 ' + r.coin + ' ' + r.score + '/100*'
+        : (burst && r.score < 61 ? '\u26a1 *LIQ BURST \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*');
       queue.push(head + ' ' + (r.down ? '\ud83d\udd3b SHORT' : '\ud83d\udd3a LONG') +
         '\n' + fmtBig(r.wall) + ' in liq walls \u00b15%' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
         '\nliqs 15m ' + fmtBig(r.liq15) + ' \u00b7 funding ' + (r.fund * 100).toFixed(4) + '%/h \u00b7 OI 24h ' + (r.dOi > 0 ? '+' : '') + r.dOi.toFixed(1) + '%' +
