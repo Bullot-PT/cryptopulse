@@ -712,7 +712,7 @@
     </div>
     <div class="grid-stack-item" gs-id="longshort">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚖️ Long vs Short <span class="sub">top 500 wallets · on-chain</span></div>
+        <div class="panel-head">⚖️ Long vs Short <span class="sub" id="lsHeadSub">top 500 wallets · on-chain</span></div>
         <div class="panel-body" id="lsBody"><div class="empty">Scanning positioning…</div></div>
       </div></div>
     </div>
@@ -1890,12 +1890,27 @@ const WHALE_MIN = 5_000_000;
 let hlLb = {rows: null, at: 0, byAddr: {}};
 async function getLeaderboard() {
   if (hlLb.rows && (Date.now() - hlLb.at) < 1_800_000) return hlLb.rows;
-  const j = await fetchJSON("https://stats-data.hyperliquid.xyz/Mainnet/leaderboard", {timeout: 45000});
-  const rows = j.leaderboardRows || [];
-  const byAddr = {};
-  rows.forEach(r => { if (r.ethAddress) byAddr[r.ethAddress.toLowerCase()] = r; });
-  hlLb = {rows, at: Date.now(), byAddr};
-  return rows;
+  try {
+    const j = await fetchJSON("https://stats-data.hyperliquid.xyz/Mainnet/leaderboard", {timeout: 45000});
+    const rows = j.leaderboardRows || [];
+    if (!rows.length) throw new Error("empty leaderboard");
+    const byAddr = {};
+    rows.forEach(r => { if (r.ethAddress) byAddr[r.ethAddress.toLowerCase()] = r; });
+    hlLb = {rows, at: Date.now(), byAddr, src: "live"};
+    return rows;
+  } catch (e) {
+    /* stats-data hangs/goes down at times — fall back to the bot's published wallet list
+       (data/hl-wallets.json, refreshed every collector run). Positions still come LIVE
+       per-wallet from api.hyperliquid.xyz — only the wallet DIRECTORY is from the bot. */
+    const f = await fetchJSONraw("data/hl-wallets.json?b=" + Math.floor(Date.now() / 300000), {timeout: 15000});
+    const rows = (f.rows || []).map(r => ({ethAddress: r[0], accountValue: String(r[1])}));
+    if (!rows.length) throw e;
+    const byAddr = {};
+    rows.forEach(r => { byAddr[r.ethAddress.toLowerCase()] = r; });
+    /* backdate the cache so the live endpoint is retried in ~5 min */
+    hlLb = {rows, at: Date.now() - 1_500_000, byAddr, src: "bot", botT: f.t || 0};
+    return rows;
+  }
 }
 function whaleDist(szi, liq, mark) {
   if (!liq || !mark || !isFinite(liq) || !isFinite(mark)) return null;
@@ -2153,7 +2168,7 @@ async function loadWhales() {
       if (fa && fb) return a.dist - b.dist;
       return b.value - a.value;
     });
-    $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned";
+    $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
     if (!found.length) {
       body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
       renderWatchlist(); return;
@@ -2204,6 +2219,7 @@ async function loadLongShort() {
       await new Promise(r => setTimeout(r, 250)); /* stay under HL rate limits */
     }
     renderLongShort(agg, totalOI);
+    { const el = $("lsHeadSub"); if (el) el.textContent = "top 500 wallets · on-chain" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : ""); }
     /* expose per-coin whale net + reference mark for the Whales-vs-Crowd panel (live-scaled each second) */
     lsSnapshot = {t: Date.now(), coins: {}};
     Object.entries(agg.coins).forEach(([coin, c]) => {

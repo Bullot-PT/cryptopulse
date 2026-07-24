@@ -255,12 +255,29 @@ try {
 
 // ---------------- Full-leaderboard liquidation book (feeds the DEX Liq Heatmap) ----------------
 // Scans up to 2500 wallets (account >= $25k) — every position >= $10k, bucketed by liq price.
-let LB = [], MIDS = {};
+let LB = [], MIDS = {}, lbFresh = false;
 try {
-  LB = (await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || [];
+  // stats-data can hang for minutes — hard 90s timeout, then fall back to our own cached wallet list
+  try {
+    LB = (await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', { signal: AbortSignal.timeout(90000) })).leaderboardRows || [];
+    lbFresh = LB.length > 0;
+  } catch (e) {
+    console.log('leaderboard fetch failed (' + e.message + ') — using cached data/hl-wallets.json');
+    try {
+      LB = JSON.parse(fs.readFileSync('data/hl-wallets.json', 'utf8')).rows
+        .map(r => ({ ethAddress: r[0], accountValue: String(r[1]) }));
+    } catch (e2) {}
+  }
   MIDS = await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
   const wallets = LB.filter(r => (parseFloat(r.accountValue) || 0) >= 25000)
     .sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 2500);
+  // publish the wallet list itself (top 700) — the browser falls back to it when stats-data hangs client-side
+  if (lbFresh) {
+    const wl = wallets.slice(0, 700).map(r => [r.ethAddress, Math.round(parseFloat(r.accountValue) || 0)]);
+    fs.mkdirSync('data', { recursive: true });
+    fs.writeFileSync('data/hl-wallets.json', JSON.stringify({ t: Date.now(), rows: wl }));
+    console.log('hl-wallets.json:', wl.length, 'wallets');
+  }
   const book = {}; // coin -> {px, step, bins:{binIdx:[sellFuelUsd, buyFuelUsd]}}
   let scanned = 0, positions = 0;
   for (let i = 0; i < wallets.length; i += 15) {
@@ -501,7 +518,7 @@ function consider(kind, key, msg) {
 
 // --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
 try {
-  const lb = LB.length ? LB : ((await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')).leaderboardRows || []);
+  const lb = LB.length ? LB : ((await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', { signal: AbortSignal.timeout(90000) })).leaderboardRows || []);
   const mids = Object.keys(MIDS).length ? MIDS : await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
   const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
   for (let i = 0; i < top60.length; i += 12) {
