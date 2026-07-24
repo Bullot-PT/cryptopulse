@@ -524,6 +524,7 @@
     background: rgba(255,255,255,0.08); color: var(--muted); border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity .15s; }
   .grid-stack-item:hover .panel-x { opacity: 1; }
+  .layout-locked .panel-x { display: none; }
   .panel-x:hover { background: rgba(208,59,59,0.3); color: #fff; }
   #indMenu { position: fixed; top: 44px; right: 14px; z-index: 1000; background: var(--surface-2, #11151b);
     border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.55);
@@ -573,6 +574,7 @@
   <div class="header-stats" id="globalStats"></div>
   <div class="spacer"></div>
   <span class="hint">drag panels by their header · drag edges to resize</span>
+  <button class="btn-ghost" id="lockBtn" title="Lock the layout so panels can't be moved or resized by accident">🔓</button>
   <button class="btn-ghost" id="indBtn" title="Add or remove indicators from your layout">🧩 Indicators</button>
   <button class="btn-ghost" id="resetLayout" title="Restore the default panel arrangement">Reset layout</button>
   <div class="updated"><span class="pulse-dot" id="liveDot" title="Live WebSocket feed"></span><span id="updatedAt">connecting…</span></div>
@@ -920,6 +922,7 @@ function showPanel(id) {
     const items = grid.engine.nodes.map(n => ({id: n.el.getAttribute("gs-id"), x: n.x, y: n.y, w: n.w, h: n.h}));
     layoutStore.set(items);
   } catch (e) {}
+  try { if (typeof applyLock === "function") applyLock(); } catch (e) {} /* re-added widget must respect the lock */
   indPaint();
 }
 const indMenu = document.createElement("div");
@@ -963,6 +966,26 @@ document.querySelectorAll(".grid-stack-item").forEach(it => {
 });
 hiddenStore.load().forEach(id => hidePanel(id, false));
 indPaint();
+/* layout LOCK (padlock next to Indicators): blocks drag/resize AND the hover ✕ so nothing moves by accident */
+let layoutLocked = false;
+try { layoutLocked = localStorage.getItem("cryptopulse-layout-locked") === "1"; } catch (e) {}
+function applyLock() {
+  try { grid.enableMove(!layoutLocked); grid.enableResize(!layoutLocked); } catch (e) {}
+  document.body.classList.toggle("layout-locked", layoutLocked);
+  const b = $("lockBtn");
+  if (b) {
+    b.textContent = layoutLocked ? "🔒" : "🔓";
+    b.title = layoutLocked ? "Layout LOCKED — panels can't be dragged, resized or removed. Click to unlock."
+                           : "Layout unlocked — click to lock it so you don't move panels by accident.";
+  }
+}
+$("lockBtn").addEventListener("click", e => {
+  e.preventDefault(); e.stopPropagation();
+  layoutLocked = !layoutLocked;
+  try { localStorage.setItem("cryptopulse-layout-locked", layoutLocked ? "1" : "0"); } catch (er) {}
+  applyLock();
+});
+applyLock();
 
 function timeAgo(tsMs) {
   const s = Math.max(0, (Date.now() - tsMs) / 1000);
