@@ -859,7 +859,10 @@
     <div class="grid-stack-item" gs-id="funding">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">💸 Funding &amp; Basis <span class="sub" title="Funding normalized to %/HOUR (Binance/Bybit/OKX publish 8h rates — shown ÷8; HL is natively hourly). Positive = longs pay = down-fuel (red). Negative = shorts pay = up-fuel (green). Δ = biggest divergence across exchanges (amber ≥0.002%/h — cross-exchange squeeze fuel). Basis = HL perp mark vs Binance SPOT — premium (red) = longs crowded.">%/h by exchange + spot-perp basis · live</span></div>
-        <div class="panel-body" id="fdBody"><div class="empty">Loading funding rates…</div></div>
+        <div class="panel-body" id="fdOuter">
+          <div class="scan-bar"><input class="scan-input" id="fdAdd" placeholder="➕ add a token to the table — e.g. PEPE, then Enter" spellcheck="false"></div>
+          <div id="fdBody"><div class="empty">Loading funding rates…</div></div>
+        </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="lscrowd">
@@ -996,7 +999,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 /* ---------------- indicator manager: hover ✕ removes a panel; 🧩 menu re-adds it ---------------- */
 const hiddenStore = {
   key: "cryptopulse-hidden-panels",
-  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  /* first visit (nothing stored yet): Kalshi starts hidden — cleaner board; it lives in 🧩 Indicators */
+  load() { try { const v = localStorage.getItem(this.key); if (v === null) return ["kalshi"]; return JSON.parse(v) || []; } catch (e) { return ["kalshi"]; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
 };
 function panelTitle(id) {
@@ -5177,18 +5181,28 @@ function alLog(kind, txt) {
   alStore.save(a.filter(e => e.t > Date.now() - 24 * 3600_000));
   renderAC();
 }
+let botAlLog = {t: 0, entries: []};
+async function fetchBotAlLog() {
+  try {
+    const j = await fetchJSONraw("data/alert-log.json?b=" + Math.floor(Date.now() / 300000), {timeout: 12000});
+    if (j && Array.isArray(j.entries)) { botAlLog = j; renderAC(); }
+  } catch (e) { /* file appears after the bot's next run */ }
+}
 function renderAC() {
   const body = $("acBody"); if (!body) return;
   const map = {RADAR: "radar", PM: "pm", KALSHI: "kalshi", WHALE: "whale"};
-  const a = alStore.load().filter(e => e.t > Date.now() - 24 * 3600_000)
-    .filter(e => acFilter === "ALL" || e.k === map[acFilter]);
+  const bots = (botAlLog.entries || []).map(e => ({t: e.t, k: e.k, x: e.x, bot: true}));
+  const a = alStore.load().concat(bots)
+    .filter(e => e.t > Date.now() - 24 * 3600_000)
+    .filter(e => acFilter === "ALL" || e.k === map[acFilter])
+    .sort((x, y) => y.t - x.t);
   if (!a.length) {
-    body.innerHTML = '<div class="empty">No ' + (acFilter === "ALL" ? "" : acFilter.toLowerCase() + " ") + 'alerts in the last 24h — everything that fires while the dashboard is open collects here.</div>';
+    body.innerHTML = '<div class="empty">No ' + (acFilter === "ALL" ? "" : acFilter.toLowerCase() + " ") + 'alerts in the last 24h — browser alerts collect here, and 🤖 entries come from the 24/7 bot (even while your PC was off).</div>';
     return;
   }
   body.innerHTML = a.slice(0, 120).map(e =>
     '<div class="ac-row"><span class="when">' + new Date(e.t).toLocaleTimeString("en-GB") + "</span>" +
-    '<span class="ac-k ac-' + e.k + '">' + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : e.k === "kalshi" ? "KALSHI" : "WHALE") + "</span>" +
+    '<span class="ac-k ac-' + e.k + '" title="' + (e.bot ? "caught by the 24/7 bot (works with your PC off)" : "caught by this browser") + '">' + (e.bot ? "🤖 " : "") + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : e.k === "kalshi" ? "KALSHI" : "WHALE") + "</span>" +
     '<span class="ac-x">' + esc(e.x) + "</span></div>").join("");
 }
 document.querySelectorAll(".ac-f").forEach(b => {
@@ -5205,12 +5219,18 @@ setInterval(renderAC, 30_000);
 
 /* ---------------- Funding & Basis: %/h per exchange + spot-perp basis (public endpoints, browser-side) ---------------- */
 const FD_COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "HYPE", "SUI", "ADA", "LINK", "AVAX", "LTC", "BNB"];
+const fdCustom = {
+  key: "cryptopulse-fd-custom",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  save(a) { try { localStorage.setItem(this.key, JSON.stringify(a.slice(0, 20))); } catch (e) {} }
+};
+const fdCoins = () => FD_COINS.concat(fdCustom.load().filter(c => !FD_COINS.includes(c)));
 let fdData = null;
 async function loadFunding() {
   try {
     const out = {t: Date.now(), rows: {}};
-    FD_COINS.forEach(c => { out.rows[c] = {}; });
-    if (rdHl) FD_COINS.forEach(c => { if (rdHl[c]) { out.rows[c].HL = rdHl[c].fund; out.rows[c].mark = rdHl[c].px; } });
+    fdCoins().forEach(c => { out.rows[c] = {}; });
+    if (rdHl) fdCoins().forEach(c => { if (rdHl[c]) { out.rows[c].HL = rdHl[c].fund; out.rows[c].mark = rdHl[c].px; } });
     try { /* Binance USD-M: 8h rate → ÷8 */
       const bj = await fetchJSONraw("https://fapi.binance.com/fapi/v1/premiumIndex", {timeout: 15000});
       (Array.isArray(bj) ? bj : []).forEach(x => {
@@ -5225,7 +5245,7 @@ async function loadFunding() {
         if (out.rows[c] && (x.symbol || "").endsWith("USDT")) out.rows[c].BYB = parseFloat(x.fundingRate) / 8;
       });
     } catch (e) {}
-    for (const c of FD_COINS) { /* OKX swap: 8h → ÷8, one call per coin */
+    for (const c of fdCoins()) { /* OKX swap: 8h → ÷8, one call per coin */
       try {
         const oj = await fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=" + c + "-USDT-SWAP", {timeout: 10000});
         const d = (oj.data || [])[0];
@@ -5237,7 +5257,7 @@ async function loadFunding() {
       const sp = await fetchJSONraw("https://api.binance.com/api/v3/ticker/price", {timeout: 15000});
       const m = {};
       (Array.isArray(sp) ? sp : []).forEach(x => { m[x.symbol] = parseFloat(x.price); });
-      FD_COINS.forEach(c => {
+      fdCoins().forEach(c => {
         const s = m[c + "USDT"];
         if (s > 0 && out.rows[c].mark > 0) out.rows[c].basis = (out.rows[c].mark - s) / s * 100;
       });
@@ -5256,7 +5276,7 @@ function fdCell(v) {
 function renderFunding() {
   const body = $("fdBody"); if (!body || !fdData) return;
   const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th></tr>';
-  const rows = FD_COINS.map(c => {
+  const rows = fdCoins().map(c => {
     const r = fdData.rows[c] || {};
     const vals = ["HL", "BIN", "BYB", "OKX"].map(k => r[k]).filter(v => v != null && isFinite(v));
     const spread = vals.length >= 2 ? (Math.max(...vals) - Math.min(...vals)) * 100 : null;
@@ -5265,12 +5285,32 @@ function renderFunding() {
     const b = r.basis;
     const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
       : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
-    return '<tr><td class="fd-coin">' + c + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
+    const custom = !FD_COINS.includes(c);
+    return '<tr><td class="fd-coin">' + c + (custom ? ' <button class="bet-x" data-fdrm="' + c + '" title="Remove this token from the table" style="padding:0 4px;font-size:10px">✕</button>' : "") + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
   }).join("");
   body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
 }
 setTimeout(loadFunding, 4000);
 setInterval(loadFunding, 120_000);
+(() => {
+  const inp = $("fdAdd");
+  if (inp) inp.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const c = (inp.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!c) return;
+    const cur = fdCustom.load();
+    if (!FD_COINS.includes(c) && !cur.includes(c)) { cur.push(c); fdCustom.save(cur); }
+    inp.value = "";
+    loadFunding(); /* full refetch so the new coin gets all 4 exchanges + basis */
+  });
+  const outer = $("fdOuter");
+  if (outer) outer.addEventListener("click", e => {
+    const x = e.target.closest("[data-fdrm]");
+    if (!x) return;
+    fdCustom.save(fdCustom.load().filter(c => c !== x.dataset.fdrm));
+    renderFunding(); loadFunding();
+  });
+})();
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
@@ -5289,6 +5329,7 @@ every(loadTrending, 300_000, 305_000);  /* every 5 min */
 every(loadFng,      900_000, 900_000);  /* every 15 min */
 every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big bets */
 every(loadKalshiPanel, 300_000, 305_000); /* every 5 min — the bot mirror itself only changes ~10-min */
+every(fetchBotAlLog, 300_000, 9_000); /* bot's 24/7 alert log for the Alert Center */
 /* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); }

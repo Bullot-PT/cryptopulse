@@ -678,6 +678,16 @@ try {
   console.log('radar:', rowsR.length, 'coins scored, top:', rowsR.slice(0, 3).map(r => r.coin + ' ' + r.score).join(', '));
 } catch (e) { console.log('radar section failed', e.message); }
 
+// persist a rolling 48h log of every alert fired — the site's Alert Center reads this,
+// so alerts keep counting even with the user's PC off
+try {
+  let alog = [];
+  try { alog = JSON.parse(fs.readFileSync('data/alert-log.json', 'utf8')).entries || []; } catch (e) {}
+  const kindOf = m => /🐋|whale|liquidation risk/i.test(m) ? 'whale' : 'radar';
+  queue.forEach(m => alog.push({ t: Date.now(), k: kindOf(m), x: m.replace(/<[^>]+>/g, '') }));
+  alog = alog.filter(e => e.t > Date.now() - 48 * 3600_000).slice(-400);
+  fs.writeFileSync('data/alert-log.json', JSON.stringify({ t: Date.now(), entries: alog }));
+} catch (e) { console.log('alert-log write failed', e.message); }
 // send queued alerts (cap to avoid floods), save state
 for (const msg of queue.slice(0, 12)) { await tg(msg); await new Promise(r => setTimeout(r, 400)); }
 if (queue.length > 12) await tg('… and ' + (queue.length - 12) + ' more alerts this cycle.');
