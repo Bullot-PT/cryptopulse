@@ -209,7 +209,7 @@ try {
   const evMap = {};
   let mc = '', mp = 0;
   while (mp < 12) {
-    const u = 'https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=1000' + (mc ? '&cursor=' + encodeURIComponent(mc) : '');
+    const u = 'https://api.elections.kalshi.com/trade-api/v2/markets?status=open&limit=1000&mve_filter=exclude' + (mc ? '&cursor=' + encodeURIComponent(mc) : '');
     const r = await fetch(u, { headers: KH });
     if (!r.ok) { console.log('kalshi markets http', r.status); break; }
     const j = await r.json();
