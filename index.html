@@ -562,6 +562,22 @@
     border-radius: 8px; color: var(--accent); font-size: 11.5px; font-weight: 700; text-decoration: none; }
   .rd-cd-tv:hover { background: rgba(57,135,229,0.12); }
   .cx-spark { padding: 3px 14px 1px; border-bottom: 1px solid var(--grid); line-height: 0; }
+  /* Alert Center */
+  .ac-row { display: flex; gap: 10px; padding: 4px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 11.5px; align-items: baseline; }
+  .ac-row .when { color: var(--muted); font-size: 10px; width: 52px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .ac-k { font-size: 9px; font-weight: 800; border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+  .ac-radar { background: rgba(229,72,77,0.15); color: var(--down); }
+  .ac-pm { background: rgba(57,135,229,0.15); color: var(--accent); }
+  .ac-whale { background: rgba(250,178,25,0.15); color: var(--warn); }
+  .ac-x { color: var(--ink-2); }
+  /* Funding & Basis */
+  .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .fd-table th { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px; text-align: right; position: sticky; top: 0; background: var(--surface-2, #11151b); cursor: help; z-index: 2; }
+  .fd-table th:first-child { text-align: left; padding-left: 14px; }
+  .fd-coin { font-weight: 700; padding: 4px 6px 4px 14px; }
+  .fd-c { padding: 4px 6px; text-align: right; cursor: help; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .lm-track { position: relative; }
+  .lm-ob { position: absolute; left: 0; bottom: 0; height: 2.5px; background: var(--accent); opacity: 0.8; border-radius: 1px; cursor: help; }
   /* polymarket blocked-markets manager */
   .pm-blk-bar { cursor: pointer; color: var(--muted); font-size: 10.5px; padding: 6px 14px; border-top: 1px solid var(--grid); user-select: none; }
   .pm-blk-bar:hover { color: var(--ink-2); }
@@ -774,6 +790,24 @@
         </div>
       </div></div>
     </div>
+    <div class="grid-stack-item" gs-id="alertcenter">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🗂️ Alert Center <span class="sub">everything that fired · last 24h · this browser</span>
+          <span style="margin-left:auto;display:inline-flex;gap:4px">
+            <button class="src-btn ac-f src-on" data-acf="ALL">ALL</button>
+            <button class="src-btn ac-f" data-acf="RADAR">Radar</button>
+            <button class="src-btn ac-f" data-acf="PM">Polymarket</button>
+            <button class="src-btn ac-f" data-acf="WHALE">Whales</button>
+          </span></div>
+        <div class="panel-body" id="acBody"><div class="empty">No alerts fired yet — everything that fires while the dashboard is open collects here for 24h.</div></div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="funding">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">💸 Funding &amp; Basis <span class="sub" title="Funding normalized to %/HOUR (Binance/Bybit/OKX publish 8h rates — shown ÷8; HL is natively hourly). Positive = longs pay = down-fuel (red). Negative = shorts pay = up-fuel (green). Δ = biggest divergence across exchanges (amber ≥0.002%/h — cross-exchange squeeze fuel). Basis = HL perp mark vs Binance SPOT — premium (red) = longs crowded.">%/h by exchange + spot-perp basis · live</span></div>
+        <div class="panel-body" id="fdBody"><div class="empty">Loading funding rates…</div></div>
+      </div></div>
+    </div>
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
@@ -830,7 +864,9 @@ const DEFAULT_LAYOUT = [
   {id: "alerts",     x: 6, y: 12, w: 3, h: 6,  minW: 2, minH: 3},
   {id: "liqmap",     x: 0, y: 18, w: 6, h: 7,  minW: 3, minH: 3},
   {id: "cexliq",     x: 6, y: 18, w: 6, h: 7,  minW: 2, minH: 3}, /* beside the heatmap */
-  {id: "radar",      x: 0, y: 25, w: 12, h: 5, minW: 3, minH: 3} /* full-width row below everything — easy to inspect/tweak/remove */
+  {id: "radar",      x: 0, y: 25, w: 12, h: 5, minW: 3, minH: 3}, /* full-width row below everything */
+  {id: "alertcenter", x: 0, y: 30, w: 6, h: 5, minW: 2, minH: 3},
+  {id: "funding",     x: 6, y: 30, w: 6, h: 5, minW: 2, minH: 3}
 ];
 const layoutStore = {
   _mem: null,
@@ -3022,10 +3058,12 @@ function trackOddsMoves(oddsNow) {
         if (!ex) {
           stored.push({slug: o.slug, title: o.title, label: o.label, pct: o.pct, from: base[1], delta, dvol, t: now});
           dirty = true; fresh = true;
+          alLog("pm", "odds move " + base[1].toFixed(0) + "%→" + o.pct.toFixed(0) + "% (" + (delta > 0 ? "+" : "") + delta.toFixed(0) + "pp/1h) — " + o.title);
         } else if (Math.round(ex.pct) !== Math.round(o.pct) || Math.round(ex.delta) !== Math.round(delta)) {
           /* same market, NEW numbers → refresh the same card and chime again */
           ex.pct = o.pct; ex.from = base[1]; ex.delta = delta; ex.dvol = dvol; ex.t = now;
           dirty = true; fresh = true;
+          alLog("pm", "odds update " + base[1].toFixed(0) + "%→" + o.pct.toFixed(0) + "% — " + o.title);
         } /* identical numbers while the card is still on the page → stay silent */
       }
     }
@@ -3171,7 +3209,11 @@ async function loadPolymarket() {
     /* sound on alerts not yet announced this session */
     const fresh = hits.filter(t => !pmSeenSession.has(pmAlertId(t)));
     if (fresh.length) {
-      fresh.forEach(t => pmSeenSession.add(pmAlertId(t)));
+      fresh.forEach(t => {
+        pmSeenSession.add(pmAlertId(t));
+        const usd = (t.size || 0) * (t.price || 0) || t.size || 0;
+        alLog("pm", "big bet " + fmtBig(usd) + " " + (t.side || "") + " “" + (t.outcome || "") + "” — " + (t.title || ""));
+      });
       playBeep();
     }
     if (hits.length) {
@@ -3794,6 +3836,21 @@ function lmLivePx(coin) {
   const d = lmData[coin];
   return d && d.snapPx || null;
 }
+/* REAL orderbook depth (HL live L2 book) — overlaid on the heatmap: liq walls say where forced
+   flow is BORN, the orderbook says what can ABSORB it. Refreshed ~30s for the selected coin. */
+let lmOb = {coin: null, t: 0, bids: [], asks: []}, lmObBusy = false;
+async function fetchLmOb() {
+  const coin = lmCur;
+  try {
+    const j = await fetchHL({type: "l2Book", coin});
+    const lv = (j && j.levels) || [];
+    lmOb = {coin, t: Date.now(),
+      bids: (lv[0] || []).map(x => ({px: parseFloat(x.px), usd: parseFloat(x.px) * parseFloat(x.sz)})),
+      asks: (lv[1] || []).map(x => ({px: parseFloat(x.px), usd: parseFloat(x.px) * parseFloat(x.sz)}))};
+    if (lmCur === coin) renderLiqmap();
+  } catch (e) {}
+}
+setInterval(fetchLmOb, 30_000);
 function renderLiqmap() {
   const body = $("lmBody"); if (!body) return;
   /* tabs (draggable to reorder) + source buttons */
@@ -3811,8 +3868,18 @@ function renderLiqmap() {
   const R = lmRange, ST = R / 12;
   /* index-built buckets: k=12 gives EXACTLY p=0 (float accumulation once produced p≈-1e-14,
      which dropped the first above-price bucket below the price line) */
-  const BK = []; for (let k = 0; k < 24; k++) BK.push({p: (k - 12) * ST, lend: 0, wl: 0, ws: 0});
+  const BK = []; for (let k = 0; k < 24; k++) BK.push({p: (k - 12) * ST, lend: 0, wl: 0, ws: 0, ob: 0});
   const bIdx = pct => { const i = Math.floor((pct + R) / ST); return i >= 0 && i < BK.length ? i : -1; };
+  /* orderbook depth overlay: keep it fresh for the selected coin */
+  if ((lmOb.coin !== coin || Date.now() - lmOb.t > 45_000) && !lmObBusy) {
+    lmObBusy = true;
+    fetchLmOb().finally(() => { lmObBusy = false; });
+  }
+  const obOn = lmOb.coin === coin && Date.now() - lmOb.t < 120_000;
+  if (obOn) {
+    lmOb.bids.forEach(o => { const i = bIdx((o.px - px) / px * 100); if (i >= 0) BK[i].ob += o.usd; });
+    lmOb.asks.forEach(o => { const i = bIdx((o.px - px) / px * 100); if (i >= 0) BK[i].ob += o.usd; });
+  }
   /* STALE-DATA RULE: a lending snapshot taken at a very different price is old information —
      old information is NOT shown. Excluded entirely (no approximate bars), noted in the sum line. */
   const lendDrifted = d && d.snapPx && Math.abs(d.snapPx - px) / px > 0.15;
@@ -3925,10 +3992,12 @@ function renderLiqmap() {
     }
   }
   const rows = BK.filter(b => b.lend + b.wl + b.ws > 0).map(b => ({...b, tot: b.lend + b.wl + b.ws}));
+  const obMax = Math.max(1, ...rows.map(r => r.ob || 0));
   const legend = '<div class="lm-legend">' +
     '<span class="k" title="On-chain lending collateral (DefiLlama — all lenders, all chains) that gets sold if price falls to that level"><span class="dot" style="background:var(--down)"></span>lending (forced sells)</span>' +
     '<span class="k" title="Perp longs across the integrated DEXes (Hyperliquid full book + dYdX complete chain book) liquidated at that level — forced selling"><span class="dot" style="background:#f0908a"></span>perp longs (sells)</span>' +
     '<span class="k" title="Perp shorts across the integrated DEXes liquidated at that level — forced BUYING that fuels rallies"><span class="dot" style="background:var(--up)"></span>perp shorts (forced buys)</span>' +
+    '<span class="k" title="REAL orderbook depth from Hyperliquid’s live L2 book (~30s refresh) — resting bids/asks that can ABSORB the forced flow at that level. Shown as the thin blue strip under each bar. Liq walls say where forced flow is born; the orderbook says what can stop it."><span class="dot" style="background:var(--accent)"></span>orderbook depth</span>' +
     '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
   if (!rows.length) {
     body.innerHTML = legend + '<div class="empty">' +
@@ -3951,7 +4020,8 @@ function renderLiqmap() {
       '" data-ws="' + Math.round(r.ws) + '" data-tot="' + Math.round(r.tot) + '">' +
       '<div class="lm-lvl">' + fpx(px * (1 + r.p / 100)) + ' <span class="pct">' + fpc(r.p) + "%</span></div>" +
       '<div class="lm-track"><div class="lm-bar" style="width:' + Math.max(1.2, r.tot / max * 100).toFixed(1) + '%">' +
-        seg(r.lend, "lm-lend") + seg(r.wl, "lm-wl") + seg(r.ws, "lm-ws") + "</div></div>" +
+        seg(r.lend, "lm-lend") + seg(r.wl, "lm-wl") + seg(r.ws, "lm-ws") + "</div>" +
+        (r.ob > 0 ? '<div class="lm-ob" style="width:' + Math.max(1, r.ob / obMax * 100).toFixed(1) + '%" title="orderbook depth here (HL live L2): ' + fmtBig(r.ob) + '"></div>' : "") + "</div>" +
       '<div class="lm-val">' + fmtBig(r.tot) + "</div></div>";
   };
   const above = rows.filter(r => r.p >= 0).sort((a, b) => b.p - a.p);
@@ -4137,6 +4207,7 @@ function cxAdd(ev) {
   cxHistDirty = true;
   cxEvDirty = true;
   cxDirty = true;
+  if (ev.det) alLog("whale", "HL whale liq DETECTED: " + ev.coin + " " + fmtBig(ev.usd) + " " + (ev.side === "L" ? "LONG" : "SHORT") + (ev.px > 0 ? " @ " + fmtPrice(ev.px) : ""));
 }
 function connectBinanceLiqs() {
   let ws;
@@ -4652,7 +4723,11 @@ function renderRadar() {
     r.burst = r.parts[2] >= 15; /* ⚡ BURST: heavy forced flow RIGHT NOW (V alone) — warns at klaxon level, never cries cascade */
     r.eff = Math.max(r.lvl, r.burst ? 2 : 0);
     const st = rdAlState[r.coin] || (rdAlState[r.coin] = {lvl: 0, muted: 0, lastT: {}});
-    if (r.eff > st.lvl && r.eff > st.muted) rdSound(r.eff, r.coin);
+    if (r.eff > st.lvl) {
+      const nm = r.lvl >= 3 ? (r.down ? "!! SHORT CASCADE" : "!! LONG CASCADE") : (r.burst && r.lvl < 2) ? "⚡ BURST" : r.eff >= 2 ? "red alert ≥61" : "yellow alert ≥50";
+      alLog("radar", r.coin + " " + r.score + "/100 " + (r.down ? "🔻 SHORT" : "🔺 LONG") + " — " + nm);
+      if (r.eff > st.muted) rdSound(r.eff, r.coin);
+    }
     if (r.eff < st.muted) st.muted = 0; /* dropped below the silenced level → re-arm the sound */
     st.lvl = r.eff;
   });
@@ -4803,6 +4878,114 @@ setInterval(rdFetchOiRef, 300_000);
 setInterval(rdFetchHist, 300_000);
 setTimeout(renderRadar, 2500);
 setInterval(renderRadar, 10_000); /* feels live — the underlying inputs refresh at 90s (funding/OI) and ~10 min (books/liq mirror) */
+
+/* ---------------- Alert Center: 24h log of everything that fired in this browser ---------------- */
+const alStore = {
+  key: "cryptopulse-alert-log",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  save(a) { try { localStorage.setItem(this.key, JSON.stringify(a.slice(0, 300))); } catch (e) {} }
+};
+let acFilter = "ALL";
+function alLog(kind, txt) {
+  const a = alStore.load();
+  a.unshift({t: Date.now(), k: kind, x: txt});
+  alStore.save(a.filter(e => e.t > Date.now() - 24 * 3600_000));
+  renderAC();
+}
+function renderAC() {
+  const body = $("acBody"); if (!body) return;
+  const map = {RADAR: "radar", PM: "pm", WHALE: "whale"};
+  const a = alStore.load().filter(e => e.t > Date.now() - 24 * 3600_000)
+    .filter(e => acFilter === "ALL" || e.k === map[acFilter]);
+  if (!a.length) {
+    body.innerHTML = '<div class="empty">No ' + (acFilter === "ALL" ? "" : acFilter.toLowerCase() + " ") + 'alerts in the last 24h — everything that fires while the dashboard is open collects here.</div>';
+    return;
+  }
+  body.innerHTML = a.slice(0, 120).map(e =>
+    '<div class="ac-row"><span class="when">' + new Date(e.t).toLocaleTimeString("en-GB") + "</span>" +
+    '<span class="ac-k ac-' + e.k + '">' + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : "WHALE") + "</span>" +
+    '<span class="ac-x">' + esc(e.x) + "</span></div>").join("");
+}
+document.querySelectorAll(".ac-f").forEach(b => {
+  b.addEventListener("mousedown", e => e.stopPropagation());
+  b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    acFilter = b.dataset.acf;
+    document.querySelectorAll(".ac-f").forEach(x => x.classList.toggle("src-on", x.dataset.acf === acFilter));
+    renderAC();
+  });
+});
+renderAC();
+setInterval(renderAC, 30_000);
+
+/* ---------------- Funding & Basis: %/h per exchange + spot-perp basis (public endpoints, browser-side) ---------------- */
+const FD_COINS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "HYPE", "SUI", "ADA", "LINK", "AVAX", "LTC", "BNB"];
+let fdData = null;
+async function loadFunding() {
+  try {
+    const out = {t: Date.now(), rows: {}};
+    FD_COINS.forEach(c => { out.rows[c] = {}; });
+    if (rdHl) FD_COINS.forEach(c => { if (rdHl[c]) { out.rows[c].HL = rdHl[c].fund; out.rows[c].mark = rdHl[c].px; } });
+    try { /* Binance USD-M: 8h rate → ÷8 */
+      const bj = await fetchJSONraw("https://fapi.binance.com/fapi/v1/premiumIndex", {timeout: 15000});
+      (Array.isArray(bj) ? bj : []).forEach(x => {
+        const c = (x.symbol || "").replace(/USDT$/, "");
+        if (out.rows[c] && (x.symbol || "").endsWith("USDT")) out.rows[c].BIN = parseFloat(x.lastFundingRate) / 8;
+      });
+    } catch (e) {}
+    try { /* Bybit linear: 8h → ÷8 */
+      const yj = await fetchJSONraw("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000});
+      ((yj.result && yj.result.list) || []).forEach(x => {
+        const c = (x.symbol || "").replace(/USDT$/, "");
+        if (out.rows[c] && (x.symbol || "").endsWith("USDT")) out.rows[c].BYB = parseFloat(x.fundingRate) / 8;
+      });
+    } catch (e) {}
+    for (const c of FD_COINS) { /* OKX swap: 8h → ÷8, one call per coin */
+      try {
+        const oj = await fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=" + c + "-USDT-SWAP", {timeout: 10000});
+        const d = (oj.data || [])[0];
+        if (d) out.rows[c].OKX = parseFloat(d.fundingRate) / 8;
+      } catch (e) {}
+      await new Promise(r => setTimeout(r, 120));
+    }
+    try { /* basis: HL perp mark vs Binance SPOT */
+      const sp = await fetchJSONraw("https://api.binance.com/api/v3/ticker/price", {timeout: 15000});
+      const m = {};
+      (Array.isArray(sp) ? sp : []).forEach(x => { m[x.symbol] = parseFloat(x.price); });
+      FD_COINS.forEach(c => {
+        const s = m[c + "USDT"];
+        if (s > 0 && out.rows[c].mark > 0) out.rows[c].basis = (out.rows[c].mark - s) / s * 100;
+      });
+    } catch (e) {}
+    fdData = out;
+    renderFunding();
+  } catch (e) {}
+}
+function fdCell(v) {
+  if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)">—</td>';
+  const pct = v * 100;
+  const mag = Math.min(1, Math.abs(pct) / 0.005);
+  const col = pct > 0 ? "208,59,59" : "18,163,58";
+  return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + '">' + pct.toFixed(4) + "</td>";
+}
+function renderFunding() {
+  const body = $("fdBody"); if (!body || !fdData) return;
+  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th></tr>';
+  const rows = FD_COINS.map(c => {
+    const r = fdData.rows[c] || {};
+    const vals = ["HL", "BIN", "BYB", "OKX"].map(k => r[k]).filter(v => v != null && isFinite(v));
+    const spread = vals.length >= 2 ? (Math.max(...vals) - Math.min(...vals)) * 100 : null;
+    const dCell = spread == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
+      : '<td class="fd-c"' + (spread >= 0.002 ? ' style="color:var(--warn);font-weight:800"' : ' style="color:var(--muted)"') + ' title="max − min across the 4 exchanges">' + spread.toFixed(4) + "</td>";
+    const b = r.basis;
+    const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
+      : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
+    return '<tr><td class="fd-coin">' + c + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
+  }).join("");
+  body.innerHTML = '<table class="fd-table">' + head + rows + "</table>";
+}
+setTimeout(loadFunding, 4000);
+setInterval(loadFunding, 120_000);
 
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
