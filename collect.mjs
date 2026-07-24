@@ -589,7 +589,8 @@ try {
     const f = rdFund[coin] || 0;
     const W = Math.min(40, 40 * Math.max(below, above) / (oiUsd * 0.08));
     const F = Math.min(20, 20 * Math.abs(f) / 0.0001);
-    const V = Math.min(25, 25 * (v.L + v.S) / Math.max(oiUsd * 0.001, 200000));
+    const mktOi = oiUsd + (bb[coin] || 0) + (ok[coin] || 0); /* market-wide liqs need a market-wide OI denominator */
+    const V = Math.min(25, 25 * (v.L + v.S) / Math.max(mktOi * 0.001, 1000000));
     let M = 0, dOi = 0;
     if (oiRefR[coin] > 0) { dOi = (oiUsd - oiRefR[coin]) / oiRefR[coin] * 100; M = Math.min(15, Math.abs(dOi) * 1.5); }
     const down = (below + v.L * 30 + (f > 0.00002 ? oiUsd * 0.02 : 0)) >= (above + v.S * 30 + (f < -0.00002 ? oiUsd * 0.02 : 0));
@@ -612,13 +613,13 @@ try {
   const rdSt = st.radar || {};
   const rdNew = {};
   rowsR.forEach(r => {
-    const lvl = (r.score >= 75 || r.vv >= 15) ? 3 : r.score >= 61 ? 2 : 0;
+    const lvl = r.score >= 75 ? 3 : r.score >= 61 ? 2 : 0; /* CASCADE only at 75 (user's call) */
     if (lvl < 2) return;
     const prev = rdSt[r.coin] || { lvl: 0, t: 0 };
     const fire = lvl > prev.lvl || now - prev.t > 6 * 3600000;
     rdNew[r.coin] = { lvl, t: fire ? now : prev.t };
     if (fire && !firstRun) {
-      const head = lvl >= 3 ? '\ud83d\udea8 *CASCADE RADAR \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*';
+      const head = lvl >= 3 ? '\ud83d\udea8 *' + (r.down ? 'SHORT' : 'LONG') + ' CASCADE \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*';
       queue.push(head + ' ' + (r.down ? '\ud83d\udd3b DOWN' : '\ud83d\udd3a UP') +
         '\n' + fmtBig(r.wall) + ' in liq walls \u00b15%' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
         '\nliqs 15m ' + fmtBig(r.liq15) + ' \u00b7 funding ' + (r.fund * 100).toFixed(4) + '%/h \u00b7 OI 24h ' + (r.dOi > 0 ? '+' : '') + r.dOi.toFixed(1) + '%' +
