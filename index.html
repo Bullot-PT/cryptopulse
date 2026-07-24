@@ -621,7 +621,7 @@
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" onerror="this.style.display='none'">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
-          <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:2px 8px">🔔</button>
+          <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:4px 7px;color:var(--muted)"></button>
           <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
         <div class="panel-body" id="pmOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
@@ -756,7 +756,7 @@
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
           <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
-          <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:2px 8px">🔔</button></div>
+          <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:4px 7px;color:var(--muted)"></button></div>
         <div class="panel-body" id="rdOuter">
           <div class="scan-bar"><input class="scan-input" id="rdSearch" placeholder="🔎 search any token — see its score even outside the top 10" spellcheck="false"></div>
           <div id="rdBody"><div class="empty">Computing pressure scores…</div></div>
@@ -2813,8 +2813,11 @@ function playBeep() {
     o.start(t0 + dt); o.stop(t0 + dt + 0.18);
   });
 }
+/* thin outline speaker icons (elegant, like the browser-bar ones) — grey, stroke follows button color */
+const SVG_VOL_ON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>';
+const SVG_VOL_OFF = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;opacity:.55"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
 function refreshSoundBtn() {
-  $("pmSound").textContent = alertMuted ? "🔕" : "🔔";
+  $("pmSound").innerHTML = alertMuted ? SVG_VOL_OFF : SVG_VOL_ON;
   $("pmSound").title = alertMuted ? "Alert sound is OFF — click to enable" : "Alert sound is ON — click to mute";
 }
 $("pmSound").addEventListener("click", e => {
@@ -4660,7 +4663,7 @@ document.getElementById("rdBody").addEventListener("click", e => {
 });
 (() => {
   const b = document.getElementById("rdSound"), s = document.getElementById("rdVol");
-  const paint = () => { if (b) { b.textContent = rdMuted ? "🔕" : "🔔"; b.title = rdMuted ? "Radar sounds OFF — click to enable" : "Radar sounds ON — click to mute"; } };
+  const paint = () => { if (b) { b.innerHTML = rdMuted ? SVG_VOL_OFF : SVG_VOL_ON; b.title = rdMuted ? "Radar sounds OFF — click to enable" : "Radar sounds ON — click to mute"; } };
   if (b) b.addEventListener("click", e => {
     e.preventDefault(); e.stopPropagation();
     rdMuted = !rdMuted;
