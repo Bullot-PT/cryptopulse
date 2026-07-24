@@ -459,13 +459,16 @@ if (CZ_KEY) {
   try {
     const CZ = 'https://api.coinalyze.net/v1';
     const mk = await jget(CZ + '/future-markets?api_key=' + CZ_KEY);
-    const wantBases = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'SUI', 'ADA', 'LINK', 'AVAX'];
-    const exPref = ['A', '6', '3', 'F', '0', 'K', '2', 'W', 'H']; // rough preference; unknown codes go last
+    /* bases: top-30 Hyperliquid coins by OI (k-prefix stripped) + the majors — "todos os mercados possíveis"
+       dentro do rate limit (40 req/min): até 240 símbolos = 12 pedidos por intervalo */
+    const wantBases = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'SUI', 'ADA', 'LINK', 'AVAX', 'LTC', 'BNB']);
+    Object.keys(topN(coins, 30)).forEach(c => wantBases.add(c.replace(/^k/, '')));
+    const exPref = ['A', '6', '3', 'F', '0', 'K', '2', 'W', 'H'];
     const cands = [];
     (Array.isArray(mk) ? mk : []).forEach(m => {
       if (!m.is_perpetual) return;
       const base = (m.base_asset || '').toUpperCase();
-      if (!wantBases.includes(base)) return;
+      if (!wantBases.has(base)) return;
       const q = (m.quote_asset || '').toUpperCase();
       if (q !== 'USDT' && q !== 'USD' && q !== 'USDC') return;
       const suf = ((m.symbol || '').split('.')[1] || '');
@@ -473,35 +476,40 @@ if (CZ_KEY) {
       cands.push({ sym: m.symbol, base, pr: pr < 0 ? 99 : pr });
     });
     cands.sort((a, b) => a.pr - b.pr || (a.base < b.base ? -1 : 1));
-    const chosen = cands.slice(0, 60);
-    const nowS = Math.floor(now / 1000), from = nowS - 7 * 86400;
-    const agg = {}, perCoin = {};
-    let sampleLogged = false;
-    for (let i = 0; i < chosen.length; i += 20) {
-      const batch = chosen.slice(i, i + 20);
-      const u = CZ + '/liquidation-history?symbols=' + encodeURIComponent(batch.map(b => b.sym).join(',')) +
-        '&interval=1hour&from=' + from + '&to=' + nowS + '&convert_to_usd=true&api_key=' + CZ_KEY;
-      const r = await jget(u);
-      (Array.isArray(r) ? r : []).forEach(row => {
-        const meta = chosen.find(c => c.sym === row.symbol); if (!meta) return;
-        (row.history || []).forEach(h => {
-          if (!sampleLogged) { console.log('coinalyze row sample:', JSON.stringify(h)); sampleLogged = true; }
-          const L = +h.l || 0, S = +h.s || 0;
-          const hk = h.t;
-          const a = agg[hk] || (agg[hk] = [0, 0]); a[0] += L; a[1] += S;
-          const pcs = perCoin[meta.base] || (perCoin[meta.base] = {});
-          const pc = pcs[hk] || (pcs[hk] = [0, 0]); pc[0] += L; pc[1] += S;
-        });
-      });
-      await new Promise(r2 => setTimeout(r2, 1700)); // free tier: 40 req/min
-    }
+    const chosen = cands.slice(0, 240);
+    const nowS = Math.floor(now / 1000);
     const round2 = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [Math.round(v[0]), Math.round(v[1])]]));
-    const totalD = Object.entries(agg).filter(([ts]) => +ts >= nowS - 86400).reduce((s, [, v]) => s + v[0] + v[1], 0);
+    const fetchLiq = async (interval, from) => {
+      const agg = {}, perCoin = {};
+      for (let i = 0; i < chosen.length; i += 20) {
+        const batch = chosen.slice(i, i + 20);
+        const u = CZ + '/liquidation-history?symbols=' + encodeURIComponent(batch.map(b => b.sym).join(',')) +
+          '&interval=' + interval + '&from=' + from + '&to=' + nowS + '&convert_to_usd=true&api_key=' + CZ_KEY;
+        try {
+          const r = await jget(u);
+          (Array.isArray(r) ? r : []).forEach(row => {
+            const meta = batch.find(c => c.sym === row.symbol); if (!meta) return;
+            (row.history || []).forEach(h => {
+              const L = +h.l || 0, S = +h.s || 0, hk = h.t;
+              const a = agg[hk] || (agg[hk] = [0, 0]); a[0] += L; a[1] += S;
+              const pcs = perCoin[meta.base] || (perCoin[meta.base] = {});
+              const pc = pcs[hk] || (pcs[hk] = [0, 0]); pc[0] += L; pc[1] += S;
+            });
+          });
+        } catch (e) { console.log('coinalyze batch failed', e.message); }
+        await new Promise(r2 => setTimeout(r2, 1700)); // free tier: 40 req/min
+      }
+      return { agg: round2(agg), coins: Object.fromEntries(Object.entries(perCoin).map(([c, m2]) => [c, round2(m2)])) };
+    };
+    const hourly = await fetchLiq('1hour', nowS - 7 * 86400);       /* 7 days for 1D/1W */
+    const minute = await fetchLiq('1min', nowS - 2 * 3600);          /* last 2h for a fresh 1h 🌐 */
+    const totalD = Object.entries(hourly.agg).filter(([ts]) => +ts >= nowS - 86400).reduce((s, [, v]) => s + v[0] + v[1], 0);
     fs.writeFileSync('data/liq-totals.json', JSON.stringify({
-      t: now, symbols: chosen.length, agg: round2(agg),
-      coins: Object.fromEntries(Object.entries(perCoin).map(([c, m2]) => [c, round2(m2)]))
+      t: now, symbols: chosen.length, agg: hourly.agg, coins: hourly.coins,
+      aggMin: minute.agg, coinsMin: minute.coins
     }));
-    console.log('coinalyze:', chosen.length, 'symbols,', Object.keys(agg).length, 'hourly buckets, 24h total', fmtBig(totalD));
+    console.log('coinalyze:', chosen.length, 'symbols across', wantBases.size, 'bases,',
+      Object.keys(hourly.agg).length, 'hourly +', Object.keys(minute.agg).length, 'minute buckets, 24h total', fmtBig(totalD));
   } catch (e) { console.log('coinalyze failed', e.message); }
 } else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
 

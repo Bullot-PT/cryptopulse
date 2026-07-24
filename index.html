@@ -682,7 +682,7 @@
     </div>
     <div class="grid-stack-item" gs-id="cexliq">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub" title="CEX: Binance, Bybit, OKX, BitMEX, Deribit · on-chain (blue): dYdX v4, Lighter, GMX">Binance · Bybit · OKX · BitMEX · Deribit + dYdX · Lighter · GMX <span style="color:var(--accent)">on-chain</span></span>
+        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub" title="CEX: Binance, Bybit, OKX, BitMEX, Deribit · on-chain (blue): dYdX v4, Lighter, GMX, HL* (whale liqs detected from our own position book — HL has no public liq stream)">Binance · Bybit · OKX · BitMEX · Deribit + dYdX · Lighter · GMX · HL* <span style="color:var(--accent)">on-chain</span></span>
           <span id="cxFlt" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">
             <button class="src-btn" data-cxf="ALL">ALL</button>
             <button class="src-btn" data-cxf="BTC">BTC</button>
@@ -1879,6 +1879,7 @@ async function loadWhales() {
     });
     /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
        🆕/💰 badges still show on rows wherever they sit. */
+    hlDetectLiqs(found);
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
       if (fa !== fb) return fb - fa;
@@ -2989,6 +2990,41 @@ function connectHyperMids() {
   hlWs.onclose = () => { hlRetry++; setTimeout(connectHyperMids, Math.min(15000, 1000 * hlRetry)); };
   hlWs.onerror = () => { try { hlWs.close(); } catch (e) {} };
 }
+/* HL whale-liquidation detector: we KNOW every tracked whale position and its liq price.
+   If a position vanishes between scans AND the live price touched its liq level meanwhile,
+   that is a liquidation — pushed to the Live Liquidations feed labeled as detected. */
+let hlPrevPos = {}, hlExtremes = {};
+function hlTrackExtremes() {
+  Object.keys(hlExtremes).forEach(c => {
+    const m = parseFloat(liveMark[c]); if (!m) return;
+    const e = hlExtremes[c];
+    if (m < e.lo) e.lo = m;
+    if (m > e.hi) e.hi = m;
+  });
+}
+function hlDetectLiqs(found) {
+  try {
+    const cur = {};
+    found.forEach(r => { cur[r.addr + "|" + r.coin + "|" + (r.szi > 0 ? "L" : "S")] = r; });
+    Object.entries(hlPrevPos).forEach(([k, p]) => {
+      if (cur[k]) return;
+      const e = hlExtremes[p.coin];
+      if (!e || !(p.liq > 0)) return;
+      const long = p.szi > 0;
+      if ((long && e.lo <= p.liq * 1.005) || (!long && e.hi >= p.liq * 0.995)) {
+        if (typeof cxAdd === "function")
+          cxAdd({t: Date.now(), ex: "HL", oc: 1, det: 1, coin: cxNorm(p.coin), side: long ? "L" : "S", usd: p.value, px: p.liq});
+      }
+    });
+    hlPrevPos = cur;
+    hlExtremes = {};
+    found.forEach(r => {
+      const m = parseFloat(liveMark[r.coin]);
+      if (m && !hlExtremes[r.coin]) hlExtremes[r.coin] = {lo: m, hi: m};
+    });
+  } catch (e) {}
+}
+setInterval(hlTrackExtremes, 1000);
 function updateWhaleLive() {
   document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
     const coin = row.dataset.coin;
@@ -4008,18 +4044,21 @@ async function fetchCxTotals() {
 }
 setTimeout(fetchCxTotals, 5000);
 setInterval(fetchCxTotals, 300_000);
-function cxSumsGlobal(rangeMs, want) {
-  if (!cxTotals || Date.now() - (cxTotals.t || 0) > 3 * 3600_000) return null; /* stale → not shown (rule) */
+function cxSumsGlobal(rangeMs, want, minute) {
+  const maxAge = minute ? 25 * 60_000 : 3 * 3600_000; /* stale → not shown (rule) */
+  if (!cxTotals || Date.now() - (cxTotals.t || 0) > maxAge) return null;
   let src = null;
+  const coinsMap = minute ? cxTotals.coinsMin : cxTotals.coins;
   if (want) {
-    const c = cxTotals.coins || {};
+    const c = coinsMap || {};
     src = c[want] || c[want.replace(/^K/, "")] || null; /* kPEPE ↔ PEPE */
     if (!src) return null; /* coin not covered by the mirror → caller falls back to session data */
-  } else src = cxTotals.agg;
+  } else src = minute ? cxTotals.aggMin : cxTotals.agg;
   if (!src) return null;
+  const bucket = minute ? 59 : 3599;
   const cutoff = (Date.now() - rangeMs) / 1000;
   let L = 0, S = 0, any = false;
-  Object.entries(src).forEach(([ts, v]) => { if (+ts >= cutoff - 3599) { L += v[0] || 0; S += v[1] || 0; any = true; } });
+  Object.entries(src).forEach(([ts, v]) => { if (+ts >= cutoff - bucket) { L += v[0] || 0; S += v[1] || 0; any = true; } });
   return any ? {L, S} : null;
 }
 function renderCx() {
@@ -4033,6 +4072,10 @@ function renderCx() {
     if (now - ev.t < 3600_000) h1[ev.side] += ev.usd;
     if (now - ev.t < 60_000) { n60++; v60 += ev.usd; }
   });
+  const gH = cxSumsGlobal(3600_000, want, true);
+  const h1u = gH || h1;
+  const hTip = gH ? "Last hour — MARKET-WIDE (minute-level via the bot's Coinalyze feed, refreshed ~10 min)"
+                  : "Last hour — longs (▼ forced sells) vs shorts (▲ forced buys), observed live";
   const gD = cxSumsGlobal(86_400_000, want), gW = cxSumsGlobal(7 * 86_400_000, want);
   const d1 = gD || cxSums(86_400_000, want), w1 = gW || cxSums(7 * 86_400_000, want);
   const dTip = gD ? "Last 24h — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)"
@@ -4047,7 +4090,7 @@ function renderCx() {
     '<b style="color:var(--up)" title="shorts liquidated (forced buys)">▲ ' + fmtBig(o.S) + "</b></span>";
   const stats = '<div class="cx-stats">' +
     (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
-    pair("1h", h1, "Last hour — longs (▼ forced sells) vs shorts (▲ forced buys), observed live") +
+    pair("1h" + (gH ? " 🌐" : ""), h1u, hTip) +
     pair("1D" + (gD ? " 🌐" : ""), d1, dTip) +
     pair("1W" + (gW ? " 🌐" : ""), w1, wTip) +
     '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
@@ -4062,7 +4105,9 @@ function renderCx() {
     const long = ev.side === "L";
     return '<div class="cx-row' + (ev.usd >= 250_000 ? " big" : "") + (ev.usd >= 1_000_000 && now - ev.t < 60_000 ? " flash-red" : "") + '">' +
       '<span class="when">' + new Date(ev.t).toLocaleTimeString("en-GB") + "</span>" +
-      '<span class="ex"' + (ev.oc ? ' style="color:var(--accent)" title="on-chain DEX liquidation"' : "") + '>' + ev.ex + "</span>" +
+      '<span class="ex"' + (ev.oc ? ' style="color:var(--accent)" title="' +
+        (ev.det ? "DETECTED on-chain: this tracked Hyperliquid whale position crossed its liquidation price and vanished from the book (size = last known value)"
+                : "on-chain DEX liquidation") + '"' : "") + '>' + ev.ex + (ev.det ? "*" : "") + "</span>" +
       '<span class="side-badge ' + (long ? "side-short\" title=\"A LONG was liquidated — forced SELL hit the market\">LONG LIQ" : "side-long\" title=\"A SHORT was liquidated — forced BUY hit the market\">SHORT LIQ") + "</span>" +
       '<span class="c">' + esc(ev.coin) + "</span>" +
       '<span class="px">' + (ev.px > 0 ? "@ " + fmtPrice(ev.px) : "") + "</span>" +
