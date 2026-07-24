@@ -4112,8 +4112,9 @@ function renderCx() {
   const minUsd = want ? 100 : 3000;
   const shown = cxEvents.filter(ev => ev.usd >= minUsd && cxCoinMatch(ev.coin, want)).slice(0, 60);
   const pair = (label, o, tip) =>
-    '<span title="' + tip + '">' + label + ' <b style="color:var(--up)" title="longs liquidated (forced sells)">▼ ' + fmtBig(o.L) + '</b> ' +
-    '<b style="color:var(--down)" title="shorts liquidated (forced buys)">▲ ' + fmtBig(o.S) + "</b></span>";
+    '<span title="' + tip + '">' + label +
+    ' <span class="side-badge side-long" title="longs liquidated (forced sells)">LONG</span> <b style="color:var(--up)" title="longs liquidated (forced sells)">' + fmtBig(o.L) + '</b>' +
+    ' <span class="side-badge side-short" title="shorts liquidated (forced buys)">SHORT</span> <b style="color:var(--down)" title="shorts liquidated (forced buys)">' + fmtBig(o.S) + "</b></span>";
   const stats = '<div class="cx-stats">' +
     (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
     pair("1h" + (gH ? " 🌐" : ""), h1u, hTip) +
