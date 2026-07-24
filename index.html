@@ -524,6 +524,21 @@
   .rd-score { width: 32px; text-align: right; font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
   .rd-why { color: var(--muted); font-size: 10px; margin: 3px 0 0 26px; }
   .rd-why b { color: var(--ink-2); font-weight: 600; }
+  /* radar alert tiers: ≥50 yellow flash, ≥61 red flash, ≥75 (or V≥15) intense fast red + !! badge */
+  .rd-row.al1 { animation: rdA1 1.1s ease-in-out infinite; }
+  .rd-row.al2 { animation: rdA2 0.85s ease-in-out infinite; }
+  .rd-row.al3 { animation: rdA3 0.45s linear infinite; }
+  @keyframes rdA1 { 0%, 100% { background: rgba(250,204,21,0.10); } 50% { background: rgba(250,204,21,0.38); } }
+  @keyframes rdA2 { 0%, 100% { background: rgba(229,72,77,0.14); } 50% { background: rgba(229,72,77,0.45); } }
+  @keyframes rdA3 { 0%, 100% { background: rgba(255,40,40,0.30); box-shadow: inset 0 0 0 1px rgba(255,80,80,0.7); } 50% { background: rgba(255,0,0,0.72); box-shadow: inset 0 0 14px rgba(255,120,120,0.9); } }
+  .rd-row.al3 .rd-coin, .rd-row.al3 .rd-score { color: #fff !important; }
+  .rd-bang { color: #fff; background: #e5484d; font-weight: 900; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 10px; animation: rdA3 0.45s linear infinite; }
+  /* polymarket blocked-markets manager */
+  .pm-blk-bar { cursor: pointer; color: var(--muted); font-size: 10.5px; padding: 6px 14px; border-top: 1px solid var(--grid); user-select: none; }
+  .pm-blk-bar:hover { color: var(--ink-2); }
+  .pm-blk-row { display: flex; align-items: center; gap: 8px; padding: 4px 14px; font-size: 11px; color: var(--ink-2); }
+  .pm-unblock { background: rgba(12,163,12,0.18); color: var(--up); border: 1px solid rgba(12,163,12,0.5); border-radius: 6px; font-size: 9.5px; font-weight: 800; padding: 2px 8px; cursor: pointer; flex-shrink: 0; }
+  .pm-unblock:hover { background: rgba(12,163,12,0.38); }
   .lm-legend { display: flex; gap: 11px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10px; color: var(--ink-2); flex-wrap: wrap; }
   .lm-legend .k { display: inline-flex; align-items: center; gap: 4px; }
   .lm-legend .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
@@ -717,7 +732,9 @@
     </div>
     <div class="grid-stack-item" gs-id="radar">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown.">where the next forced move is most likely · 0-100 · live</span></div>
+        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · ≥75 (or V≥15 = cascade confirmed) intense red + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
+          <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
+          <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:2px 8px">🔔</button></div>
         <div class="panel-body" id="rdBody"><div class="empty">Computing pressure scores…</div></div>
       </div></div>
     </div>
@@ -2670,6 +2687,38 @@ const pmDismissed = {
   save(set) { try { localStorage.setItem(this.key, JSON.stringify([...set].slice(-300))); } catch (e) {} }
 };
 const pmAlertId = t => t.transactionHash || (t.title + "|" + t.timestamp);
+/* markets the user BLOCKED (🚫) — never suggested as alerts again; managed in the collapsible
+   "blocked markets" bar at the bottom of the panel (green UNBLOCK button per market) */
+const pmBlocked = {
+  key: "cryptopulse-pm-blocked",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return {}; } },
+  save(o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
+};
+let pmBlockedOpen = false;
+$("pmBody").addEventListener("click", e => {
+  const blk = e.target.closest("[data-blockslug]");
+  if (blk) {
+    e.preventDefault(); e.stopPropagation();
+    const o = pmBlocked.load();
+    o[blk.dataset.blockslug] = {title: blk.dataset.blocktitle || blk.dataset.blockslug, t: Date.now()};
+    pmBlocked.save(o);
+    const rest = watchStore.get("cryptopulse-pm-odds-alerts", []).filter(a => a.slug !== blk.dataset.blockslug);
+    watchStore.set("cryptopulse-pm-odds-alerts", rest);
+    const al = blk.closest(".bet-alert"); if (al) al.remove();
+    renderPmRows();
+    return;
+  }
+  if (e.target.closest("#pmBlkBar")) {
+    e.preventDefault(); e.stopPropagation();
+    pmBlockedOpen = !pmBlockedOpen; renderPmRows(); return;
+  }
+  const ub = e.target.closest("[data-unblock]");
+  if (ub) {
+    e.preventDefault(); e.stopPropagation();
+    const o = pmBlocked.load(); delete o[ub.dataset.unblock]; pmBlocked.save(o);
+    renderPmRows(); return;
+  }
+});
 $("pmBody").addEventListener("click", e => {
   const x = e.target.closest(".bet-x");
   if (!x) return;
@@ -2733,15 +2782,16 @@ function trackOddsMoves(oddsNow) {
   const hist = watchStore.get("cryptopulse-pm-odds", {});
   const now = Date.now();
   const snooze = watchStore.get("cryptopulse-pm-odds-snooze", {});
+  const blkMap = pmBlocked.load();
   const pre = watchStore.get("cryptopulse-pm-odds-alerts", []);
   /* keep only recent alerts and ONE per market (cleans up any older duplicates too) */
   const bySlug = {};
-  pre.filter(a => a.t > now - 3 * 3_600_000)
+  pre.filter(a => a.t > now - 3 * 3_600_000 && !blkMap[a.slug])
      .forEach(a => { if (!bySlug[a.slug] || a.t > bySlug[a.slug].t) bySlug[a.slug] = a; });
   let stored = Object.values(bySlug);
   let dirty = stored.length !== pre.length, fresh = false;
   oddsNow.forEach(o => {
-    if (!o || !o.slug) return;
+    if (!o || !o.slug || blkMap[o.slug]) return;
     const arr = hist[o.slug] = (hist[o.slug] || []).filter(x => x[0] > now - 2 * 3_600_000);
     /* baseline: sample closest to 1h ago (45–90 min window) */
     const base = arr.filter(x => x[0] <= now - 45 * 60_000 && x[0] >= now - 90 * 60_000)
@@ -2779,6 +2829,7 @@ function trackOddsMoves(oddsNow) {
       '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
       ' <span class="pm-outcome' + pmSideClass(a.label) + '">' + esc(a.label) + "</span>" +
       '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
+      '<button class="bet-x" data-blockslug="' + esc(a.slug) + '" data-blocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list below)">🚫</button>' +
       '<button class="bet-x" data-odds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
       '<div class="b2">' + esc(a.title) + "</div></a>";
   }).join("");
@@ -2802,11 +2853,17 @@ function renderPmRows() {
   const q = ($("pmSearch").value || "").trim();
   const Q = q.toUpperCase();
   const list = Q ? pmCards.filter(c => c.t.toUpperCase().includes(Q)) : pmCards.slice(0, 10);
+  const blkO = pmBlocked.load(), blkN = Object.keys(blkO).length;
+  const blkBar = '<div class="pm-blk-bar" id="pmBlkBar" title="Markets you blocked from alerts — click to manage">🚫 blocked markets (' + blkN + ") " + (pmBlockedOpen ? "▾" : "▸") + "</div>" +
+    (pmBlockedOpen ? (blkN ? Object.entries(blkO).map(([slug, o]) =>
+        '<div class="pm-blk-row"><button class="pm-unblock" data-unblock="' + esc(slug) + '" title="Unblock — this market can be suggested as an alert again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
+      : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use 🚫 on any alert</div>') : "");
   body.innerHTML = pmAlertsHTML + pmOddsAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
       (pmCards.length && !Q ? "" : "")) +
     (Q.length >= 3 ? '<div id="pmRemote"><div class="empty">Searching all of Polymarket…</div></div>' :
-      (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
+      (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : "")) +
+    blkBar;
   $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
 }
 let kalshiCache = {t: 0, data: null};
@@ -2892,9 +2949,12 @@ async function loadPolymarket() {
     const trades = await fetchJSON("https://data-api.polymarket.com/trades?limit=200&takerOnly=true&filterType=CASH&filterAmount=100000");
     const cutoff = Date.now() / 1000 - 3 * 3600;
     const dismissed = pmDismissed.load();
+    const blkO = pmBlocked.load();
+    const blkTitles = new Set(Object.values(blkO).map(x => (x.title || "").toUpperCase()));
     const hits = (Array.isArray(trades) ? trades : [])
       .filter(t => t.timestamp >= cutoff && PM_ALERT_RE.test(t.title || "") && !PM_EXCLUDE.test(t.title || ""))
       .filter(t => !dismissed.has(pmAlertId(t)))
+      .filter(t => !blkO[t.eventSlug] && !blkTitles.has((t.title || "").toUpperCase()))
       .sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
     /* sound on alerts not yet announced this session */
     const fresh = hits.filter(t => !pmSeenSession.has(pmAlertId(t)));
@@ -2911,6 +2971,7 @@ async function loadPolymarket() {
           '<div class="b1">🚨 <span class="bet-amt">' + fmtBig(usd) + "</span> " + esc(t.side || "") +
           " “" + esc(t.outcome || "") + "”" +
           '<span class="wrow-meta" style="margin-left:auto" data-ts="' + (t.timestamp * 1000) + '">' + timeAgo(t.timestamp * 1000) + "</span>" +
+          '<button class="bet-x" data-blockslug="' + esc(t.eventSlug || t.title || "") + '" data-blocktitle="' + esc(t.title || "") + '" title="BLOCK this market — never alert on it again">🚫</button>' +
           '<button class="bet-x" data-id="' + esc(pmAlertId(t)) + '" title="Dismiss this alert">✕</button></div>' +
           '<div class="b2">' + esc(t.title || "") + " · @ " + (t.price != null ? (t.price * 100).toFixed(0) + "¢" : "?") + "</div>" +
         "</a>";
@@ -4283,6 +4344,16 @@ function renderRadar() {
       parts: [Math.round(wallScore), Math.round(fScore), Math.round(vScore), Math.round(mScore)]});
   });
   rows.sort((a, b) => b.score - a.score);
+  /* ---- alert levels: ALL scored coins are monitored, not just the visible top 10 ----
+     lvl 1 ≥50 · lvl 2 ≥61 · lvl 3 ≥75 OR V-component ≥15 (backtest: V alone caught 43% of
+     cascades — it means the cascade is CONFIRMED even if the total score lags) */
+  rows.forEach(r => {
+    r.lvl = (r.score >= 75 || r.parts[2] >= 15) ? 3 : r.score >= 61 ? 2 : r.score >= 50 ? 1 : 0;
+    const st = rdAlState[r.coin] || (rdAlState[r.coin] = {lvl: 0, muted: 0, lastT: {}});
+    if (r.lvl > st.lvl && r.lvl > st.muted) rdSound(r.lvl, r.coin);
+    if (r.lvl < st.muted) st.muted = 0; /* dropped below the silenced level → re-arm the sound */
+    st.lvl = r.lvl;
+  });
   const top = rows.slice(0, 10);
   if (!top.length) { body.innerHTML = '<div class="empty">Waiting for the position books…</div>'; return; }
   body.innerHTML = top.map((r, i) => {
@@ -4293,10 +4364,11 @@ function renderRadar() {
     why.push("funding <b>" + (r.h.fund * 100).toFixed(4) + "%/h</b>");
     if (r.V > 0) why.push("liqs 15m <b>" + fmtBig(r.V) + "</b> (L " + fmtBig(r.v.L) + " · S " + fmtBig(r.v.S) + ")");
     if (r.dOi) why.push("OI 24h <b>" + (r.dOi > 0 ? "+" : "") + r.dOi.toFixed(1) + "%</b>");
-    const col = r.score >= 70 ? "var(--down)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
-    return '<div class="rd-row" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum">' +
+    const col = r.lvl >= 2 ? "var(--down)" : r.lvl >= 1 ? "var(--warn)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
+    return '<div class="rd-row' + (r.lvl ? " al" + r.lvl : "") + '" data-coin="' + esc(r.coin) + '" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum' + (r.lvl ? " — click to silence the sound (keeps flashing)" : "") + '">' +
       '<div class="rd-top"><span class="rd-rank">' + (i + 1) + '</span><span class="rd-coin">' + esc(r.coin) + '</span>' +
       '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '">' + (r.down ? "🔻 DOWN" : "🔺 UP") + "</span>" +
+      (r.lvl >= 3 ? '<span class="rd-bang">!! CASCADE</span>' : "") +
       '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
       '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +
       '<div class="rd-why">' + why.join(" · ") + "</div></div>";
@@ -4304,6 +4376,68 @@ function renderRadar() {
   const sub = $("rdSub");
   if (sub) sub.textContent = "where the next forced move is most likely · " + rows.length + " coins scored · live";
 }
+/* ---- radar alert sounds: own volume/mute (separate from Polymarket's), click-to-silence ---- */
+const rdAlState = {};
+let rdMuted = false, rdVolV = 0.6;
+try { rdMuted = localStorage.getItem("cryptopulse-rd-mute") === "1"; } catch (e) {}
+try { const v = parseFloat(localStorage.getItem("cryptopulse-rd-vol")); if (isFinite(v) && v >= 0 && v <= 1) rdVolV = v; } catch (e) {}
+const rdAudio = {1: new Audio("sounds/alert-yellow-50.mp3"), 2: new Audio("sounds/alert-red-61.mp3")};
+let rdPendingKind = 0;
+function rdVoice() {
+  try {
+    const synth = window.speechSynthesis; if (!synth) return;
+    const vs = synth.getVoices();
+    const v = vs.find(x => /Google US English/i.test(x.name)) || vs.find(x => /en[-_]US/i.test(x.lang)) || vs[0];
+    const u = new SpeechSynthesisUtterance("Cascade happening! Cascade happening!");
+    if (v) u.voice = v;
+    u.rate = 1.0; u.pitch = 0.95; u.volume = Math.max(0.2, rdVolV);
+    synth.cancel(); synth.speak(u);
+  } catch (e) {}
+}
+function rdPlayKind(kind) {
+  if (rdMuted || rdVolV <= 0) return;
+  if (kind >= 3) { rdVoice(); return; }
+  const a = rdAudio[kind]; if (!a) return;
+  try { a.volume = rdVolV; a.currentTime = 0; a.play().catch(() => { rdPendingKind = kind; }); } catch (e) {}
+}
+document.addEventListener("pointerdown", () => { if (rdPendingKind) { const k = rdPendingKind; rdPendingKind = 0; rdPlayKind(k); } });
+function rdSound(lvl, coin) {
+  const st = rdAlState[coin]; if (!st) return;
+  const nowT = Date.now();
+  if (st.lastT[lvl] && nowT - st.lastT[lvl] < 90_000) return; /* cooldown per coin+level */
+  st.lastT[lvl] = nowT;
+  rdPlayKind(lvl);
+}
+function rdStopSounds() {
+  Object.values(rdAudio).forEach(a => { try { a.pause(); a.currentTime = 0; } catch (e) {} });
+  try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+}
+document.getElementById("rdBody").addEventListener("click", e => {
+  const row = e.target.closest(".rd-row"); if (!row || !row.dataset.coin) return;
+  const st = rdAlState[row.dataset.coin];
+  rdStopSounds();
+  if (st && st.lvl) st.muted = st.lvl; /* keeps flashing — just no more sound until it escalates */
+});
+(() => {
+  const b = document.getElementById("rdSound"), s = document.getElementById("rdVol");
+  const paint = () => { if (b) { b.textContent = rdMuted ? "🔕" : "🔔"; b.title = rdMuted ? "Radar sounds OFF — click to enable" : "Radar sounds ON — click to mute"; } };
+  if (b) b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    rdMuted = !rdMuted;
+    try { localStorage.setItem("cryptopulse-rd-mute", rdMuted ? "1" : "0"); } catch (er) {}
+    paint(); if (!rdMuted) rdPlayKind(1);
+  });
+  if (s) {
+    s.value = Math.round(rdVolV * 100);
+    s.addEventListener("input", () => { rdVolV = (+s.value) / 100; });
+    s.addEventListener("change", () => {
+      try { localStorage.setItem("cryptopulse-rd-vol", String(rdVolV)); } catch (e) {}
+      if (!rdMuted && rdVolV > 0) rdPlayKind(1);
+    });
+    ["pointerdown", "mousedown", "touchstart", "click"].forEach(ev => s.addEventListener(ev, e => e.stopPropagation()));
+  }
+  paint();
+})();
 rdFetchHl(); rdFetchBook(); rdFetchOiRef();
 setInterval(rdFetchHl, 90_000);
 setInterval(rdFetchBook, 120_000);
