@@ -3141,6 +3141,7 @@ function pmEventCard(ev, opts) {
    Dismissing (✕) snoozes that market for 10 min — if it still qualifies after, it may return. */
 let pmOddsAlertsHTML = "";
 function trackOddsMoves(oddsNow) {
+  const pmActive = panelActive("polymarket");
   const hist = watchStore.get("cryptopulse-pm-odds", {});
   const now = Date.now();
   const snooze = watchStore.get("cryptopulse-pm-odds-snooze", {});
@@ -3180,7 +3181,8 @@ function trackOddsMoves(oddsNow) {
   });
   watchStore.set("cryptopulse-pm-odds", hist);
   if (dirty) watchStore.set("cryptopulse-pm-odds-alerts", stored.slice(-8));
-  if (fresh) playBeep();
+  if (fresh && pmActive) playBeep();
+  if (!pmActive) { pmOddsAlertsHTML = ""; return; }
   const act = stored.filter(a => a.t > now - 3 * 3_600_000);
   pmOddsAlertsHTML = act.map(a => {
     const up = a.delta > 0;
@@ -3296,6 +3298,7 @@ function kaEventCard(ev) {
 }
 /* odds-move tracker — same 10pp/1h rule and stores as Polymarket, ka-prefixed */
 function kaTrackOddsMoves(oddsNow) {
+  const kaActive = panelActive("kalshi");
   const hist = watchStore.get("cryptopulse-ka-odds", {});
   const now = Date.now();
   const snooze = watchStore.get("cryptopulse-ka-odds-snooze", {});
@@ -3311,7 +3314,7 @@ function kaTrackOddsMoves(oddsNow) {
     const arr = hist[o.slug] = (hist[o.slug] || []).filter(x => x[0] > now - 2 * 3_600_000);
     const base = arr.filter(x => x[0] <= now - 45 * 60_000 && x[0] >= now - 90 * 60_000)
       .sort((a, b) => Math.abs((now - 3_600_000) - a[0]) - Math.abs((now - 3_600_000) - b[0]))[0];
-    if (base) {
+    if (base && kaActive) {
       const delta = o.pct - base[1];
       const snoozedAt = snooze[o.slug];
       if (Math.abs(delta) >= 10 && !(snoozedAt && now - snoozedAt < 10 * 60_000)) {
@@ -3332,7 +3335,8 @@ function kaTrackOddsMoves(oddsNow) {
   });
   watchStore.set("cryptopulse-ka-odds", hist);
   if (dirty) watchStore.set("cryptopulse-ka-odds-alerts", stored.slice(-8));
-  if (fresh) playBeep();
+  if (fresh && kaActive) playBeep();
+  if (!kaActive) { kaOddsAlertsHTML = ""; return; }
   const act = stored.filter(a => a.t > now - 3 * 3_600_000);
   kaOddsAlertsHTML = act.map(a => {
     const up = a.delta > 0;
@@ -3525,7 +3529,7 @@ async function loadPolymarket() {
         const usd = (t.size || 0) * (t.price || 0) || t.size || 0;
         alLog("pm", "big bet " + fmtBig(usd) + " " + (t.side || "") + " “" + (t.outcome || "") + "” — " + (t.title || ""));
       });
-      playBeep();
+      if (panelActive("polymarket")) playBeep();
     }
     if (hits.length) {
       alertActive = true;
@@ -5243,7 +5247,11 @@ const alStore = {
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a.slice(0, 300))); } catch (e) {} }
 };
 let acFilter = "ALL";
+/* alerts follow the layout: a hidden indicator does not log, chime or fill the Alert Center */
+const AC_SRC_PANEL = {radar: "radar", pm: "polymarket", kalshi: "kalshi", whale: "cexliq"};
+function panelActive(id) { return !hiddenStore.load().includes(id); }
 function alLog(kind, txt) {
+  if (AC_SRC_PANEL[kind] && !panelActive(AC_SRC_PANEL[kind])) return; /* source panel is hidden */
   const a = alStore.load();
   a.unshift({t: Date.now(), k: kind, x: txt});
   alStore.save(a.filter(e => e.t > Date.now() - 24 * 3600_000));
@@ -5260,8 +5268,10 @@ function renderAC() {
   const body = $("acBody"); if (!body) return;
   const map = {RADAR: "radar", PM: "pm", KALSHI: "kalshi", WHALE: "whale"};
   const bots = (botAlLog.entries || []).map(e => ({t: e.t, k: e.k, x: e.x, bot: true}));
+  const hidden = new Set(hiddenStore.load());
   const a = alStore.load().concat(bots)
     .filter(e => e.t > Date.now() - 24 * 3600_000)
+    .filter(e => !AC_SRC_PANEL[e.k] || !hidden.has(AC_SRC_PANEL[e.k])) /* only ACTIVE indicators alert */
     .filter(e => acFilter === "ALL" || e.k === map[acFilter])
     .sort((x, y) => y.t - x.t);
   if (!a.length) {
