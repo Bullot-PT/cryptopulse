@@ -3243,12 +3243,13 @@ const kaLink = ev => "https://kalshi.com/markets/" + encodeURIComponent(((ev.s |
 function kaLeader(ev) {
   const mkts = (ev.m || []).filter(x => x.y != null);
   if (!mkts.length) return null;
+  const trim = t => t.length > 46 ? t.slice(0, 45) + "…" : t;
   if (mkts.length > 1) {
     const top = mkts.slice().sort((a, b) => (b.y || 0) - (a.y || 0))[0];
-    return {pct: top.y, label: (top.ti || "Yes") + " · Yes"};
+    return {pct: top.y, label: trim(top.ti || "Yes") + " · Yes"};
   }
   const y = mkts[0].y;
-  return y >= 50 ? {pct: y, label: (mkts[0].ti ? mkts[0].ti + " · " : "") + "Yes"}
+  return y >= 50 ? {pct: y, label: (mkts[0].ti ? trim(mkts[0].ti) + " · " : "") + "Yes"}
                  : {pct: 100 - y, label: "No"};
 }
 function kaEventCard(ev) {
@@ -3350,7 +3351,8 @@ $("kaBody").addEventListener("click", e => {
 function renderKaRows() {
   const body = $("kaBody"); if (!body) return;
   const q = ($("kaSearch").value || "").trim().toUpperCase();
-  const list = q ? kaCards.filter(c => c.t.toUpperCase().includes(q)).slice(0, 40) : kaCards.slice(0, 10);
+  const list = q ? kaCards.filter(c => c.t.toUpperCase().includes(q)).slice(0, 40)
+                 : kaCards.filter(c => c.topical).slice(0, 10);
   body.innerHTML = kaOddsAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
       '<div class="empty">' + (q ? "Nothing on Kalshi for “" + esc(q.toLowerCase()) + "” (searches all " + kaCards.length + " mirrored markets)." : "Kalshi mirror not built yet — the repo bot creates it on its next run.") + "</div>");
@@ -3365,9 +3367,13 @@ async function loadKalshiPanel() {
   kaMirrorT = j.t || 0;
   const blkMap = kaBlocked.load();
   const cards = [], oddsNow = [];
+  /* Kalshi floods with sports parlays whose "titles" are joined market legs ("yes Milwaukee,yes …").
+     Those slip past the sport-name regex — catch them by shape, not by league name. */
+  const kaJunk = t => t.length > 110 || /,\s*yes\s/i.test(t) || /^yes\s/i.test(t) ||
+    /\bteams? to score\b|\bwins by over\b|\bby over \d|\bparlay\b|\b(runs|goals|points|touchdowns)\b/i.test(t);
   for (const ev of j.events) {
     const text = ev.t || "";
-    if (PM_EXCLUDE.test(text)) continue;                    /* same no-sports rule as Polymarket */
+    if (PM_EXCLUDE.test(text) || kaJunk(text)) continue;    /* same no-sports rule as Polymarket + parlay shape */
     const led = kaLeader(ev);
     cards.push({t: text, tk: ev.tk, topical: PM_INCLUDE.test(text), h: kaEventCard(ev)});
     if (led && !blkMap[ev.tk] && PM_INCLUDE.test(text))
