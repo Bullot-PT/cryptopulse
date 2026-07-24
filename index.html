@@ -4594,7 +4594,7 @@ function renderRadar() {
     const col = r.lvl >= 2 ? "var(--down)" : r.lvl >= 1 ? "var(--warn)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
     return '<div class="rd-row' + (r.lvl ? " al" + r.lvl : "") + '" data-coin="' + esc(r.coin) + '" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum' + (r.lvl ? " — click to silence the sound (keeps flashing)" : "") + '">' +
       '<div class="rd-top"><span class="rd-rank">' + r.rank + '</span><a class="rd-coin" href="https://www.tradingview.com/chart/?symbol=BINANCE%3A' + esc(r.coin.replace(/^k/, "1000")) + 'USDT.P" target="_blank" rel="noopener" title="Open the ' + esc(r.coin) + ' chart on TradingView">' + esc(r.coin) + "</a>" +
-      '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '">' + (r.down ? "🔻 DOWN" : "🔺 UP") + "</span>" +
+      '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '" title="' + (r.down ? "SHORT setup — the dominant fuel points DOWN (longs at risk of liquidation)" : "LONG setup — the dominant fuel points UP (shorts at risk of liquidation)") + '">' + (r.down ? "🔻 SHORT" : "🔺 LONG") + "</span>" +
       (r.lvl >= 3 ? '<span class="rd-bang' + (r.down ? "" : " up") + '">!! ' + (r.down ? "SHORT" : "LONG") + " CASCADE</span>" : "") +
       '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
       '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +

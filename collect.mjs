@@ -620,7 +620,7 @@ try {
     rdNew[r.coin] = { lvl, t: fire ? now : prev.t };
     if (fire && !firstRun) {
       const head = lvl >= 3 ? '\ud83d\udea8 *' + (r.down ? 'SHORT' : 'LONG') + ' CASCADE \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*';
-      queue.push(head + ' ' + (r.down ? '\ud83d\udd3b DOWN' : '\ud83d\udd3a UP') +
+      queue.push(head + ' ' + (r.down ? '\ud83d\udd3b SHORT' : '\ud83d\udd3a LONG') +
         '\n' + fmtBig(r.wall) + ' in liq walls \u00b15%' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
         '\nliqs 15m ' + fmtBig(r.liq15) + ' \u00b7 funding ' + (r.fund * 100).toFixed(4) + '%/h \u00b7 OI 24h ' + (r.dOi > 0 ? '+' : '') + r.dOi.toFixed(1) + '%' +
         '\nW' + r.w + ' F' + r.f + ' V' + r.vv + ' OI' + r.m);
