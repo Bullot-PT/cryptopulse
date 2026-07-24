@@ -4423,13 +4423,20 @@ $("lmBody").addEventListener("wheel", e => {
   if (now - lmSaveT > 700) { lmSaveT = now; try { localStorage.setItem("cryptopulse-liqmap-range", String(lmRange)); } catch (err) {} }
 }, {passive: false});
 function lmResolveCoin(c) {
-  /* map typed names to xyz RWA markets: "XYZGOLD", "GOLD" or "xyz:GOLD" all resolve to "xyz:GOLD"
-     (only when the name is NOT already a crypto coin we know — BTC stays BTC) */
+  /* map typed names to xyz RWA markets: "XYZGOLD", "GOLD", "xyz:GOLD" — and PARTIAL names too:
+     "BRENT" → xyz:BRENTOIL. Crypto coins we already know (BTC…) always keep priority. */
   const known = new Set(Object.keys(liveMark));
   if (known.has(c)) return c;
   const norm = x => x.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const dir = new Set(Object.keys(xyzMidsCache.mids).concat(Object.keys((lmBotBook.coins) || {}).filter(k => k.startsWith("xyz:"))));
+  const dir = [...new Set(Object.keys(xyzMidsCache.mids).concat(Object.keys((lmBotBook.coins) || {}).filter(k => k.startsWith("xyz:"))))];
   for (const k of dir) { const nk = norm(k); if (nk === c || nk === "XYZ" + c) return k; }
+  if (c.length >= 3) {
+    const base = k => norm(k).replace(/^XYZ/, "");
+    const starts = dir.filter(k => base(k).startsWith(c)).sort((a, b) => a.length - b.length);
+    if (starts.length) return starts[0]; /* shortest match wins: BRENT → BRENTOIL */
+    const has = dir.filter(k => base(k).includes(c)).sort((a, b) => a.length - b.length);
+    if (has.length) return has[0];
+  }
   return c;
 }
 function lmAddCoin() {
