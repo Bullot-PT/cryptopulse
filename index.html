@@ -3773,6 +3773,22 @@ setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books
 /* ---------------- CEX live liquidations (Binance !forceOrder + Bybit allLiquidation, real-time WS) ---------------- */
 const cxEvents = []; /* newest first: {t, ex, coin, side: 'L'(long liq→forced sell)|'S'(short liq→forced buy), usd, px} */
 let cxDirty = false, cxConnected = {bn: false, by: false, ok: false, bm: false, dr: false, dd: false, lg: false, gx: false};
+/* the feed + the live 1h stat survive refreshes: events are restored from localStorage (24h window).
+   Restored events are NOT re-added to the cxHist hourly buckets — they were already counted. */
+let cxEvDirty = false;
+const cxEvStore = {
+  key: "cryptopulse-cx-events",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  save() { try { localStorage.setItem(this.key, JSON.stringify(cxEvents.slice(0, 1500))); } catch (e) {} }
+};
+{
+  const cut = Date.now() - 86_400_000;
+  cxEvStore.load().forEach(ev => { if (ev && ev.t > cut && ev.usd > 0) cxEvents.push(ev); });
+  cxEvents.sort((a, b) => b.t - a.t);
+  if (cxEvents.length > 1500) cxEvents.length = 1500;
+}
+setInterval(() => { if (cxEvDirty) { cxEvDirty = false; cxEvStore.save(); } }, 10_000);
+window.addEventListener("pagehide", () => cxEvStore.save());
 const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
 /* coin filter: ALL / BTC / ETH / SOL / HYPE / CUSTOM(typed token). kPEPE matches PEPE both ways. */
 let cxFilter = (() => { try { return localStorage.getItem("cryptopulse-cx-filter") || "ALL"; } catch (e) { return "ALL"; } })();
@@ -3817,6 +3833,7 @@ function cxAdd(ev) {
   const cc = b.c[ev.coin] || (b.c[ev.coin] = [0, 0]);
   cc[ev.side === "L" ? 0 : 1] += ev.usd;
   cxHistDirty = true;
+  cxEvDirty = true;
   cxDirty = true;
 }
 function connectBinanceLiqs() {
@@ -3975,7 +3992,7 @@ function connectDydxLiqs() {
 }
 /* Lighter — ON-CHAIN liquidations via the public trade tape (trades carry a type field);
    polled gently to respect their rate limit, deduped by trade_id */
-let cxLgMkts = null; const cxLgSeen = new Set();
+let cxLgMkts = null; const cxLgSeen = new Set(cxEvents.filter(e => e.ex === "LIGHTER" && e.id != null).map(e => e.id));
 async function pollLighterLiqs() {
   try {
     if (!cxLgMkts) {
@@ -3995,7 +4012,7 @@ async function pollLighterLiqs() {
           const px = parseFloat(t.price) || 0;
           if (!(usd > 0) || !px) return;
           /* taker is the forced side: maker on ask → taker BOUGHT → short liquidated */
-          cxAdd({t: t.timestamp ? t.timestamp * (t.timestamp > 2e12 ? 1 : 1000) : Date.now(), ex: "LIGHTER", oc: 1, coin: cxNorm(m.sym), side: t.is_maker_ask ? "S" : "L", usd, px});
+          cxAdd({t: t.timestamp ? t.timestamp * (t.timestamp > 2e12 ? 1 : 1000) : Date.now(), ex: "LIGHTER", oc: 1, id: key, coin: cxNorm(m.sym), side: t.is_maker_ask ? "S" : "L", usd, px});
         });
       } catch (e) {}
       await new Promise(r => setTimeout(r, 700));
@@ -4005,7 +4022,7 @@ async function pollLighterLiqs() {
   } catch (e) { cxConnected.lg = false; }
 }
 /* GMX — ON-CHAIN liquidations from their public indexer (orderType 7 = Liquidation), polled */
-let cxGmxMap = null, cxGmxInit = false; const cxGmxSeen = new Set();
+let cxGmxMap = null, cxGmxInit = false; const cxGmxSeen = new Set(cxEvents.filter(e => e.ex === "GMX" && e.id).map(e => e.id));
 async function pollGmxLiqs() {
   try {
     if (!cxGmxMap) {
@@ -4034,7 +4051,7 @@ async function pollGmxLiqs() {
       let px = parseFloat(a.executionPrice) || 0;
       if (live > 0 && px > 0) { while (px > live * 3.163) px /= 10; while (px < live / 3.163) px *= 10; }
       else px = 0; /* unknown decimals without a live ref — hide the price, keep the real $ */
-      cxAdd({t: a.timestamp * 1000, ex: "GMX", oc: 1, coin: cxNorm(base), side: a.isLong ? "L" : "S", usd, px});
+      cxAdd({t: a.timestamp * 1000, ex: "GMX", oc: 1, id: a.id, coin: cxNorm(base), side: a.isLong ? "L" : "S", usd, px});
     });
     cxGmxInit = true;
     cxConnected.gx = true;
@@ -4095,8 +4112,8 @@ function renderCx() {
   const minUsd = want ? 100 : 3000;
   const shown = cxEvents.filter(ev => ev.usd >= minUsd && cxCoinMatch(ev.coin, want)).slice(0, 60);
   const pair = (label, o, tip) =>
-    '<span title="' + tip + '">' + label + ' <b style="color:var(--down)" title="longs liquidated (forced sells)">▼ ' + fmtBig(o.L) + '</b> ' +
-    '<b style="color:var(--up)" title="shorts liquidated (forced buys)">▲ ' + fmtBig(o.S) + "</b></span>";
+    '<span title="' + tip + '">' + label + ' <b style="color:var(--up)" title="longs liquidated (forced sells)">▼ ' + fmtBig(o.L) + '</b> ' +
+    '<b style="color:var(--down)" title="shorts liquidated (forced buys)">▲ ' + fmtBig(o.S) + "</b></span>";
   const stats = '<div class="cx-stats">' +
     (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
     pair("1h" + (gH ? " 🌐" : ""), h1u, hTip) +
