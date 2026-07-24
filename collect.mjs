@@ -223,6 +223,8 @@ try {
         else y = bY || aY || null;
       }
       const et = m.event_ticker || m.ticker;
+      /* sports multi-leg parlays (KXMVE…MULTIGAME…) flood the volume ranking with joined-leg junk — skip at source */
+      if (/MULTIGAME|^KXMVE/i.test(et || '') || /,\s*(yes|no)\s/i.test(m.title || '')) return;
       const v = m.volume_24h ?? m.volume ?? (parseFloat(m.volume_24h_fp) || parseFloat(m.volume_fp) || 0);
       const e = evMap[et] || (evMap[et] = { m: [], vol: 0 });
       e.m.push({ tk: m.ticker, ti: m.title || m.yes_sub_title || '', y: y ?? null, v });
