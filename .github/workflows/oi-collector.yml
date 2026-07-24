@@ -19,6 +19,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
           SOLANA_RPC: ${{ secrets.SOLANA_RPC }}
+          COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
       - name: Commit history
         run: |
           git config user.name "oi-collector-bot"
