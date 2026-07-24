@@ -576,7 +576,8 @@
   <span class="hint">drag panels by their header · drag edges to resize</span>
   <button class="btn-ghost" id="lockBtn" title="Lock the layout so panels can't be moved or resized by accident">🔓</button>
   <button class="btn-ghost" id="indBtn" title="Add or remove indicators from your layout">🧩 Indicators</button>
-  <button class="btn-ghost" id="resetLayout" title="Restore the default panel arrangement">Reset layout</button>
+  <button class="btn-ghost" id="saveLayout" title="Save the CURRENT arrangement (positions, sizes and hidden indicators) as YOUR preset — Reset layout will restore it">💾 Save layout</button>
+  <button class="btn-ghost" id="resetLayout" title="Restore your saved preset (or the default arrangement if you haven't saved one)">Reset layout</button>
   <div class="updated"><span class="pulse-dot" id="liveDot" title="Live WebSocket feed"></span><span id="updatedAt">connecting…</span></div>
 </header>
 
@@ -875,6 +876,7 @@ function initGrid() {
   });
   document.getElementById("resetLayout").addEventListener("click", () => {
     layoutStore.clear();
+    if (typeof applyUserPreset === "function" && applyUserPreset()) return; /* user's own saved preset wins */
     applyLayout(DEFAULT_LAYOUT);
   });
 }
@@ -986,6 +988,37 @@ $("lockBtn").addEventListener("click", e => {
   applyLock();
 });
 applyLock();
+/* personal layout preset: 💾 saves the current arrangement; Reset restores it (default only if none saved) */
+const presetStore = {
+  key: "cryptopulse-layout-preset",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
+  save(v) { try { localStorage.setItem(this.key, JSON.stringify(v)); } catch (e) {} }
+};
+function applyUserPreset() {
+  const p = presetStore.load();
+  if (!p || !Array.isArray(p.layout) || !p.layout.length) return false;
+  const wantHidden = new Set(p.hidden || []);
+  [...document.querySelectorAll(".grid-stack-item")].forEach(el => {
+    const id = el.getAttribute("gs-id");
+    const isHidden = hiddenStore.load().includes(id);
+    if (wantHidden.has(id) && !isHidden) hidePanel(id);
+    else if (!wantHidden.has(id) && isHidden) showPanel(id);
+  });
+  applyLayout(p.layout);
+  layoutStore.set(p.layout);
+  indPaint();
+  return true;
+}
+$("saveLayout").addEventListener("click", e => {
+  e.preventDefault(); e.stopPropagation();
+  try {
+    const items = grid.engine.nodes.map(n => ({id: n.el.getAttribute("gs-id"), x: n.x, y: n.y, w: n.w, h: n.h}));
+    presetStore.save({layout: items, hidden: hiddenStore.load(), t: Date.now()});
+    const b = $("saveLayout");
+    b.textContent = "✓ saved!";
+    setTimeout(() => { b.textContent = "💾 Save layout"; }, 1600);
+  } catch (er) {}
+});
 
 function timeAgo(tsMs) {
   const s = Math.max(0, (Date.now() - tsMs) / 1000);
