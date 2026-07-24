@@ -499,7 +499,7 @@
   .cx-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .cx-row { display: flex; align-items: center; gap: 8px; padding: 3.5px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 11.5px; }
   .cx-row .when { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; width: 52px; }
-  .cx-row .ex { font-size: 9.5px; font-weight: 700; color: var(--muted); width: 48px; letter-spacing: .02em; }
+  .cx-row .ex { font-size: 9.5px; font-weight: 700; color: var(--muted); width: 62px; letter-spacing: .02em; }
   .cx-row .c { font-weight: 700; width: 56px; }
   .cx-row .v { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 650; }
   .cx-row .px { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; width: 76px; text-align: right; }
@@ -682,7 +682,7 @@
     </div>
     <div class="grid-stack-item" gs-id="cexliq">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub">Binance · Bybit · OKX · BitMEX · Deribit</span>
+        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub" title="CEX: Binance, Bybit, OKX, BitMEX, Deribit · on-chain (⛓): dYdX v4, Lighter">Binance · Bybit · OKX · BitMEX · Deribit · dYdX ⛓ · Lighter ⛓</span>
           <span id="cxFlt" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">
             <button class="src-btn" data-cxf="ALL">ALL</button>
             <button class="src-btn" data-cxf="BTC">BTC</button>
@@ -3397,16 +3397,22 @@ const LM_SOURCES = [
 let lmSrc = (() => { try { return localStorage.getItem("cryptopulse-liqmap-src") || "AGG"; } catch (e) { return "AGG"; } })();
 if (!LM_SOURCES.some(s => s.k === lmSrc)) lmSrc = "AGG";
 /* mouse-wheel zoom: ±range% shown over 24 rows; scroll up = zoom in, down = zoom out */
-const LM_RANGES = [7.5, 10, 15, 20, 30, 40, 50];
+const LM_RANGES = [7.5, 10, 12.5, 15, 20, 25, 30, 40, 50];
 let lmRange = (() => { try { const v = +localStorage.getItem("cryptopulse-liqmap-range"); return LM_RANGES.includes(v) ? v : 30; } catch (e) { return 30; } })();
-let lmWheelAt = 0;
-function lmZoom(dir) { /* dir -1 = in, +1 = out */
+let lmWheelAcc = 0, lmWheelAt = 0;
+function lmZoom(dir) { /* dir -1 = in, +1 = out — soft cross-fade so the step follows the eye */
   const i = LM_RANGES.indexOf(lmRange);
   const ni = Math.min(LM_RANGES.length - 1, Math.max(0, i + dir));
   if (ni === i) return;
   lmRange = LM_RANGES[ni];
   try { localStorage.setItem("cryptopulse-liqmap-range", String(lmRange)); } catch (e) {}
-  renderLiqmap();
+  const b = $("lmBody");
+  if (b) {
+    b.style.transition = "opacity .16s ease";
+    b.style.opacity = "0.45";
+    renderLiqmap();
+    requestAnimationFrame(() => requestAnimationFrame(() => { b.style.opacity = "1"; }));
+  } else renderLiqmap();
 }
 /* manual refresh: bypass the 5-min bucket on the bot book, re-pull lending, force a fresh mids snapshot */
 let lmReloading = false;
@@ -3469,7 +3475,9 @@ function renderLiqmap() {
   /* display buckets: 24 rows over ±lmRange%, re-based to the LIVE price every render.
      Mouse wheel inside the chart zooms the range in/out. */
   const R = lmRange, ST = R / 12;
-  const BK = []; for (let p = -R; p < R - ST / 2; p += ST) BK.push({p, lend: 0, wl: 0, ws: 0});
+  /* index-built buckets: k=12 gives EXACTLY p=0 (float accumulation once produced p≈-1e-14,
+     which dropped the first above-price bucket below the price line) */
+  const BK = []; for (let k = 0; k < 24; k++) BK.push({p: (k - 12) * ST, lend: 0, wl: 0, ws: 0});
   const bIdx = pct => { const i = Math.floor((pct + R) / ST); return i >= 0 && i < BK.length ? i : -1; };
   /* STALE-DATA RULE: a lending snapshot taken at a very different price is old information —
      old information is NOT shown. Excluded entirely (no approximate bars), noted in the sum line. */
@@ -3665,14 +3673,19 @@ $("lmBody").addEventListener("mousemove", e => {
   if (row) lmPopShow(row, e); else lmPop.style.display = "none";
 });
 $("lmBody").addEventListener("mouseleave", () => { lmPop.style.display = "none"; });
-/* wheel inside the chart = zoom (throttled so one notch = one step); page scroll is suppressed there */
+/* wheel inside the chart = zoom. Deltas ACCUMULATE (trackpads send many tiny ones) and one
+   visual step fires per ~notch — no hard time-throttle, so it tracks the hand smoothly. */
 $("lmBody").addEventListener("wheel", e => {
   e.preventDefault();
   const now = Date.now();
-  if (now - lmWheelAt < 180) return;
-  lmWheelAt = now;
-  lmPop.style.display = "none";
-  lmZoom(e.deltaY < 0 ? -1 : 1);
+  if (now - lmWheelAt > 400) lmWheelAcc = 0; /* stale remainder from a previous gesture */
+  lmWheelAcc += e.deltaY;
+  if (Math.abs(lmWheelAcc) >= 60 && now - lmWheelAt >= 90) {
+    lmPop.style.display = "none";
+    lmZoom(lmWheelAcc > 0 ? 1 : -1);
+    lmWheelAcc = 0;
+    lmWheelAt = now;
+  }
 }, {passive: false});
 function lmAddCoin() {
   const el = $("lmAdd");
@@ -3731,7 +3744,7 @@ setInterval(() => lmCoins.forEach(fetchLiqmapCoin), 1_800_000); /* lending books
 
 /* ---------------- CEX live liquidations (Binance !forceOrder + Bybit allLiquidation, real-time WS) ---------------- */
 const cxEvents = []; /* newest first: {t, ex, coin, side: 'L'(long liq→forced sell)|'S'(short liq→forced buy), usd, px} */
-let cxDirty = false, cxConnected = {bn: false, by: false, ok: false, bm: false, dr: false};
+let cxDirty = false, cxConnected = {bn: false, by: false, ok: false, bm: false, dr: false, dd: false, lg: false};
 const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
 /* coin filter: ALL / BTC / ETH / SOL / HYPE / CUSTOM(typed token). kPEPE matches PEPE both ways. */
 let cxFilter = (() => { try { return localStorage.getItem("cryptopulse-cx-filter") || "ALL"; } catch (e) { return "ALL"; } })();
@@ -3907,6 +3920,62 @@ function connectDeribitLiqs() {
   ws.onclose = () => { cxConnected.dr = false; clearInterval(ws._ping); setTimeout(connectDeribitLiqs, 6000); };
   ws.onerror = () => { try { ws.close(); } catch (e) {} };
 }
+/* dYdX v4 — ON-CHAIN liquidations, live: the indexer's trade stream marks type LIQUIDATED */
+const CX_DYDX_MKTS = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "AVAX-USD", "LINK-USD", "SUI-USD"];
+function connectDydxLiqs() {
+  let ws;
+  try { ws = new WebSocket("wss://indexer.dydx.trade/v4/ws"); } catch (e) { setTimeout(connectDydxLiqs, 7000); return; }
+  ws.onopen = () => {
+    cxConnected.dd = true; cxDirty = true;
+    CX_DYDX_MKTS.forEach(id => ws.send(JSON.stringify({type: "subscribe", channel: "v4_trades", id})));
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (m.type !== "channel_data") return; /* the initial 'subscribed' payload is history — skip it */
+    const coin = (m.id || "").split("-")[0];
+    ((m.contents && m.contents.trades) || []).forEach(t => {
+      if (t.type !== "LIQUIDATED" && t.type !== "DELEVERAGED") return;
+      const px = parseFloat(t.price) || 0;
+      const usd = (parseFloat(t.size) || 0) * px;
+      if (!(usd > 0)) return;
+      /* liquidation order side SELL = long liquidated */
+      cxAdd({t: t.createdAt ? Date.parse(t.createdAt) : Date.now(), ex: "DYDX ⛓", coin, side: t.side === "SELL" ? "L" : "S", usd, px});
+    });
+  };
+  ws.onclose = () => { cxConnected.dd = false; setTimeout(connectDydxLiqs, 6000); };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+/* Lighter — ON-CHAIN liquidations via the public trade tape (trades carry a type field);
+   polled gently to respect their rate limit, deduped by trade_id */
+let cxLgMkts = null; const cxLgSeen = new Set();
+async function pollLighterLiqs() {
+  try {
+    if (!cxLgMkts) {
+      const ob = await fetchJSONraw("https://mainnet.zklighter.elliot.ai/api/v1/orderBooks", {timeout: 15000});
+      const want = {BTC: 1, ETH: 1, SOL: 1, HYPE: 1, XRP: 1, DOGE: 1};
+      cxLgMkts = (ob.order_books || []).filter(m => want[m.symbol]).map(m => ({id: m.market_id, sym: m.symbol}));
+    }
+    for (const m of cxLgMkts) {
+      try {
+        const j = await fetchJSONraw("https://mainnet.zklighter.elliot.ai/api/v1/recentTrades?market_id=" + m.id + "&limit=25", {timeout: 15000});
+        (j.trades || []).forEach(t => {
+          if (!/liquidat/i.test(t.type || "")) return;
+          const key = t.trade_id_str || t.trade_id;
+          if (cxLgSeen.has(key)) return;
+          cxLgSeen.add(key);
+          const usd = parseFloat(t.usd_amount) || 0;
+          const px = parseFloat(t.price) || 0;
+          if (!(usd > 0) || !px) return;
+          /* taker is the forced side: maker on ask → taker BOUGHT → short liquidated */
+          cxAdd({t: t.timestamp ? t.timestamp * (t.timestamp > 2e12 ? 1 : 1000) : Date.now(), ex: "LIGHTER ⛓", coin: cxNorm(m.sym), side: t.is_maker_ask ? "S" : "L", usd, px});
+        });
+      } catch (e) {}
+      await new Promise(r => setTimeout(r, 700));
+    }
+    if (cxLgSeen.size > 4000) { const keep = [...cxLgSeen].slice(-2000); cxLgSeen.clear(); keep.forEach(k => cxLgSeen.add(k)); }
+    cxConnected.lg = true;
+  } catch (e) { cxConnected.lg = false; }
+}
 function renderCx() {
   const body = $("cxBody"); if (!body) return;
   const now = Date.now();
@@ -3935,7 +4004,7 @@ function renderCx() {
   const nConn = Object.values(cxConnected).filter(Boolean).length;
   if (!shown.length) {
     body.innerHTML = stats + '<div class="empty">' +
-      (nConn ? nConn + "/5 streams live — waiting for the next " + (want ? esc(want) + " liquidation…" : "liquidation ≥ $3k…") : "Connecting to the liquidation streams…") + "</div>";
+      (nConn ? nConn + "/7 streams live — waiting for the next " + (want ? esc(want) + " liquidation…" : "liquidation ≥ $3k…") : "Connecting to the liquidation streams…") + "</div>";
     return;
   }
   body.innerHTML = stats + shown.map(ev => {
@@ -3989,6 +4058,9 @@ connectBybitLiqs();
 connectOkxLiqs();
 connectBitmexLiqs();
 connectDeribitLiqs();
+connectDydxLiqs();
+setTimeout(pollLighterLiqs, 8000);
+setInterval(pollLighterLiqs, 25_000);
 setInterval(() => { if (cxDirty) { cxDirty = false; renderCx(); } }, 600);
 setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without new events */
 
