@@ -64,6 +64,108 @@ fs.mkdirSync('data', { recursive: true });
 fs.writeFileSync('data/oi-history.json', JSON.stringify(hist));
 console.log('OI samples stored:', hist.samples.length);
 
+// ---------------- Coinalyze: MARKET-WIDE liquidation totals, 24/7 (needs COINALYZE_KEY secret) ----------------
+// Feeds the dashboard's 1h/1D/1W 🌐 stats. QUOTA RULE (learned in run #33): each SYMBOL in a request
+// counts as ONE API call toward the 40/min limit — a 20-symbol batch costs 20 credits, and 429s come back
+// as parseable JSON (no throw), so they failed SILENTLY. Fix: 1 batch per 31s, real status checks with
+// Retry-After honoring, hourly 7d pass only once per hour (merged + persisted), minute pass every run.
+// Started HERE (before the slow book scans) and awaited at the end so the paced sleeps cost no wall time.
+const CZ_KEY = process.env.COINALYZE_KEY;
+const czPromise = CZ_KEY ? (async () => {
+  try {
+    const CZ = 'https://api.coinalyze.net/v1';
+    const czSleep = s => new Promise(r => setTimeout(r, s * 1000));
+    const czGet = async u => {
+      for (let a = 0; a < 4; a++) {
+        const r = await fetch(u);
+        if (r.status === 429) { const ra = Math.min(120, +(r.headers.get('retry-after') || 25) + 2); console.log('coinalyze 429, waiting ' + ra + 's'); await czSleep(ra); continue; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }
+      throw new Error('still 429 after retries');
+    };
+    const mk2 = await czGet(CZ + '/future-markets?api_key=' + CZ_KEY);
+    const wantBases = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'SUI', 'ADA', 'LINK', 'AVAX', 'LTC', 'BNB']);
+    Object.keys(topN(coins, 30)).forEach(c => wantBases.add(c.replace(/^k/, '')));
+    const exPref = ['A', '6', '3', 'F', '0', 'K', '2', 'W', 'H'];
+    const cands = [];
+    (Array.isArray(mk2) ? mk2 : []).forEach(m => {
+      if (!m.is_perpetual) return;
+      const base = (m.base_asset || '').toUpperCase();
+      if (!wantBases.has(base)) return;
+      const q = (m.quote_asset || '').toUpperCase();
+      if (q !== 'USDT' && q !== 'USD') return; /* USDC perps skipped — tiny liq volume, saves quota for more exchanges */
+      const suf = ((m.symbol || '').split('.')[1] || '');
+      const pr = exPref.indexOf(suf);
+      cands.push({ sym: m.symbol, base, pr: pr < 0 ? 99 : pr });
+    });
+    cands.sort((a, b) => a.pr - b.pr || (a.base < b.base ? -1 : 1));
+    const chosen = cands.slice(0, 120); /* 6 batches/pass — every base on the top exchanges, within quota */
+    const nowS = Math.floor(now / 1000);
+    const round2 = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [Math.round(v[0]), Math.round(v[1])]]));
+    let failed = 0;
+    const fetchLiq = async (interval, from) => {
+      const aggB = {}, perCoin = {};
+      for (let i = 0; i < chosen.length; i += 20) {
+        const batch = chosen.slice(i, i + 20);
+        if (i > 0) await czSleep(31); /* 20 credits per batch → ≤39 credits/min */
+        const u = CZ + '/liquidation-history?symbols=' + encodeURIComponent(batch.map(b => b.sym).join(',')) +
+          '&interval=' + interval + '&from=' + from + '&to=' + nowS + '&convert_to_usd=true&api_key=' + CZ_KEY;
+        try {
+          const r = await czGet(u);
+          (Array.isArray(r) ? r : []).forEach(row => {
+            const meta2 = batch.find(c => c.sym === row.symbol); if (!meta2) return;
+            (row.history || []).forEach(h => {
+              const L = +h.l || 0, S = +h.s || 0, hk = h.t;
+              const a = aggB[hk] || (aggB[hk] = [0, 0]); a[0] += L; a[1] += S;
+              const pcs = perCoin[meta2.base] || (perCoin[meta2.base] = {});
+              const pc = pcs[hk] || (pcs[hk] = [0, 0]); pc[0] += L; pc[1] += S;
+            });
+          });
+        } catch (e) { failed++; console.log('coinalyze batch failed', e.message); }
+      }
+      return { agg: round2(aggB), coins: Object.fromEntries(Object.entries(perCoin).map(([c, m2]) => [c, round2(m2)])) };
+    };
+    let old = {};
+    try { old = JSON.parse(fs.readFileSync('data/liq-totals.json', 'utf8')); } catch (e) {}
+    const out = { t: now, symbols: chosen.length, agg: old.agg || {}, coins: old.coins || {}, aggMin: old.aggMin || {}, coinsMin: old.coinsMin || {}, hT: old.hT || 0 };
+    /* hourly pass: once per hour is enough (buckets only complete hourly) — full 7d only when starting empty */
+    const doHourly = !out.hT || now - out.hT > 55 * 60 * 1000 || !Object.keys(out.agg).length;
+    if (doHourly) {
+      const hFrom = (out.hT && Object.keys(out.agg).length) ? nowS - 3 * 3600 : nowS - 7 * 86400;
+      const before = failed;
+      const hourly = await fetchLiq('1hour', hFrom);
+      if (failed === before && Object.keys(hourly.agg).length) { /* only replace when the pass was complete — never publish partial sums */
+        const keep = ([ts]) => +ts < hFrom;
+        out.agg = { ...Object.fromEntries(Object.entries(out.agg).filter(keep)), ...hourly.agg };
+        const nc = {};
+        new Set([...Object.keys(out.coins), ...Object.keys(hourly.coins)]).forEach(b => {
+          nc[b] = { ...Object.fromEntries(Object.entries(out.coins[b] || {}).filter(keep)), ...(hourly.coins[b] || {}) };
+        });
+        out.coins = nc;
+        out.hT = now;
+      } else console.log('coinalyze: hourly pass incomplete — keeping previous hourly data');
+      await czSleep(31);
+    }
+    /* minute pass: every run — feeds the live "1h 🌐" stat */
+    const before2 = failed;
+    const minute = await fetchLiq('1min', nowS - 2 * 3600);
+    if (failed === before2 && Object.keys(minute.agg).length) { out.aggMin = minute.agg; out.coinsMin = minute.coins; }
+    else console.log('coinalyze: minute pass incomplete — keeping previous minute data');
+    /* prune */
+    const cutH = nowS - 7.3 * 86400, cutM = nowS - 3 * 3600;
+    const pruneTo = (o2, cut) => Object.fromEntries(Object.entries(o2).filter(([ts]) => +ts >= cut));
+    out.agg = pruneTo(out.agg, cutH); out.aggMin = pruneTo(out.aggMin, cutM);
+    Object.keys(out.coins).forEach(b => { out.coins[b] = pruneTo(out.coins[b], cutH); if (!Object.keys(out.coins[b]).length) delete out.coins[b]; });
+    Object.keys(out.coinsMin).forEach(b => { out.coinsMin[b] = pruneTo(out.coinsMin[b], cutM); if (!Object.keys(out.coinsMin[b]).length) delete out.coinsMin[b]; });
+    fs.mkdirSync('data', { recursive: true });
+    fs.writeFileSync('data/liq-totals.json', JSON.stringify(out));
+    const totalD = Object.entries(out.agg).filter(([ts]) => +ts >= nowS - 86400).reduce((s, [, v]) => s + v[0] + v[1], 0);
+    console.log('coinalyze:', chosen.length, 'symbols across', wantBases.size, 'bases,', (doHourly ? 'hourly+minute' : 'minute-only'), 'pass,',
+      Object.keys(out.agg).length, 'hourly +', Object.keys(out.aggMin).length, 'minute buckets,', failed, 'failed batches, 24h total', fmtBig(totalD));
+  } catch (e) { console.log('coinalyze failed', e.message); }
+})() : null;
+
 // ---------------- CoinGecko mirror (browser IPs get rate-limited/blocked; GitHub's servers don't) ----------------
 // The dashboard falls back to this file whenever CoinGecko refuses the user's browser.
 try {
@@ -452,66 +554,8 @@ try {
   console.log('gmx book:', gFetched, 'open positions fetched,', gPos, 'mapped >= $10k,', Object.keys(gbook).length, 'coins');
 } catch (e) { console.log('gmx book failed', e.message); }
 
-// ---------------- Coinalyze: MARKET-WIDE liquidation totals, 24/7 (needs COINALYZE_KEY secret) ----------------
-// Majors across 25+ exchanges, hourly buckets, 7 days — this is what feeds the dashboard's 1D/1W 🌐 stats.
-const CZ_KEY = process.env.COINALYZE_KEY;
-if (CZ_KEY) {
-  try {
-    const CZ = 'https://api.coinalyze.net/v1';
-    const mk = await jget(CZ + '/future-markets?api_key=' + CZ_KEY);
-    /* bases: top-30 Hyperliquid coins by OI (k-prefix stripped) + the majors — "todos os mercados possíveis"
-       dentro do rate limit (40 req/min): até 240 símbolos = 12 pedidos por intervalo */
-    const wantBases = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'HYPE', 'SUI', 'ADA', 'LINK', 'AVAX', 'LTC', 'BNB']);
-    Object.keys(topN(coins, 30)).forEach(c => wantBases.add(c.replace(/^k/, '')));
-    const exPref = ['A', '6', '3', 'F', '0', 'K', '2', 'W', 'H'];
-    const cands = [];
-    (Array.isArray(mk) ? mk : []).forEach(m => {
-      if (!m.is_perpetual) return;
-      const base = (m.base_asset || '').toUpperCase();
-      if (!wantBases.has(base)) return;
-      const q = (m.quote_asset || '').toUpperCase();
-      if (q !== 'USDT' && q !== 'USD' && q !== 'USDC') return;
-      const suf = ((m.symbol || '').split('.')[1] || '');
-      const pr = exPref.indexOf(suf);
-      cands.push({ sym: m.symbol, base, pr: pr < 0 ? 99 : pr });
-    });
-    cands.sort((a, b) => a.pr - b.pr || (a.base < b.base ? -1 : 1));
-    const chosen = cands.slice(0, 240);
-    const nowS = Math.floor(now / 1000);
-    const round2 = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [Math.round(v[0]), Math.round(v[1])]]));
-    const fetchLiq = async (interval, from) => {
-      const agg = {}, perCoin = {};
-      for (let i = 0; i < chosen.length; i += 20) {
-        const batch = chosen.slice(i, i + 20);
-        const u = CZ + '/liquidation-history?symbols=' + encodeURIComponent(batch.map(b => b.sym).join(',')) +
-          '&interval=' + interval + '&from=' + from + '&to=' + nowS + '&convert_to_usd=true&api_key=' + CZ_KEY;
-        try {
-          const r = await jget(u);
-          (Array.isArray(r) ? r : []).forEach(row => {
-            const meta = batch.find(c => c.sym === row.symbol); if (!meta) return;
-            (row.history || []).forEach(h => {
-              const L = +h.l || 0, S = +h.s || 0, hk = h.t;
-              const a = agg[hk] || (agg[hk] = [0, 0]); a[0] += L; a[1] += S;
-              const pcs = perCoin[meta.base] || (perCoin[meta.base] = {});
-              const pc = pcs[hk] || (pcs[hk] = [0, 0]); pc[0] += L; pc[1] += S;
-            });
-          });
-        } catch (e) { console.log('coinalyze batch failed', e.message); }
-        await new Promise(r2 => setTimeout(r2, 1700)); // free tier: 40 req/min
-      }
-      return { agg: round2(agg), coins: Object.fromEntries(Object.entries(perCoin).map(([c, m2]) => [c, round2(m2)])) };
-    };
-    const hourly = await fetchLiq('1hour', nowS - 7 * 86400);       /* 7 days for 1D/1W */
-    const minute = await fetchLiq('1min', nowS - 2 * 3600);          /* last 2h for a fresh 1h 🌐 */
-    const totalD = Object.entries(hourly.agg).filter(([ts]) => +ts >= nowS - 86400).reduce((s, [, v]) => s + v[0] + v[1], 0);
-    fs.writeFileSync('data/liq-totals.json', JSON.stringify({
-      t: now, symbols: chosen.length, agg: hourly.agg, coins: hourly.coins,
-      aggMin: minute.agg, coinsMin: minute.coins
-    }));
-    console.log('coinalyze:', chosen.length, 'symbols across', wantBases.size, 'bases,',
-      Object.keys(hourly.agg).length, 'hourly +', Object.keys(minute.agg).length, 'minute buckets, 24h total', fmtBig(totalD));
-  } catch (e) { console.log('coinalyze failed', e.message); }
-} else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
+// ---------------- Coinalyze totals: kicked off earlier (concurrent) — wait for it to finish here ----------------
+if (czPromise) await czPromise; else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
 
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
