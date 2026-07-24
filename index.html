@@ -585,6 +585,7 @@
   .ac-radar { background: rgba(229,72,77,0.15); color: var(--down); }
   .ac-pm { background: rgba(57,135,229,0.15); color: var(--accent); }
   .ac-whale { background: rgba(250,178,25,0.15); color: var(--warn); }
+  .ac-kalshi { background: rgba(18,163,58,0.15); color: var(--up); }
   .ac-x { color: var(--ink-2); }
   /* Funding & Basis */
   .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -693,6 +694,18 @@
         <div class="panel-body" id="pmOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
           <div id="pmBody"><div class="empty">Loading markets…</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="kalshi">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=kalshi.com&amp;sz=64" alt="" onerror="this.style.display='none'">Kalshi</span> <span class="sub" id="kaSub"></span>
+          <input type="range" id="kaVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
+          <button class="btn-ghost" id="kaSound" title="Sound on new odds-move alerts" style="padding:4px 7px;color:var(--muted)"></button>
+          <button class="btn-ghost" id="kaBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
+        <div class="panel-body" id="kaOuter" style="position:relative">
+          <div class="scan-bar"><input class="scan-input" id="kaSearch" placeholder="🔎 search Kalshi markets…" spellcheck="false"></div>
+          <div id="kaBody"><div class="empty">Loading Kalshi…</div></div>
         </div>
       </div></div>
     </div>
@@ -837,6 +850,7 @@
             <button class="src-btn ac-f src-on" data-acf="ALL">ALL</button>
             <button class="src-btn ac-f" data-acf="RADAR">Radar</button>
             <button class="src-btn ac-f" data-acf="PM">Polymarket</button>
+            <button class="src-btn ac-f" data-acf="KALSHI">Kalshi</button>
             <button class="src-btn ac-f" data-acf="WHALE">Whales</button>
           </span></div>
         <div class="panel-body" id="acBody"><div class="empty">No alerts fired yet — everything that fires while the dashboard is open collects here for 24h.</div></div>
@@ -906,7 +920,8 @@ const DEFAULT_LAYOUT = [
   {id: "cexliq",     x: 6, y: 18, w: 6, h: 7,  minW: 2, minH: 3}, /* beside the heatmap */
   {id: "radar",      x: 0, y: 25, w: 12, h: 5, minW: 3, minH: 3}, /* full-width row below everything */
   {id: "alertcenter", x: 0, y: 30, w: 6, h: 5, minW: 2, minH: 3},
-  {id: "funding",     x: 6, y: 30, w: 6, h: 5, minW: 2, minH: 3}
+  {id: "funding",     x: 6, y: 30, w: 6, h: 5, minW: 2, minH: 3},
+  {id: "kalshi",      x: 0, y: 35, w: 6, h: 5, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -2924,30 +2939,37 @@ function playBeep() {
 const SVG_VOL_ON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>';
 const SVG_VOL_OFF = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;opacity:.55"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
 function refreshSoundBtn() {
-  $("pmSound").innerHTML = alertMuted ? SVG_VOL_OFF : SVG_VOL_ON;
-  $("pmSound").title = alertMuted ? "Alert sound is OFF — click to enable" : "Alert sound is ON — click to mute";
+  [["pmSound"], ["kaSound"]].forEach(([id]) => {
+    const b = $(id); if (!b) return;
+    b.innerHTML = alertMuted ? SVG_VOL_OFF : SVG_VOL_ON;
+    b.title = alertMuted ? "Alert sound is OFF — click to enable" : "Alert sound is ON — click to mute";
+  });
 }
-$("pmSound").addEventListener("click", e => {
+["pmSound", "kaSound"].forEach(id => $(id) && $(id).addEventListener("click", e => {
   e.preventDefault(); e.stopPropagation();
   alertMuted = !alertMuted;
   try { localStorage.setItem("cryptopulse-mute", alertMuted ? "1" : "0"); } catch (er) {}
   refreshSoundBtn();
   if (!alertMuted) { ensureAudio(); playBeep(); } /* audible confirmation */
-});
+}));
 refreshSoundBtn();
 /* volume slider: drag to set, release plays a preview at the new level */
-(() => {
-  const s = $("pmVol");
+["pmVol", "kaVol"].forEach(id => {
+  const s = $(id);
   if (!s) return;
   s.value = Math.round(alertVol * 100);
-  s.addEventListener("input", () => { alertVol = (+s.value) / 100; });
+  s.addEventListener("input", () => {
+    alertVol = (+s.value) / 100;
+    const other = $(id === "pmVol" ? "kaVol" : "pmVol");
+    if (other) other.value = s.value; /* the two sliders drive the SAME global volume */
+  });
   s.addEventListener("change", () => {
     try { localStorage.setItem("cryptopulse-vol", String(alertVol)); } catch (e) {}
     if (!alertMuted && alertVol > 0) { ensureAudio(); playBeep(); }
   });
   /* keep slider drags from dragging the whole panel (panel-head is the drag handle) */
   ["pointerdown", "mousedown", "touchstart", "click"].forEach(ev => s.addEventListener(ev, e => e.stopPropagation()));
-})();
+});
 /* alerts announced this session — an active alert chimes once per visit */
 const pmSeenSession = new Set();
 /* alerts the user dismissed with ✕ — never shown again */
@@ -3162,6 +3184,202 @@ $("pmBody").addEventListener("click", e => {
   const al = x.closest(".bet-alert");
   if (al) al.remove();
 });
+/* ---------------- Kalshi panel — mirror of the Polymarket panel, bot-mirrored source ----------------
+   Data: data/kalshi.json (repo bot, ~10-min cycle, 1500 events by volume). Odds-move alerts use the
+   same 10pp/1h rule as Polymarket; there is no public trades feed, so there are no big-bet alerts. */
+const kaBlocked = {
+  key: "cryptopulse-ka-blocked",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return {}; } },
+  save(o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
+};
+let kaBlockedOpen = false;
+function kaBlkPaint() {
+  const b = $("kaBlkBtn");
+  if (b) b.textContent = "🚫 " + Object.keys(kaBlocked.load()).length;
+}
+function kaBlkOverlay() {
+  let ov = $("kaBlkOverlay");
+  if (!kaBlockedOpen) { if (ov) ov.remove(); return; }
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "kaBlkOverlay";
+    ov.style.cssText = "position:absolute;inset:0;background:rgba(10,12,16,0.97);z-index:30;overflow:auto;padding:6px 0";
+    $("kaOuter").appendChild(ov);
+  }
+  const blkO = kaBlocked.load(), entries = Object.entries(blkO);
+  ov.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
+    '<b style="font-size:12px">🚫 Blocked markets (' + entries.length + ')</b>' +
+    '<span style="color:var(--muted);font-size:10px">these never fire alerts again</span>' +
+    '<button class="btn-ghost" id="kaBlkClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>' +
+    (entries.length ? entries.map(([slug, o]) =>
+      '<div class="pm-blk-row"><button class="pm-unblock" data-kaunblock="' + esc(slug) + '" title="Unblock — this market can fire alerts again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
+    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the 🚫 button on any alert</div>');
+}
+(() => {
+  const b = $("kaBlkBtn");
+  if (!b) return;
+  ["mousedown", "pointerdown"].forEach(ev => b.addEventListener(ev, e => e.stopPropagation()));
+  b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    kaBlockedOpen = !kaBlockedOpen;
+    kaBlkOverlay();
+  });
+})();
+$("kaOuter").addEventListener("click", e => {
+  if (e.target.closest("#kaBlkClose")) {
+    e.preventDefault(); e.stopPropagation();
+    kaBlockedOpen = false; kaBlkOverlay(); return;
+  }
+  const ub = e.target.closest("[data-kaunblock]");
+  if (ub) {
+    e.preventDefault(); e.stopPropagation();
+    const o = kaBlocked.load(); delete o[ub.dataset.kaunblock]; kaBlocked.save(o);
+    kaBlkPaint(); kaBlkOverlay(); return;
+  }
+});
+let kaCards = [], kaOddsAlertsHTML = "", kaMirrorT = 0;
+const kaLink = ev => "https://kalshi.com/markets/" + encodeURIComponent(((ev.s || ev.tk || ev.slug || "") + "").toLowerCase());
+/* leader extraction — same rules kalshiCard uses (multi-market: top Yes; binary: winning side) */
+function kaLeader(ev) {
+  const mkts = (ev.m || []).filter(x => x.y != null);
+  if (!mkts.length) return null;
+  if (mkts.length > 1) {
+    const top = mkts.slice().sort((a, b) => (b.y || 0) - (a.y || 0))[0];
+    return {pct: top.y, label: (top.ti || "Yes") + " · Yes"};
+  }
+  const y = mkts[0].y;
+  return y >= 50 ? {pct: y, label: (mkts[0].ti ? mkts[0].ti + " · " : "") + "Yes"}
+                 : {pct: 100 - y, label: "No"};
+}
+function kaEventCard(ev) {
+  const led = kaLeader(ev);
+  const meta = fmtBig(ev.vol || 0) + " vol · odds on Kalshi ↗";
+  if (!led) {
+    const any = (ev.m || [])[0];
+    return '<a class="pm-item" style="display:block" href="' + kaLink(ev) + '" target="_blank" rel="noopener">' +
+      '<div class="pm-q">' + esc(ev.t) + "</div>" +
+      '<div class="pm-meta"><span>' + esc((any && any.ti) || "open market") + " · " + meta + "</span></div></a>";
+  }
+  return '<a class="pm-item" style="display:block" href="' + kaLink(ev) + '" target="_blank" rel="noopener">' +
+    '<div class="pm-q">' + esc(ev.t) + "</div>" +
+    '<div class="pm-row"><span class="pm-odds chg-up">' + led.pct.toFixed(0) + '%</span>' +
+    '<span class="pm-outcome' + pmSideClass(led.label) + '">' + esc(led.label) + "</span>" +
+    '<span class="pm-meta" style="margin-left:auto">' + meta + "</span></div></a>";
+}
+/* odds-move tracker — same 10pp/1h rule and stores as Polymarket, ka-prefixed */
+function kaTrackOddsMoves(oddsNow) {
+  const hist = watchStore.get("cryptopulse-ka-odds", {});
+  const now = Date.now();
+  const snooze = watchStore.get("cryptopulse-ka-odds-snooze", {});
+  const blkMap = kaBlocked.load();
+  const pre = watchStore.get("cryptopulse-ka-odds-alerts", []);
+  const bySlug = {};
+  pre.filter(a => a.t > now - 3 * 3_600_000 && !blkMap[a.slug])
+     .forEach(a => { if (!bySlug[a.slug] || a.t > bySlug[a.slug].t) bySlug[a.slug] = a; });
+  let stored = Object.values(bySlug);
+  let dirty = stored.length !== pre.length, fresh = false;
+  oddsNow.forEach(o => {
+    if (!o || !o.slug || blkMap[o.slug]) return;
+    const arr = hist[o.slug] = (hist[o.slug] || []).filter(x => x[0] > now - 2 * 3_600_000);
+    const base = arr.filter(x => x[0] <= now - 45 * 60_000 && x[0] >= now - 90 * 60_000)
+      .sort((a, b) => Math.abs((now - 3_600_000) - a[0]) - Math.abs((now - 3_600_000) - b[0]))[0];
+    if (base) {
+      const delta = o.pct - base[1];
+      const snoozedAt = snooze[o.slug];
+      if (Math.abs(delta) >= 10 && !(snoozedAt && now - snoozedAt < 10 * 60_000)) {
+        const dvol = base[2] != null ? Math.max(0, (o.vol || 0) - base[2]) : null;
+        const ex = stored.find(a => a.slug === o.slug);
+        if (!ex) {
+          stored.push({slug: o.slug, title: o.title, label: o.label, pct: o.pct, from: base[1], delta, dvol, t: now, s: o.s});
+          dirty = true; fresh = true;
+          alLog("kalshi", "odds move " + base[1].toFixed(0) + "%→" + o.pct.toFixed(0) + "% (" + (delta > 0 ? "+" : "") + delta.toFixed(0) + "pp/1h) — " + o.title);
+        } else if (Math.round(ex.pct) !== Math.round(o.pct) || Math.round(ex.delta) !== Math.round(delta)) {
+          ex.pct = o.pct; ex.from = base[1]; ex.delta = delta; ex.dvol = dvol; ex.t = now;
+          dirty = true; fresh = true;
+          alLog("kalshi", "odds update " + base[1].toFixed(0) + "%→" + o.pct.toFixed(0) + "% — " + o.title);
+        }
+      }
+    }
+    if (!arr.length || now - arr[arr.length - 1][0] > 5 * 60_000) arr.push([now, o.pct, o.vol || 0]);
+  });
+  watchStore.set("cryptopulse-ka-odds", hist);
+  if (dirty) watchStore.set("cryptopulse-ka-odds-alerts", stored.slice(-8));
+  if (fresh) playBeep();
+  const act = stored.filter(a => a.t > now - 3 * 3_600_000);
+  kaOddsAlertsHTML = act.map(a => {
+    const up = a.delta > 0;
+    const move = a.from != null ? a.from.toFixed(0) + "% → " + a.pct.toFixed(0) + "%" : a.pct.toFixed(0) + "%";
+    const volTxt = a.dvol != null && a.dvol > 0 ? " · vol +" + fmtBig(a.dvol) : "";
+    return '<a class="bet-alert flash-red" href="' + kaLink(a) + '" target="_blank" rel="noopener">' +
+      '<div class="b1">📊 <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
+      '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
+      ' <span class="pm-outcome' + pmSideClass(a.label) + '">' + esc(a.label) + "</span>" +
+      '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
+      '<button class="bet-x" data-kablockslug="' + esc(a.slug) + '" data-kablocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list)">🚫</button>' +
+      '<button class="bet-x" data-kaodds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
+      '<div class="b2">' + esc(a.title) + "</div></a>";
+  }).join("");
+}
+$("kaBody").addEventListener("click", e => {
+  const blk = e.target.closest("[data-kablockslug]");
+  if (blk) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    const o = kaBlocked.load();
+    o[blk.dataset.kablockslug] = {title: blk.dataset.kablocktitle || blk.dataset.kablockslug, t: Date.now()};
+    kaBlocked.save(o);
+    const rest = watchStore.get("cryptopulse-ka-odds-alerts", []).filter(a => a.slug !== blk.dataset.kablockslug);
+    watchStore.set("cryptopulse-ka-odds-alerts", rest);
+    const gone = h => h.includes('data-kablockslug="' + blk.dataset.kablockslug + '"');
+    const parts = kaOddsAlertsHTML ? kaOddsAlertsHTML.split('<a class="bet-alert').map((p, i) => i ? '<a class="bet-alert' + p : p) : [""];
+    kaOddsAlertsHTML = parts[0] + parts.slice(1).filter(p => !gone(p)).join("");
+    kaBlkPaint();
+    renderKaRows();
+    return;
+  }
+  const x = e.target.closest(".bet-x");
+  if (!x || !x.dataset.kaodds) return;
+  e.preventDefault(); e.stopPropagation();
+  const rest = watchStore.get("cryptopulse-ka-odds-alerts", []).filter(a => a.slug !== x.dataset.kaodds);
+  watchStore.set("cryptopulse-ka-odds-alerts", rest);
+  const sn = watchStore.get("cryptopulse-ka-odds-snooze", {});
+  sn[x.dataset.kaodds] = Date.now();
+  watchStore.set("cryptopulse-ka-odds-snooze", sn);
+  const al = x.closest(".bet-alert");
+  if (al) al.remove();
+});
+function renderKaRows() {
+  const body = $("kaBody"); if (!body) return;
+  const q = ($("kaSearch").value || "").trim().toUpperCase();
+  const list = q ? kaCards.filter(c => c.t.toUpperCase().includes(q)).slice(0, 40) : kaCards.slice(0, 10);
+  body.innerHTML = kaOddsAlertsHTML +
+    (list.length ? list.map(c => c.h).join("") :
+      '<div class="empty">' + (q ? "Nothing on Kalshi for “" + esc(q.toLowerCase()) + "” (searches all " + kaCards.length + " mirrored markets)." : "Kalshi mirror not built yet — the repo bot creates it on its next run.") + "</div>");
+  kaBlkPaint();
+  const age = kaMirrorT ? timeAgo(kaMirrorT) : "…";
+  $("kaSub").textContent = q ? list.length + " of " + kaCards.length + " mirrored markets" : "politics · macro · crypto · no sports · bot mirror " + age;
+}
+$("kaSearch").addEventListener("input", renderKaRows);
+async function loadKalshiPanel() {
+  const j = await getKalshi();
+  if (!j || !Array.isArray(j.events)) { renderKaRows(); return; }
+  kaMirrorT = j.t || 0;
+  const blkMap = kaBlocked.load();
+  const cards = [], oddsNow = [];
+  for (const ev of j.events) {
+    const text = ev.t || "";
+    if (PM_EXCLUDE.test(text)) continue;                    /* same no-sports rule as Polymarket */
+    const led = kaLeader(ev);
+    cards.push({t: text, tk: ev.tk, topical: PM_INCLUDE.test(text), h: kaEventCard(ev)});
+    if (led && !blkMap[ev.tk] && PM_INCLUDE.test(text))
+      oddsNow.push({slug: ev.tk, s: ev.s, title: text, label: led.label, pct: led.pct, vol: ev.vol || 0});
+  }
+  /* default view: topical markets first (politics/macro/crypto), then the rest — search covers all */
+  cards.sort((a, b) => (b.topical - a.topical));
+  kaCards = cards;
+  kaTrackOddsMoves(oddsNow);
+  renderKaRows();
+  markUpdated();
+}
 let pmSearchTimer = null, pmSearchToken = 0;
 function renderPmRows() {
   const body = $("pmBody");
@@ -4954,7 +5172,7 @@ function alLog(kind, txt) {
 }
 function renderAC() {
   const body = $("acBody"); if (!body) return;
-  const map = {RADAR: "radar", PM: "pm", WHALE: "whale"};
+  const map = {RADAR: "radar", PM: "pm", KALSHI: "kalshi", WHALE: "whale"};
   const a = alStore.load().filter(e => e.t > Date.now() - 24 * 3600_000)
     .filter(e => acFilter === "ALL" || e.k === map[acFilter]);
   if (!a.length) {
@@ -4963,7 +5181,7 @@ function renderAC() {
   }
   body.innerHTML = a.slice(0, 120).map(e =>
     '<div class="ac-row"><span class="when">' + new Date(e.t).toLocaleTimeString("en-GB") + "</span>" +
-    '<span class="ac-k ac-' + e.k + '">' + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : "WHALE") + "</span>" +
+    '<span class="ac-k ac-' + e.k + '">' + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : e.k === "kalshi" ? "KALSHI" : "WHALE") + "</span>" +
     '<span class="ac-x">' + esc(e.x) + "</span></div>").join("");
 }
 document.querySelectorAll(".ac-f").forEach(b => {
@@ -5050,7 +5268,7 @@ setInterval(loadFunding, 120_000);
 /* ---------------- schedule ---------------- */
 function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
 
-loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadGlobal(); loadSEC(); loadListings(); loadHyperliquid(); loadLiquidations(); loadWhales(); loadGlobalOI();
+loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadKalshiPanel(); loadGlobal(); loadSEC(); loadListings(); loadHyperliquid(); loadLiquidations(); loadWhales(); loadGlobalOI();
 every(loadListings, 300_000, 310_000);  /* every 5 min */
 every(loadHyperliquid, 60_000, 65_000); /* every 60s */
 every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates ~hourly) */
@@ -5063,9 +5281,10 @@ every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadTrending, 300_000, 305_000);  /* every 5 min */
 every(loadFng,      900_000, 900_000);  /* every 15 min */
 every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big bets */
+every(loadKalshiPanel, 300_000, 305_000); /* every 5 min — the bot mirror itself only changes ~10-min */
 /* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { loadPolymarket(); loadPrices(); loadHyperliquid(); }
+  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); }
 });
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */
