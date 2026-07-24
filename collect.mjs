@@ -21,14 +21,27 @@ const top = topN(coins, 60);
 
 let bb = {}, ok = {};
 try {
-  const j = await jget('https://api.bybit.com/v5/market/tickers?category=linear');
-  (j.result && j.result.list || []).forEach(t => {
-    if (!t.symbol || !t.symbol.endsWith('USDT')) return;
-    let b = t.symbol.slice(0, -4);
-    if (b.startsWith('1000')) b = 'k' + b.slice(4);
-    const v = parseFloat(t.openInterestValue);
-    if (v > 0) bb[b] = (bb[b] || 0) + Math.round(v);
-  });
+  /* api.bybit.com serves an HTML block page to GitHub runner IPs — try the mirror host too and verify JSON */
+  let j = null;
+  for (const h of ['api.bybit.com', 'api.bytick.com']) {
+    try {
+      const r = await fetch('https://' + h + '/v5/market/tickers?category=linear', { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (cryptopulse-bot)' } });
+      if (!r.ok) { console.log('bybit', h, 'http', r.status); continue; }
+      const txt = await r.text();
+      try { j = JSON.parse(txt); } catch (e2) { console.log('bybit', h, 'non-json:', txt.slice(0, 60).replace(/\s+/g, ' ')); continue; }
+      if (j && j.result && j.result.list) break;
+      j = null;
+    } catch (e2) { console.log('bybit', h, 'failed', e2.message); }
+  }
+  if (j) {
+    (j.result.list || []).forEach(t => {
+      if (!t.symbol || !t.symbol.endsWith('USDT')) return;
+      let b = t.symbol.slice(0, -4);
+      if (b.startsWith('1000')) b = 'k' + b.slice(4);
+      const v = parseFloat(t.openInterestValue);
+      if (v > 0) bb[b] = (bb[b] || 0) + Math.round(v);
+    });
+  } else console.log('bybit OI unavailable this run (all hosts blocked)');
 } catch (e) { console.log('bybit failed', e.message); }
 try {
   const j = await jget('https://www.okx.com/api/v5/public/open-interest?instType=SWAP');
@@ -200,15 +213,17 @@ try {
     const r = await fetch(u, { headers: KH });
     if (!r.ok) { console.log('kalshi markets http', r.status); break; }
     const j = await r.json();
-    if (mp === 0) { try { fs.writeFileSync('data/_kdebug.json', JSON.stringify({sample: (j.markets||[]).slice(0,3), keys: (j.markets||[])[0] ? Object.keys(j.markets[0]) : []})); } catch(e){} }
     (j.markets || []).forEach(m => {
-      let y = m.last_price;
-      if (y == null) {
-        if (m.yes_bid != null && m.yes_ask != null) y = Math.round((m.yes_bid + m.yes_ask) / 2);
-        else y = m.yes_bid ?? m.yes_ask ?? null;
+      /* 2026-07 API change: integer-cent fields became *_dollars strings, volumes became *_fp */
+      const cents = d => { const f = parseFloat(d); return isFinite(f) ? Math.round(f * 100) : null; };
+      let y = m.last_price ?? cents(m.last_price_dollars);
+      if (!y) { /* 0 = never traded → try the book midpoint */
+        const bY = m.yes_bid ?? cents(m.yes_bid_dollars), aY = m.yes_ask ?? cents(m.yes_ask_dollars);
+        if (bY && aY) y = Math.round((bY + aY) / 2);
+        else y = bY || aY || null;
       }
       const et = m.event_ticker || m.ticker;
-      const v = m.volume_24h ?? m.volume ?? 0;
+      const v = m.volume_24h ?? m.volume ?? (parseFloat(m.volume_24h_fp) || parseFloat(m.volume_fp) || 0);
       const e = evMap[et] || (evMap[et] = { m: [], vol: 0 });
       e.m.push({ tk: m.ticker, ti: m.title || m.yes_sub_title || '', y: y ?? null, v });
       e.vol += v;

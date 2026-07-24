@@ -4539,6 +4539,9 @@ function renderRadar() {
   };
   if (rdBook) { addBook(rdBook.coins); addBook(rdBook.dydx && rdBook.dydx.coins); addBook(rdBook.jup && rdBook.jup.coins); addBook(rdBook.lighter && rdBook.lighter.coins); addBook(rdBook.gmx && rdBook.gmx.coins); }
   const nowS = Date.now() / 1000;
+  /* V input, hybrid: market-wide minute mirror AND the live feed — take whichever saw MORE.
+     (The mirror goes stale when GitHub skips bot runs; preferring it blindly zeroed V seconds
+     after page load and made fresh BURST alerts vanish — the bug the user caught.) */
   const vel = {};
   const cmn = (cxTotals && cxTotals.coinsMin) || {};
   Object.entries(cmn).forEach(([coin, buckets]) => {
@@ -4546,10 +4549,15 @@ function renderRadar() {
     Object.entries(buckets).forEach(([ts, v]) => { if (+ts >= nowS - 900) { L += v[0] || 0; S += v[1] || 0; } });
     if (L || S) vel[coin] = {L, S};
   });
+  const velLive = {};
   cxEvents.forEach(ev => {
-    if (Date.now() - ev.t >= 900_000 || cmn[ev.coin]) return;
-    const v = vel[ev.coin] || (vel[ev.coin] = {L: 0, S: 0});
+    if (Date.now() - ev.t >= 900_000) return;
+    const v = velLive[ev.coin] || (velLive[ev.coin] = {L: 0, S: 0});
     v[ev.side] += ev.usd;
+  });
+  Object.entries(velLive).forEach(([coin, v]) => {
+    const m = vel[coin];
+    if (!m || (v.L + v.S) > (m.L + m.S)) vel[coin] = v;
   });
   const rows = [];
   Object.entries(rdHl).forEach(([coin, h]) => {
@@ -4636,7 +4644,9 @@ function rdPlayKind(kind) {
   try { a.volume = rdVolV; a.currentTime = 0; a.play().catch(() => { rdPendingKind = kind; }); } catch (e) {}
 }
 document.addEventListener("pointerdown", () => { if (rdPendingKind) { const k = rdPendingKind; rdPendingKind = 0; rdPlayKind(k); } });
+const rdBootT = Date.now();
 function rdSound(lvl, coin) {
+  if (Date.now() - rdBootT < 20_000) return; /* no sounds right after page load — visuals still show */
   const st = rdAlState[coin]; if (!st) return;
   const nowT = Date.now();
   if (st.lastT[lvl] && nowT - st.lastT[lvl] < 90_000) return; /* cooldown per coin+level */
