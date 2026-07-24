@@ -551,6 +551,17 @@
   @keyframes rdA3up { 0%, 100% { background: rgba(29,158,85,0.55); } 50% { background: rgba(18,199,94,0.95); } }
   .rd-burst { color: #111; background: #f5a623; font-weight: 900; border-radius: 4px; padding: 0 6px; margin-left: 6px; font-size: 10px; cursor: help; animation: rdBu 0.85s ease-in-out infinite; }
   @keyframes rdBu { 0%, 100% { background: #d98e12; } 50% { background: #ffc14d; } }
+  .rd-spark { flex-shrink: 0; opacity: 0.9; }
+  #rdCard { position: absolute; top: 44px; right: 10px; width: 380px; z-index: 40; background: var(--surface-2, #11151b);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 44px rgba(0,0,0,0.6); padding-bottom: 8px; }
+  .rd-cd-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--grid); }
+  .rd-cd-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 14px; font-size: 11.5px; }
+  .rd-cd-row > span:first-child { color: var(--muted); width: 92px; flex-shrink: 0; }
+  .rd-cd-sub { color: var(--muted); font-size: 10px; }
+  .rd-cd-tv { display: block; margin: 8px 14px 4px; padding: 6px 10px; text-align: center; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--accent); font-size: 11.5px; font-weight: 700; text-decoration: none; }
+  .rd-cd-tv:hover { background: rgba(57,135,229,0.12); }
+  .cx-spark { padding: 3px 14px 1px; border-bottom: 1px solid var(--grid); line-height: 0; }
   /* polymarket blocked-markets manager */
   .pm-blk-bar { cursor: pointer; color: var(--muted); font-size: 10.5px; padding: 6px 14px; border-top: 1px solid var(--grid); user-select: none; }
   .pm-blk-bar:hover { color: var(--ink-2); }
@@ -757,7 +768,7 @@
         <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
           <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
           <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:4px 7px;color:var(--muted)"></button></div>
-        <div class="panel-body" id="rdOuter">
+        <div class="panel-body" id="rdOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="rdSearch" placeholder="🔎 search any token — see its score even outside the top 10" spellcheck="false"></div>
           <div id="rdBody"><div class="empty">Computing pressure scores…</div></div>
         </div>
@@ -4362,7 +4373,9 @@ async function fetchCxTotals() {
 setTimeout(fetchCxTotals, 5000);
 setInterval(fetchCxTotals, 300_000);
 function cxSumsGlobal(rangeMs, want, minute) {
-  const maxAge = minute ? 25 * 60_000 : 3 * 3600_000; /* stale → not shown (rule) */
+  /* minute data must be FRESH (25 min); hourly data stays usable up to 8h with an age flag —
+     hiding it during GitHub scheduler gaps threw away real data (rule: real data, age visible) */
+  const maxAge = minute ? 25 * 60_000 : 8 * 3600_000;
   if (!cxTotals || Date.now() - (cxTotals.t || 0) > maxAge) return null;
   let src = null;
   const coinsMap = minute ? cxTotals.coinsMin : cxTotals.coins;
@@ -4374,9 +4387,32 @@ function cxSumsGlobal(rangeMs, want, minute) {
   if (!src) return null;
   const bucket = minute ? 59 : 3599;
   const cutoff = (Date.now() - rangeMs) / 1000;
-  let L = 0, S = 0, any = false;
-  Object.entries(src).forEach(([ts, v]) => { if (+ts >= cutoff - bucket) { L += v[0] || 0; S += v[1] || 0; any = true; } });
-  return any ? {L, S} : null;
+  let L = 0, S = 0, any = false, newest = 0;
+  Object.entries(src).forEach(([ts, v]) => {
+    if (+ts > newest) newest = +ts;
+    if (+ts >= cutoff - bucket) { L += v[0] || 0; S += v[1] || 0; any = true; }
+  });
+  const age = Date.now() - newest * 1000;
+  if (minute && age > 25 * 60_000) return null;
+  return any ? {L, S, age} : null;
+}
+/* 7-day hourly liquidation strip — calm day vs violent day at a glance (🌐 market-wide) */
+function cxSparkHTML() {
+  if (!cxTotals || !cxTotals.agg) return "";
+  const nowS2 = Date.now() / 1000;
+  const es = Object.entries(cxTotals.agg).map(([ts, v]) => [+ts, v]).filter(([ts]) => ts > nowS2 - 7 * 86400).sort((a, b) => a[0] - b[0]);
+  if (es.length < 10) return "";
+  const mx = Math.max(1, ...es.map(([, v]) => (v[0] || 0) + (v[1] || 0)));
+  const bw = 168 / es.length;
+  const bars = es.map(([ts, v], i) => {
+    const tot = (v[0] || 0) + (v[1] || 0);
+    const h2 = Math.max(0.4, (tot / mx) * 24);
+    const d = new Date(ts * 1000);
+    return '<rect x="' + (i * bw).toFixed(2) + '" y="' + (25 - h2).toFixed(2) + '" width="' + (bw * 0.8).toFixed(2) + '" height="' + h2.toFixed(2) +
+      '" fill="' + ((v[0] || 0) >= (v[1] || 0) ? "var(--up)" : "var(--down)") + '" opacity="0.85"><title>' +
+      d.toISOString().slice(5, 13).replace("T", " ") + "h UTC — " + fmtBig(tot) + " (LONG " + fmtBig(v[0] || 0) + " · SHORT " + fmtBig(v[1] || 0) + ")</title></rect>";
+  }).join("");
+  return '<div class="cx-spark" title="Market-wide liquidations per hour, last 7 days 🌐 — green bar = longs dominated that hour, red = shorts. Hover a bar for values."><svg width="100%" height="26" viewBox="0 0 168 26" preserveAspectRatio="none">' + bars + "</svg></div>";
 }
 function renderCx() {
   const body = $("cxBody"); if (!body) return;
@@ -4395,9 +4431,11 @@ function renderCx() {
                   : "Last hour — longs (▼ forced sells) vs shorts (▲ forced buys), observed live";
   const gD = cxSumsGlobal(86_400_000, want), gW = cxSumsGlobal(7 * 86_400_000, want);
   const d1 = gD || cxSums(86_400_000, want), w1 = gW || cxSums(7 * 86_400_000, want);
-  const dTip = gD ? "Last 24h — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)"
+  const gAge = g => g && g.age > 3.5 * 3600_000 ? " — ⏳ bot data " + Math.round(g.age / 3600_000) + "h old (GitHub skipped runs), most recent hours missing from the total" : "";
+  const gMark = g => g && g.age > 3.5 * 3600_000 ? "⏳" : "";
+  const dTip = gD ? "Last 24h — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)" + gAge(gD)
                   : "Last 24h — accumulates while the dashboard is open";
-  const wTip = gW ? "Last 7 days — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)"
+  const wTip = gW ? "Last 7 days — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)" + gAge(gW)
                   : "Last 7 days — accumulates while the dashboard is open";
   /* locked on one token → show every size (small caps cascade in small bites); ALL → ≥$3k to keep it readable */
   const minUsd = want ? 100 : 3000;
@@ -4409,17 +4447,17 @@ function renderCx() {
   const stats = '<div class="cx-stats">' +
     (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
     pair("1h" + (gH ? " 🌐" : ""), h1u, hTip) +
-    pair("1D" + (gD ? " 🌐" : ""), d1, dTip) +
-    pair("1W" + (gW ? " 🌐" : ""), w1, wTip) +
+    pair("1D" + (gD ? " 🌐" + gMark(gD) : ""), d1, dTip) +
+    pair("1W" + (gW ? " 🌐" + gMark(gW) : ""), w1, wTip) +
     '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
     "</div>";
   const nConn = Object.values(cxConnected).filter(Boolean).length;
   if (!shown.length) {
-    body.innerHTML = stats + '<div class="empty">' +
+    body.innerHTML = stats + cxSparkHTML() + '<div class="empty">' +
       (nConn ? nConn + "/8 streams live — waiting for the next " + (want ? esc(want) + " liquidation…" : "liquidation ≥ $3k…") : "Connecting to the liquidation streams…") + "</div>";
     return;
   }
-  body.innerHTML = stats + shown.map(ev => {
+  body.innerHTML = stats + cxSparkHTML() + shown.map(ev => {
     const long = ev.side === "L";
     const tier = ev.usd >= 25_000_000 ? " t4" : ev.usd >= 10_000_000 ? " t3" : ev.usd >= 5_000_000 ? " t2" : ev.usd >= 1_000_000 ? " t1" : ev.usd >= 250_000 ? " big" : "";
     return '<div class="cx-row' + tier + '">' +
@@ -4517,8 +4555,37 @@ async function rdFetchOiRef() {
     if (lastS && Date.now() - lastS.t < 3 * 3600_000) {
       rdOiNow = {};
       ["coins", "bb", "ok"].forEach(k => Object.entries(lastS[k] || {}).forEach(([c, v]) => { rdOiNow[c] = (rdOiNow[c] || 0) + v; }));
+      /* Bybit blocks GitHub runner IPs, so the bot sample may lack bb — the browser CAN reach it; fill only when missing */
+      if (!lastS.bb) {
+        try {
+          const bj = await fetchJSONraw("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000});
+          ((bj.result && bj.result.list) || []).forEach(tk => {
+            if (!tk.symbol || !tk.symbol.endsWith("USDT")) return;
+            let b = tk.symbol.slice(0, -4);
+            if (b.startsWith("1000")) b = "k" + b.slice(4);
+            const v = parseFloat(tk.openInterestValue);
+            if (v > 0) rdOiNow[b] = (rdOiNow[b] || 0) + v;
+          });
+        } catch (e) {}
+      }
     }
   } catch (e) {}
+}
+/* radar-history mirror (hourly component snapshots from the bot) — feeds the 24h score sparklines */
+let rdHist = null;
+async function rdFetchHist() {
+  try { rdHist = await fetchJSONraw("data/radar-history.json?b=" + Math.floor(Date.now() / 300_000), {timeout: 20000}); } catch (e) {}
+}
+function rdSparkSVG(coin) {
+  if (!rdHist || !rdHist.samples || rdHist.samples.length < 2) return "";
+  const cut = Date.now() - 24 * 3600_000;
+  const pts = rdHist.samples.filter(s => s.t > cut).map(s => (s.coins[coin] || [null])[0]).filter(v => v != null);
+  if (pts.length < 2) return "";
+  const W = 56, H = 14, mx = Math.max(20, ...pts);
+  const step = W / (pts.length - 1);
+  const d = pts.map((v, i) => (i ? "L" : "M") + (i * step).toFixed(1) + " " + (H - 1 - (v / mx) * (H - 2)).toFixed(1)).join(" ");
+  const last = pts[pts.length - 1], col = last >= 61 ? "var(--down)" : last >= 45 ? "var(--warn)" : "var(--accent)";
+  return '<svg class="rd-spark" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '" title="score, last 24h"><path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 }
 function renderRadar() {
   const body = $("rdBody"); if (!body || !rdHl) return;
@@ -4572,10 +4639,11 @@ function renderRadar() {
     let mScore = 0, dOi = 0;
     if (rdOiRef && rdOiRef[coin] > 0) { dOi = (h.oi - rdOiRef[coin]) / rdOiRef[coin] * 100; mScore = Math.min(15, Math.abs(dOi) * 1.5); }
     const down = (w.below + v.L * 30 + (h.fund > 0.00002 ? h.oi * 0.02 : 0)) >= (w.above + v.S * 30 + (h.fund < -0.00002 ? h.oi * 0.02 : 0));
-    rows.push({coin, h, w, v, V, dOi, down, score: Math.round(wallScore + fScore + vScore + mScore),
+    rows.push({coin, h, w, v, V, dOi, down, mktOi, score: Math.round(wallScore + fScore + vScore + mScore),
       parts: [Math.round(wallScore), Math.round(fScore), Math.round(vScore), Math.round(mScore)]});
   });
   rows.sort((a, b) => b.score - a.score);
+  rdLastRows = rows;
   /* ---- alert levels: ALL scored coins are monitored, not just the visible top 10 ----
      lvl 1 ≥50 · lvl 2 ≥61 · lvl 3 ≥75 OR V-component ≥15 (backtest: V alone caught 43% of
      cascades — it means the cascade is CONFIRMED even if the total score lags) */
@@ -4613,12 +4681,47 @@ function renderRadar() {
       (r.lvl >= 3 ? '<span class="rd-bang' + (r.down ? "" : " up") + '">!! ' + (r.down ? "SHORT" : "LONG") + " CASCADE</span>"
         : r.burst ? '<span class="rd-burst" title="Heavy forced flow happening RIGHT NOW — liquidation velocity spiked. Not (yet) a full cascade: the total score is below 75.">⚡ BURST</span>' : "") +
       '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
+      rdSparkSVG(r.coin) +
       '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +
       '<div class="rd-why">' + why.join(" · ") + "</div></div>";
   }).join("");
   const sub = $("rdSub");
   if (sub) sub.textContent = "where the next forced move is most likely · " + rows.length + " coins scored · live";
+  rdCardPaint(); /* keep the open cascade card in sync with fresh data */
 }
+/* ---- cascade card: click a radar row → everything needed to decide, in one place ---- */
+let rdLastRows = [], rdCardCoin = null;
+function rdCardPaint() {
+  let ov = document.getElementById("rdCard");
+  if (!rdCardCoin) { if (ov) ov.remove(); return; }
+  const r = rdLastRows.find(x => x.coin === rdCardCoin);
+  if (!r) { if (ov) ov.remove(); rdCardCoin = null; return; }
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "rdCard";
+    document.getElementById("rdOuter").appendChild(ov);
+  }
+  const px = (parseFloat(liveMark[r.coin]) || r.h.px);
+  const w = r.w;
+  const wallTxt = (tot, big, pct) => tot > 1000
+    ? "<b>" + fmtBig(tot) + "</b>" + (big > 0 && pct != null ? ' <span class="rd-cd-sub">(big ' + fmtBig(big) + " at " + pct.toFixed(1) + "%)</span>" : "")
+    : '<span class="rd-cd-sub">none ≥$10k</span>';
+  ov.innerHTML =
+    '<div class="rd-cd-head"><b style="font-size:15px">' + esc(r.coin) + '</b>' +
+    '<span style="font-variant-numeric:tabular-nums;font-weight:800">' + fmtPrice(px) + "</span>" +
+    (r.down ? '<span style="color:var(--down);font-weight:800">🔻 SHORT</span>' : '<span style="color:var(--up);font-weight:800">🔺 LONG</span>') +
+    '<button class="btn-ghost" id="rdCardX" style="margin-left:auto;padding:2px 8px">✕</button></div>' +
+    '<div class="rd-cd-row"><span>Score</span><b style="font-size:13px">' + r.score + '</b><span class="rd-cd-sub">W ' + r.parts[0] + "/40 · F " + r.parts[1] + "/20 · V " + r.parts[2] + "/25 · OI " + r.parts[3] + "/15</span></div>" +
+    '<div class="rd-cd-row"><span>Walls below</span>' + wallTxt(w.below, w.nbPct != null && w.nbPct < 0 ? w.nbUsd : 0, w.nbPct != null && w.nbPct < 0 ? w.nbPct : null) + '<span class="rd-cd-sub">longs’ liq levels −5%…0</span></div>' +
+    '<div class="rd-cd-row"><span>Walls above</span>' + wallTxt(w.above, w.naPct != null && w.naPct > 0 ? w.naUsd : 0, w.naPct != null && w.naPct > 0 ? w.naPct : null) + '<span class="rd-cd-sub">shorts’ liq levels 0…+5%</span></div>' +
+    '<div class="rd-cd-row"><span>Liqs 15m</span><b>' + fmtBig(r.V) + '</b><span class="rd-cd-sub">L ' + fmtBig(r.v.L) + " · S " + fmtBig(r.v.S) + "</span></div>" +
+    '<div class="rd-cd-row"><span>Funding</span><b>' + (r.h.fund * 100).toFixed(4) + '%/h</b><span class="rd-cd-sub">' + (r.h.fund > 0.00002 ? "longs pay — down-fuel" : r.h.fund < -0.00002 ? "shorts pay — up-fuel" : "neutral") + "</span></div>" +
+    '<div class="rd-cd-row"><span>OI 24h</span><b>' + (r.dOi > 0 ? "+" : "") + r.dOi.toFixed(1) + '%</b><span class="rd-cd-sub">market OI ' + fmtBig(r.mktOi) + "</span></div>" +
+    '<a class="rd-cd-tv" href="https://www.tradingview.com/chart/?symbol=BINANCE%3A' + esc(r.coin.replace(/^k/, "1000")) + 'USDT.P" target="_blank" rel="noopener">Open ' + esc(r.coin) + " on TradingView →</a>";
+}
+document.getElementById("rdOuter").addEventListener("click", e => {
+  if (e.target.closest("#rdCardX")) { e.preventDefault(); e.stopPropagation(); rdCardCoin = null; rdCardPaint(); }
+});
 /* ---- radar alert sounds: own volume/mute (separate from Polymarket's), click-to-silence ---- */
 const rdAlState = {};
 let rdMuted = false, rdVolV = 0.6;
@@ -4670,6 +4773,8 @@ document.getElementById("rdBody").addEventListener("click", e => {
   const st = rdAlState[row.dataset.coin];
   rdStopSounds();
   if (st && st.lvl) st.muted = st.lvl; /* keeps flashing — just no more sound until it escalates */
+  rdCardCoin = row.dataset.coin; /* …and open the cascade card with the full context */
+  rdCardPaint();
 });
 (() => {
   const b = document.getElementById("rdSound"), s = document.getElementById("rdVol");
@@ -4691,10 +4796,11 @@ document.getElementById("rdBody").addEventListener("click", e => {
   }
   paint();
 })();
-rdFetchHl(); rdFetchBook(); rdFetchOiRef();
+rdFetchHl(); rdFetchBook(); rdFetchOiRef(); rdFetchHist();
 setInterval(rdFetchHl, 90_000);
 setInterval(rdFetchBook, 120_000);
 setInterval(rdFetchOiRef, 300_000);
+setInterval(rdFetchHist, 300_000);
 setTimeout(renderRadar, 2500);
 setInterval(renderRadar, 10_000); /* feels live — the underlying inputs refresh at 90s (funding/OI) and ~10 min (books/liq mirror) */
 
