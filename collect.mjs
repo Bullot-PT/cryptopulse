@@ -234,23 +234,32 @@ try {
   // 2) /events → umbrella titles by event_ticker
   const titleByEt = {};
   let cursor = '', pages = 0;
-  while (pages < 8) {
+  while (pages < 20) {
     const u = 'https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
     const r = await fetch(u, { headers: KH });
-    if (!r.ok) break;
+    if (!r.ok) { console.log('kalshi events http', r.status); break; }
     const j = await r.json();
     (j.events || []).forEach(ev => { titleByEt[ev.event_ticker] = ev.title; });
     cursor = j.cursor; pages++;
     if (!cursor || !(j.events || []).length) break;
   }
   // 3) build events sorted by volume, priced
+  /* parlay markets carry joined-leg 'titles' ("yes A,yes B,…") — never let those become event titles */
+  const junkTitle = t => !t || t.length > 110 || /,\s*(yes|no)\s/i.test(t) || /^(yes|no)\s/i.test(t);
   const out = Object.entries(evMap).map(([et, d]) => ({
     t: titleByEt[et] || (d.m[0] && d.m[0].ti) || et,
     tk: et, s: (et || '').split('-')[0],
     m: d.m.sort((a, b) => (b.v || 0) - (a.v || 0)).slice(0, 12), vol: d.vol
-  })).sort((a, b) => b.vol - a.vol).slice(0, 1500);
+  })).filter(e => !junkTitle(e.t)).sort((a, b) => b.vol - a.vol).slice(0, 1500);
   const withPrice = out.filter(e => (e.m || []).some(m => m.y != null)).length;
-  if (out.length) { fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out })); console.log('kalshi events:', out.length, 'withPrice:', withPrice, 'eventTitles:', Object.keys(titleByEt).length); }
+  const umbrella = out.filter(e => titleByEt[e.tk]).length;
+  /* /events failing → zero umbrella titles → the mirror would be junk. Keep the previous good file. */
+  if (out.length && umbrella > 0) {
+    fs.writeFileSync('data/kalshi.json', JSON.stringify({ t: now, events: out }));
+    console.log('kalshi events:', out.length, 'withPrice:', withPrice, 'umbrella:', umbrella, 'eventTitles:', Object.keys(titleByEt).length);
+  } else {
+    console.log('kalshi mirror NOT written (events:', out.length, ', umbrella titles:', umbrella, ') — keeping the previous good file');
+  }
 } catch (e) { console.log('kalshi failed', e.message); }
 
 // ---------------- Full-leaderboard liquidation book (feeds the DEX Liq Heatmap) ----------------
