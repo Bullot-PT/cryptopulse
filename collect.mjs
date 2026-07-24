@@ -551,10 +551,89 @@ try {
   });
 } catch (e) { console.log('liq alert failed', e.message); }
 
+// --- Cascade Radar: hourly component history (W included!) + 24/7 alerts, same score as the dashboard ---
+try {
+  const rdFund = {};
+  (meta.universe || []).forEach((u, i) => { const c = ctxs[i]; if (c && !u.isDelisted) rdFund[u.name] = parseFloat(c.funding) || 0; });
+  let lbR = {}; try { lbR = JSON.parse(fs.readFileSync('data/liq-book.json', 'utf8')); } catch (e) {}
+  let lgR = null; try { lgR = (JSON.parse(fs.readFileSync('data/liq-book-lighter.json', 'utf8')) || {}).lighter; } catch (e) {}
+  let ltR = {}; try { ltR = JSON.parse(fs.readFileSync('data/liq-totals.json', 'utf8')); } catch (e) {}
+  const booksR = [lbR.coins, lbR.dydx && lbR.dydx.coins, lbR.jup && lbR.jup.coins, lgR && lgR.coins, lbR.gmx && lbR.gmx.coins];
+  const nowSR = now / 1000;
+  const velR = {};
+  Object.entries(ltR.coinsMin || {}).forEach(([c2, buckets]) => {
+    let L = 0, S = 0;
+    Object.entries(buckets).forEach(([ts, v]) => { if (+ts >= nowSR - 900) { L += v[0] || 0; S += v[1] || 0; } });
+    if (L || S) velR[c2] = { L, S };
+  });
+  const tgtR = now - 86400000;
+  let refR = null;
+  hist.samples.forEach(s2 => { if (!refR || Math.abs(s2.t - tgtR) < Math.abs(refR.t - tgtR)) refR = s2; });
+  const oiRefR = (refR && Math.abs(refR.t - tgtR) < 3 * 3600000) ? (refR.coins || {}) : {};
+  const rowsR = [];
+  Object.entries(coins).forEach(([coin, oiUsd]) => {
+    if (oiUsd < 5e6) return;
+    const px = parseFloat(MIDS[coin]) || 0;
+    if (!(px > 0)) return;
+    let below = 0, above = 0, big = 0, bigPct = null;
+    booksR.forEach(bs => {
+      const b = bs && bs[coin];
+      if (!b || !b.bins || !b.step) return;
+      Object.entries(b.bins).forEach(([idx, v]) => {
+        const rel = ((+idx) * b.step - px) / px;
+        if (rel <= -0.0005 && rel >= -0.05) { below += v[0] || 0; if ((v[0] || 0) > big) { big = v[0]; bigPct = rel * 100; } }
+        else if (rel >= 0.0005 && rel <= 0.05) { above += v[1] || 0; if ((v[1] || 0) > big) { big = v[1]; bigPct = rel * 100; } }
+      });
+    });
+    const v = velR[coin] || velR[coin.replace(/^k/, '')] || { L: 0, S: 0 };
+    const f = rdFund[coin] || 0;
+    const W = Math.min(40, 40 * Math.max(below, above) / (oiUsd * 0.08));
+    const F = Math.min(20, 20 * Math.abs(f) / 0.0001);
+    const V = Math.min(25, 25 * (v.L + v.S) / Math.max(oiUsd * 0.001, 200000));
+    let M = 0, dOi = 0;
+    if (oiRefR[coin] > 0) { dOi = (oiUsd - oiRefR[coin]) / oiRefR[coin] * 100; M = Math.min(15, Math.abs(dOi) * 1.5); }
+    const down = (below + v.L * 30 + (f > 0.00002 ? oiUsd * 0.02 : 0)) >= (above + v.S * 30 + (f < -0.00002 ? oiUsd * 0.02 : 0));
+    rowsR.push({ coin, score: Math.round(W + F + V + M), w: Math.round(W), f: Math.round(F), vv: Math.round(V), m: Math.round(M), down,
+      wall: Math.round(Math.max(below, above)), big: Math.round(big), bigPct, liq15: Math.round(v.L + v.S), fund: f, dOi });
+  });
+  rowsR.sort((a, b) => b.score - a.score);
+  /* hourly snapshots, 60 days — the dataset the next backtest needs (finally with W) */
+  let rh = { samples: [] };
+  try { rh = JSON.parse(fs.readFileSync('data/radar-history.json', 'utf8')); } catch (e) {}
+  const lastT = rh.samples.length ? rh.samples[rh.samples.length - 1].t : 0;
+  if (now - lastT >= 55 * 60 * 1000) {
+    const snap = { t: now, coins: {} };
+    rowsR.forEach(r => { snap.coins[r.coin] = [r.score, r.w, r.f, r.vv, r.m, r.down ? 1 : 0]; });
+    rh.samples.push(snap);
+    rh.samples = rh.samples.filter(s2 => s2.t > now - 60 * 86400000);
+    fs.writeFileSync('data/radar-history.json', JSON.stringify(rh));
+  }
+  /* 24/7 Telegram: lvl2 >=61, lvl3 >=75 OR V>=15 (cascade confirmed). Re-alert only on escalation or after 6h. */
+  const rdSt = st.radar || {};
+  const rdNew = {};
+  rowsR.forEach(r => {
+    const lvl = (r.score >= 75 || r.vv >= 15) ? 3 : r.score >= 61 ? 2 : 0;
+    if (lvl < 2) return;
+    const prev = rdSt[r.coin] || { lvl: 0, t: 0 };
+    const fire = lvl > prev.lvl || now - prev.t > 6 * 3600000;
+    rdNew[r.coin] = { lvl, t: fire ? now : prev.t };
+    if (fire && !firstRun) {
+      const head = lvl >= 3 ? '\ud83d\udea8 *CASCADE RADAR \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*';
+      queue.push(head + ' ' + (r.down ? '\ud83d\udd3b DOWN' : '\ud83d\udd3a UP') +
+        '\n' + fmtBig(r.wall) + ' in liq walls \u00b15%' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
+        '\nliqs 15m ' + fmtBig(r.liq15) + ' \u00b7 funding ' + (r.fund * 100).toFixed(4) + '%/h \u00b7 OI 24h ' + (r.dOi > 0 ? '+' : '') + r.dOi.toFixed(1) + '%' +
+        '\nW' + r.w + ' F' + r.f + ' V' + r.vv + ' OI' + r.m);
+    }
+  });
+  st.radar = rdNew;
+  console.log('radar:', rowsR.length, 'coins scored, top:', rowsR.slice(0, 3).map(r => r.coin + ' ' + r.score).join(', '));
+} catch (e) { console.log('radar section failed', e.message); }
+
 // send queued alerts (cap to avoid floods), save state
 for (const msg of queue.slice(0, 12)) { await tg(msg); await new Promise(r => setTimeout(r, 400)); }
 if (queue.length > 12) await tg('… and ' + (queue.length - 12) + ' more alerts this cycle.');
 fs.writeFileSync('data/alert-state.json', JSON.stringify({
-  whale: [...seen.whale].slice(-600), sec: [...seen.sec].slice(-400), liq: [...seen.liq].slice(-600)
+  whale: [...seen.whale].slice(-600), sec: [...seen.sec].slice(-400), liq: [...seen.liq].slice(-600),
+  radar: st.radar || {}
 }));
 console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
