@@ -423,13 +423,15 @@ try {
       const lev = parseFloat(p.leverage) / 1e4;
       if (!(sz >= 10000) || !(lev > 0)) return;
       const px = parseFloat(MIDS[base]) || 0; if (!(px > 0)) return;
-      /* entryPrice precision is 1e30/10^indexDecimals (varies per token) — normalize by live-price magnitude */
+      /* entryPrice precision is 1e30/10^indexDecimals (varies per token) — normalize by live-price
+         magnitude. Window must be NARROWER than one decade (×3.162 = √10) or the shift lands a
+         factor of 10 off (v68 bug: ×50 window rejected almost every position). */
       let entry = parseFloat(p.entryPrice); if (!(entry > 0)) return;
-      while (entry > px * 50) entry /= 10;
-      while (entry < px / 50) entry *= 10;
-      /* liq ≈ price move that eats collateral down to ~1% maintenance: adverse = 1/lev − 0.01 */
-      const adverse = 1 / lev - 0.01;
-      if (!(adverse > 0)) return;
+      while (entry > px * 3.163) entry /= 10;
+      while (entry < px / 3.163) entry *= 10;
+      /* liq ≈ price move that eats collateral down to ~1% maintenance: adverse = 1/lev − 0.01;
+         ≥100x positions liquidate essentially at entry — floor keeps them mapped */
+      const adverse = Math.max(1 / lev - 0.01, 0.001);
       const liq = p.isLong ? entry * (1 - adverse) : entry * (1 + adverse);
       if (!(liq > 0) || liq < px * 0.3 || liq > px * 3) return;
       const co = gbook[base] || (gbook[base] = { px, step: px * 0.005, bins: {} });
