@@ -26,5 +26,9 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add data/
           git commit -m "OI sample [skip ci]" || echo "nothing to commit"
-          git pull --rebase origin main || true
-          git push
+          # another workflow (lighter-collector / a parallel dispatch) can push mid-run — rebase and retry instead of dying
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((i * 7))
+          done
+          git pull --rebase origin main && git push
