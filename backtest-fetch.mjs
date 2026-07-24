@@ -33,7 +33,7 @@ const cands = [];
 cands.sort((a, b) => a.pr - b.pr || (a.base < b.base ? -1 : 1));
 const chosen = cands.slice(0, 120);
 const nowS = Math.floor(Date.now() / 1000);
-const from = nowS - Math.floor(3.2 * 365 * 86400);
+const from = nowS - Math.floor(10.2 * 365 * 86400); /* asks for 10y — the API returns whatever actually exists (perps only really date from ~2019) */
 const out = { t: Date.now(), from, note: 'daily data, majors, liq/oi summed across top exchanges; fund = best exchange (pref order)', coins: {} };
 const ensure = b => out.coins[b] || (out.coins[b] = { liq: {}, oi: {}, fund: {} });
 let first = true;
