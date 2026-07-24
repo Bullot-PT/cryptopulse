@@ -591,6 +591,9 @@
   .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
   .fd-grip { cursor: grab; color: var(--muted); margin-right: 5px; user-select: none; font-size: 10px; }
   tr[data-fdc]:hover .fd-grip { color: var(--ink-2); }
+  .fd-rm { opacity: 0; transition: opacity .12s; }
+  tr[data-fdc]:hover .fd-rm { opacity: 1; }
+  @media (pointer: coarse) { .fd-rm { opacity: 1; } } /* no hover on touch */
   .fd-table th { color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; padding: 6px; text-align: right; position: sticky; top: 0; background: var(--surface-2, #11151b); cursor: help; z-index: 2; }
   .fd-table th:first-child { text-align: left; padding-left: 14px; }
   .fd-coin { font-weight: 700; padding: 4px 6px 4px 14px; }
@@ -5289,13 +5292,24 @@ const fdCustom = {
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a.slice(0, 20))); } catch (e) {} }
 };
+const fdRemoved = { /* default coins the user removed — every row is removable now */
+  key: "cryptopulse-fd-removed",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
+  save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
+};
+/* same contract, different ticker per exchange — aliases tried when the plain name misses.
+   "1000X"-style multipliers keep the SAME funding %, so rates map 1:1. */
+const FD_ALIAS = {PUMP: ["PUMPFUN"], PEPE: ["1000PEPE"], BONK: ["1000BONK"], FLOKI: ["1000FLOKI"],
+  SHIB: ["1000SHIB", "SHIB1000"], SATS: ["1000SATS"], RATS: ["1000RATS"], LUNC: ["1000LUNC"], XEC: ["1000XEC"]};
+const fdNames = c => [c, "1000" + c, "k" + c].concat(FD_ALIAS[c] || []);
 const fdOrder = {
   key: "cryptopulse-fd-order",
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
 };
 const fdCoins = () => {
-  const base = FD_COINS.concat(fdCustom.load().filter(c => !FD_COINS.includes(c)));
+  const rm = new Set(fdRemoved.load());
+  const base = FD_COINS.filter(c => !rm.has(c)).concat(fdCustom.load().filter(c => !FD_COINS.includes(c)));
   const ord = fdOrder.load();
   if (!ord.length) return base;
   const set = new Set(base);
@@ -5308,27 +5322,30 @@ async function loadFunding() {
   try {
     const out = {t: Date.now(), rows: {}};
     fdCoins().forEach(c => { out.rows[c] = {}; });
-    if (rdHl) fdCoins().forEach(c => { if (rdHl[c]) { out.rows[c].HL = rdHl[c].fund; out.rows[c].mark = rdHl[c].px; } });
+    if (rdHl) fdCoins().forEach(c => {
+      const h = fdNames(c).map(nm => rdHl[nm]).find(Boolean); /* HL uses kPEPE-style names for 1000x contracts */
+      if (h) { out.rows[c].HL = h.fund; out.rows[c].mark = h.px; }
+    });
     try { /* Binance USD-M: 8h rate → ÷8 */
       const bj = await fetchJSONraw("https://fapi.binance.com/fapi/v1/premiumIndex", {timeout: 15000});
-      (Array.isArray(bj) ? bj : []).forEach(x => {
-        const c = (x.symbol || "").replace(/USDT$/, "");
-        if (out.rows[c] && (x.symbol || "").endsWith("USDT")) out.rows[c].BIN = parseFloat(x.lastFundingRate) / 8;
-      });
+      const bMap = {};
+      (Array.isArray(bj) ? bj : []).forEach(x => { if ((x.symbol || "").endsWith("USDT")) bMap[x.symbol.replace(/USDT$/, "")] = parseFloat(x.lastFundingRate) / 8; });
+      fdCoins().forEach(c => { const hit = fdNames(c).find(nm => bMap[nm] != null); if (hit) out.rows[c].BIN = bMap[hit]; });
     } catch (e) {}
     try { /* Bybit linear: 8h → ÷8 */
       const yj = await fetchJSONraw("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000});
-      ((yj.result && yj.result.list) || []).forEach(x => {
-        const c = (x.symbol || "").replace(/USDT$/, "");
-        if (out.rows[c] && (x.symbol || "").endsWith("USDT")) out.rows[c].BYB = parseFloat(x.fundingRate) / 8;
-      });
+      const yMap = {};
+      ((yj.result && yj.result.list) || []).forEach(x => { if ((x.symbol || "").endsWith("USDT")) yMap[x.symbol.replace(/USDT$/, "")] = parseFloat(x.fundingRate) / 8; });
+      fdCoins().forEach(c => { const hit = fdNames(c).find(nm => yMap[nm] != null); if (hit) out.rows[c].BYB = yMap[hit]; }); /* Bybit lists PUMP as PUMPFUNUSDT */
     } catch (e) {}
-    for (const c of fdCoins()) { /* OKX swap: 8h → ÷8, one call per coin */
-      try {
-        const oj = await fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=" + c + "-USDT-SWAP", {timeout: 10000});
-        const d = (oj.data || [])[0];
-        if (d) out.rows[c].OKX = parseFloat(d.fundingRate) / 8;
-      } catch (e) {}
+    for (const c of fdCoins()) { /* OKX swap: 8h → ÷8; tries aliases only when the plain name misses */
+      for (const nm of fdNames(c)) {
+        try {
+          const oj = await fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=" + nm + "-USDT-SWAP", {timeout: 10000});
+          const d = (oj.data || [])[0];
+          if (d) { out.rows[c].OKX = parseFloat(d.fundingRate) / 8; break; }
+        } catch (e) {}
+      }
       await new Promise(r => setTimeout(r, 120));
     }
     try { /* basis: HL perp mark vs Binance SPOT */
@@ -5363,9 +5380,8 @@ function renderFunding() {
     const b = r.basis;
     const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
       : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
-    const custom = !FD_COINS.includes(c);
     return '<tr draggable="true" data-fdc="' + c + '" title="Drag to reorder the table — the order is saved">' +
-      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + (custom ? ' <button class="bet-x" data-fdrm="' + c + '" title="Remove this token from the table" style="padding:0 4px;font-size:10px">✕</button>' : "") + "</td>" + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
+      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + ' <button class="bet-x fd-rm" data-fdrm="' + c + '" title="Remove this token from the table (add it back with the ➕ bar)" style="padding:0 4px;font-size:10px">✕</button></td>' + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
   }).join("");
   body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
 }
@@ -5377,6 +5393,7 @@ setInterval(loadFunding, 120_000);
     if (e.key !== "Enter") return;
     const c = (inp.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (!c) return;
+    if (FD_COINS.includes(c)) fdRemoved.save(fdRemoved.load().filter(k => k !== c)); /* re-adding a removed default */
     const cur = fdCustom.load();
     if (!FD_COINS.includes(c) && !cur.includes(c)) { cur.push(c); fdCustom.save(cur); }
     inp.value = "";
@@ -5386,7 +5403,9 @@ setInterval(loadFunding, 120_000);
   if (outer) outer.addEventListener("click", e => {
     const x = e.target.closest("[data-fdrm]");
     if (!x) return;
-    fdCustom.save(fdCustom.load().filter(c => c !== x.dataset.fdrm));
+    const c = x.dataset.fdrm;
+    if (FD_COINS.includes(c)) { const rm = fdRemoved.load(); if (!rm.includes(c)) { rm.push(c); fdRemoved.save(rm); } }
+    else fdCustom.save(fdCustom.load().filter(k => k !== c));
     renderFunding(); loadFunding();
   });
   /* row drag-to-reorder — persists in cryptopulse-fd-order */
