@@ -7,16 +7,42 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # sha fixo, não a tag: uma tag pode ser reescrita para apontar a outro código, um sha não pode.
+      # Isto também é o que permite ligar a definição "Require actions to be pinned to a full-length
+      # commit SHA" nas Settings do repo — com um @v4 aqui, essa definição partia este workflow.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Fetch 3y daily history
         run: node backtest-fetch.mjs
         env:
           COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
       - name: Commit
         run: |
+          set -u
           git config user.name "oi-collector-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/backtest-3y.json
-          git commit -m "backtest 3y data [skip ci]" || echo "nothing to commit"
-          git pull --rebase origin main || true
-          git push
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "backtest 3y data [skip ci]" >/dev/null
+          # Nunca "git pull --rebase" aqui: os coletores estão a fazer push para o mesmo main de 5 em
+          # 5 minutos, e um rebase que pare a meio deixa .git/rebase-merge no runner. Reconstruir o
+          # commit por cima do main mais recente não pode dar conflito, por construção.
+          MINE=$(git rev-parse HEAD)
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "push recusado — a reconstruir por cima do origin/main (tentativa $i)"
+            git fetch origin main || { sleep $((i * 5)); continue; }
+            git reset --hard FETCH_HEAD
+            git checkout "$MINE" -- data/backtest-3y.json
+            git add data/backtest-3y.json
+            if git diff --cached --quiet; then
+              echo "já lá estava — nada a fazer"
+              exit 0
+            fi
+            git commit -m "backtest 3y data [skip ci]" >/dev/null
+            sleep $((i * 3))
+          done
+          echo "push falhou depois de 5 tentativas"
+          exit 1
