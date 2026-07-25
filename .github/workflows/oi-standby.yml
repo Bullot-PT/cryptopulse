@@ -1,0 +1,101 @@
+name: Standby collector (takes over if the main one stops)
+on:
+  schedule:
+    # Offset from the primary's cron so the two are never asking GitHub for a runner at the same minute.
+    # GitHub drops most of these fires — that is fine and expected. This workflow exists precisely because
+    # fires get dropped: whichever one lands finds out whether the data is still moving.
+    - cron: '2,12,22,32,42,52 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  # A SEPARATE group from 'oi-collect' on purpose. If it shared the primary's group it would queue behind
+  # the very run it is supposed to be checking on, and could only ever start once that run had already
+  # finished — which is the one moment its check is worthless.
+  group: oi-standby
+  cancel-in-progress: false
+jobs:
+  standby:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: Take over only if the data has stopped moving
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+          SOLANA_RPC: ${{ secrets.SOLANA_RPC }}
+          COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
+        run: |
+          set -u
+
+          # How old the data is allowed to get before this run decides the primary is gone. The primary
+          # samples on a 5-minute grid, so 18 minutes is three missed passes — long enough that a slow
+          # pass or a push retry does not trigger a takeover, short enough that a real outage is caught
+          # inside one sampling gap instead of the 51-minute median gap the bare cron gives.
+          STALE=1080
+
+          NOW=$(date +%s)
+
+          # Two independent readings of "when did the data last move", because either one alone can lie:
+          # the commit time misses a pass that produced identical bytes, and the timestamp inside the file
+          # misses the case where the collector wrote but could not push.
+          COMMIT_T=$(git log -1 --format=%ct -- data/ 2>/dev/null || echo 0)
+          DATA_T=$(node -e "
+            try {
+              const j = JSON.parse(require('fs').readFileSync('data/hl-pos.json','utf8'));
+              console.log(Math.round((j.t||0)/1000));
+            } catch (e) { console.log(0); }
+          " 2>/dev/null || echo 0)
+
+          LAST=$COMMIT_T
+          if [ "$DATA_T" -gt "$LAST" ]; then LAST=$DATA_T; fi
+          AGE=$((NOW - LAST))
+          echo "last data movement ${AGE}s ago (commit $COMMIT_T, file $DATA_T)"
+
+          if [ "$AGE" -lt "$STALE" ]; then
+            echo "primary collector is alive — standing by, nothing to do"
+            exit 0
+          fi
+
+          echo "primary collector looks down (${AGE}s of silence) — taking over"
+
+          git config user.name "oi-standby-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          push_data() {
+            git add data/
+            if git diff --cached --quiet; then
+              echo "no change this pass"
+              return 0
+            fi
+            git commit -m "OI sample (standby) [skip ci]" >/dev/null || return 0
+            for i in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push; then return 0; fi
+              sleep $((i * 5))
+            done
+            echo "push failed after retries — the next pass will carry these files"
+            return 0
+          }
+
+          END=$(( $(date +%s) + 3300 ))
+          PASS=0
+          while : ; do
+            PASS=$((PASS + 1))
+            echo "--- standby pass $PASS at $(date -u +%H:%M:%SZ) ---"
+            node collect.mjs || echo "collector exited non-zero on this pass — continuing"
+            push_data
+
+            # Hand back the moment the primary returns. Its own run pushes with a different author, so a
+            # data commit this run did not make means the real collector is alive again and two writers
+            # would only fight over the rotation cursor stored in hl-pos.json.
+            if [ "$(git log -1 --format=%an -- data/ 2>/dev/null || echo standby)" = "oi-collector-bot" ]; then
+              echo "primary is back — standing down"
+              break
+            fi
+
+            NOW=$(date +%s)
+            if [ "$NOW" -ge "$END" ]; then break; fi
+            sleep $(( 300 - (NOW % 300) ))
+          done
+          echo "finished $PASS standby passes"
