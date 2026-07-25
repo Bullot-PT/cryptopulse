@@ -20,6 +20,11 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
+      # Same pin as the primary — a takeover has to run the collector on the same runtime, or the
+      # WebSocket-based wallet discovery would be missing for as long as the standby is in charge.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Take over only if the data has stopped moving
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}

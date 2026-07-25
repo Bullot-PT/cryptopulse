@@ -23,6 +23,13 @@ jobs:
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
+      # Pinned, not left to whatever the runner image happens to ship. The collector listens to the
+      # Hyperliquid trade feed over a WebSocket to find wallets the leaderboard does not rank, and the
+      # global WebSocket is only on by default from Node 22 — on an older runtime that discovery would
+      # silently switch itself off and the site would quietly lose coverage of the smaller coins.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Sample every 5 minutes for one hour
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
