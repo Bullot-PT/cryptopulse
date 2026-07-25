@@ -2948,21 +2948,33 @@ async function scanWallet(addr) {
    Typing "E" offers ETH, ENA, ENS… immediately and searches the best match on its own — Enter is
    optional, not required. Suggestions are ranked by how much notional is actually open in each coin,
    so the first option is the one most people mean. Wallet addresses still route to scanWallet. */
-let scanCoins = [], scanCoinsAt = 0;
+let scanCoins = [], scanOi = {}, scanOiAt = 0;
 async function scanCoinList() {
-  if (scanCoins.length && Date.now() - scanCoinsAt < 300_000) return scanCoins;
-  const w = {};
-  whaleFound.forEach(r => { const c = exCanon(r.coin); w[c] = (w[c] || 0) + r.value; });
+  /* The universe and the ranking both come from metaAndAssetCtxs: every Hyperliquid perp, weighted by
+     its REAL open interest in dollars. That is what makes "E" offer ETH first instead of whatever comes
+     first alphabetically — the order is a measured fact, not a guess. Internal spot book keys ("@107",
+     "#5090") are not tradable tickers and are left out. */
+  if (!scanOiAt || Date.now() - scanOiAt > 300_000) {
+    try {
+      const [meta, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
+      const oi = {};
+      ((meta && meta.universe) || []).forEach((a, i) => {
+        if (!a || !a.name || /^[@#]/.test(a.name)) return;
+        const c = (ctxs || [])[i] || {};
+        oi[exCanon(a.name)] = (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0);
+      });
+      if (Object.keys(oi).length) { scanOi = oi; scanOiAt = Date.now(); }
+    } catch (e) {}
+  }
+  const w = Object.assign({}, scanOi);
+  /* anything the live scan or the bot index knows about but the perp list does not still stays findable */
+  whaleFound.forEach(r => { const c = exCanon(r.coin); if (!(c in w)) w[c] = 0; });
   try {
     const j = await getHlPos();
-    Object.entries(j.coins || {}).forEach(([c, v]) => { const k = exCanon(c); w[k] = Math.max(w[k] || 0, v.idx || 0); });
+    Object.keys(j.coins || {}).forEach(c => { const k = exCanon(c); if (!(k in w)) w[k] = 0; });
   } catch (e) {}
-  try {
-    const mids = Object.keys(hlMids || {});
-    mids.forEach(c => { const k = exCanon(c); if (!(k in w)) w[k] = 0; });
-  } catch (e) {}
-  scanCoins = Object.keys(w).map(c => ({c, w: w[c]})).sort((a, b) => b.w - a.w);
-  scanCoinsAt = Date.now();
+  scanCoins = Object.keys(w).map(c => ({c, w: w[c]}))
+    .sort((a, b) => b.w - a.w || a.c.length - b.c.length || (a.c < b.c ? -1 : 1));
   return scanCoins;
 }
 function scanSuggest(q) {
@@ -2983,7 +2995,7 @@ function scanSugRender(list, active) {
   box.innerHTML = list.map((o, i) =>
     '<div class="scan-sug-item' + (i === active ? " on" : "") + '" data-sym="' + esc(o.c) + '">' +
       "<span>" + esc(o.c) + "</span>" +
-      (o.w > 0 ? '<span class="wrow-meta">' + fmtBig(o.w) + " open</span>" : "") +
+      (o.w > 0 ? '<span class="wrow-meta">' + fmtBig(o.w) + " OI</span>" : "") +
     "</div>").join("");
   box.style.display = "";
 }

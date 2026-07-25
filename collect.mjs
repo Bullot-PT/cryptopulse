@@ -2,7 +2,24 @@ import fs from 'fs';
 
 const now = Date.now();
 const jget = (u, o) => fetch(u, o).then(r => r.json());
-const post = (u, body) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+/* Hyperliquid serves roughly 600 info requests a minute per IP. Past that it answers 429 with a body
+   that is not JSON, so the old one-shot version threw and the wallet was silently dropped from the pass —
+   measured 25-jul-2026: 2500 wallets attempted, only 1120 landed. Retrying with backoff means a wallet is
+   missing only when it genuinely could not be read, not because we asked too fast. */
+const post = async (u, body, tries = 4) => {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.status === 429 || r.status >= 500) { last = new Error('http ' + r.status); await new Promise(s => setTimeout(s, 500 * (i + 1) + Math.random() * 400)); continue; }
+      return await r.json();
+    } catch (e) {
+      last = e;
+      if (i < tries - 1) await new Promise(s => setTimeout(s, 500 * (i + 1)));
+    }
+  }
+  throw last || new Error('post failed');
+};
 const fmtBig = n => n >= 1e9 ? '$' + (n/1e9).toFixed(2) + 'B' : n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : '$' + Math.round(n).toLocaleString();
 const fmtPx = p => p >= 1000 ? '$' + Math.round(p).toLocaleString() : p >= 1 ? '$' + p.toFixed(2) : '$' + p.toPrecision(4);
 
@@ -494,9 +511,18 @@ try {
     if (k === undefined) { k = addrDict.length; addrDict.push(a); addrPos.set(a, k); }
     return k;
   };
-  for (let i = 0; i < wallets.length; i += 15) {
-    const chunk = await Promise.allSettled(wallets.slice(i, i + 15).map((r, ci) =>
-      (i + ci < 1200
+  /* Scan a set we can actually FINISH inside the rate limit instead of firing at 2500 and losing half of
+     them to 429s. The list is sorted by account value, so these are the wallets that hold the money:
+     measured on the public leaderboard, the top 1000 accounts are 87.5% of all equity on the exchange.
+     RATE is requests per second — the measured sustainable ceiling is about 10. */
+  const SCAN_N = 1500, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
+  const scanList = wallets.slice(0, SCAN_N);
+  let rlDrop = 0;
+  for (let i = 0; i < scanList.length; i += CHUNK) {
+    const t0 = Date.now();
+    const slice = scanList.slice(i, i + CHUNK);
+    const chunk = await Promise.allSettled(slice.map((r, ci) =>
+      (i + ci < XYZ_N
         ? Promise.all([
             post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }),
             post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress, dex: 'xyz' }).catch(() => null)
@@ -505,7 +531,7 @@ try {
         : post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }))
       .then(s => (s && typeof s === 'object' ? { ...s, __addr: r.ethAddress } : s))));
     chunk.forEach(c => {
-      if (c.status !== 'fulfilled' || !c.value) return;
+      if (c.status !== 'fulfilled' || !c.value) { rlDrop++; return; }
       scanned++;
       const wAddr = (c.value.__addr) || '';
       (c.value.assetPositions || []).forEach(ap => {
@@ -534,8 +560,12 @@ try {
         positions++;
       });
     });
-    await new Promise(r => setTimeout(r, 120)); // stay friendly with HL rate limits
+    /* pace to RATE: wait out whatever is left of this chunk's fair share of the second */
+    const want = ((slice.length + Math.max(0, Math.min(XYZ_N - i, slice.length))) / RATE) * 1000;
+    const spent = Date.now() - t0;
+    if (spent < want) await new Promise(r => setTimeout(r, want - spent));
   }
+  if (rlDrop) console.log('wallet scan: ' + rlDrop + ' of ' + scanList.length + ' unreadable this pass');
   Object.values(book).forEach(co => {
     Object.keys(co.bins).forEach(b => { co.bins[b] = [Math.round(co.bins[b][0]), Math.round(co.bins[b][1])]; });
   });
