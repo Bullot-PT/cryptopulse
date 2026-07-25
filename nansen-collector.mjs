@@ -105,7 +105,8 @@ function dateRange(days) {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
-async function call(endpoint, body) {
+async function call(endpoint, body, ceiling) {
+  const cap = ceiling || MAX_CALL_COST;
   const est = COST[endpoint] || 5;
   if (est > remaining()) {
     throw new Error(`ORCAMENTO: ${endpoint} custa ~${est} e só sobram ${remaining()} créditos este mês`);
@@ -168,8 +169,8 @@ async function call(endpoint, body) {
   if (rejected) stats.unbilled++;
   stats.calls++;
 
-  if (charged > MAX_CALL_COST) {
-    throw new Error(`TRAVÃO: ${endpoint} custou ${charged} créditos numa só chamada (tecto ${MAX_CALL_COST}). ` +
+  if (charged > cap) {
+    throw new Error(`TRAVÃO: ${endpoint} custou ${charged} créditos numa só chamada (tecto ${cap}). ` +
       `Isto cheira a labels premium. Run abortado antes de queimar o mês.`);
   }
 
@@ -327,6 +328,33 @@ async function run() {
       keepLabel(r.trader_address, r.trader_address_label);
       console.log(`   ${r.trader_address} -> ${r.trader_address_label || "(sem nome)"} pnl ${r.total_pnl}`);
     }
+  }
+
+  /* Uma experiência controlada, para correr UMA vez e nunca mais.
+     Com premium_labels a false o que vem são categorias ("HL Perps Whale", "High Balance"),
+     não nomes próprios. Os nomes próprios — Wintermute, Jump, um fundo com nome — são as labels
+     premium. A tabela de créditos cobra 150 de sobretaxa por labels premium no perp-positions e
+     no perp-pnl-leaderboard, mas o perp-leaderboard NÃO aparece nessa lista. Ou seja: pode ser
+     de graça aqui e ninguém escreveu isso em lado nenhum.
+     Custa uma chamada de 10 linhas descobrir. Se vier a 5, ganhámos nomes a sério para sempre;
+     se vier a 155, ficámos a saber por 7% do mês e nunca mais lá voltamos — e fica escrito no
+     ficheiro do orçamento para não se repetir a pergunta no mês que vem. */
+  else if (MODE === "premium-test") {
+    const before = budget.spent;
+    const j = await call("/perp-leaderboard", {
+      date: dateRange(1),
+      premium_labels: true,
+      pagination: { page: 1, per_page: 10 },
+      order_by: [{ field: "total_pnl", direction: "DESC" }],
+    }, 200);
+    const cost = budget.spent - before;
+    const rows = j?.data || [];
+    console.log(`>>> premium_labels:true custou ${cost} créditos (a false custa 5)`);
+    for (const r of rows) {
+      keepLabel(r.trader_address, r.trader_address_label);
+      console.log(`   ${r.trader_address} -> ${r.trader_address_label || "(sem nome)"}`);
+    }
+    budget.premiumTest = { t: Date.now(), cost, endpoint: "/perp-leaderboard" };
   }
 
   else if (MODE === "sweep") {
