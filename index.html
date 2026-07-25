@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-7iHEDWoZr6wdLb6KMwxaiBSJcmTEJfgkmKeNod6dOkQ=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-lI8jYBndJXvjWBuPzYqioJLY0sMaGiUbnYtnHS4VN/M=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -244,6 +244,32 @@
     50%      { border-color: rgba(208,59,59,1); }
   }
   .panel.alert-live { animation: flashBorder 1.1s ease-in-out infinite; }
+
+  /* ---------- distância à liquidação: três níveis ----------
+     Quanto mais perto do preço de liquidação, mais berrante e mais rápido. Os limites são os
+     que o Bullot pediu: 10% a 5,1% amarelo, 5% ou menos vermelho, 1% ou menos vermelho
+     intenso e ao dobro da velocidade. Acima de 10% fica cinzento, sem animação nenhuma —
+     senão o painel inteiro pisca e deixa de se ver o que interessa. */
+  @keyframes liqT1 {
+    0%, 100% { color: #d9a400; text-shadow: none; }
+    50%      { color: #ffdf5e; text-shadow: 0 0 7px rgba(255, 205, 0, 0.65); }
+  }
+  @keyframes liqT2 {
+    0%, 100% { color: #d03b3b; text-shadow: none; }
+    50%      { color: #ff7070; text-shadow: 0 0 7px rgba(255, 60, 60, 0.7); }
+  }
+  @keyframes liqT3 {
+    0%, 100% { color: #ff1f1f; text-shadow: 0 0 5px rgba(255, 0, 0, 0.55); }
+    50%      { color: #fff2f2; text-shadow: 0 0 13px rgba(255, 0, 0, 1), 0 0 26px rgba(255, 0, 0, 0.75); }
+  }
+  .liq-t1 { animation: liqT1 1.5s ease-in-out infinite; font-weight: 700; }
+  .liq-t2 { animation: liqT2 1.0s ease-in-out infinite; font-weight: 700; }
+  .liq-t3 { animation: liqT3 0.42s ease-in-out infinite; font-weight: 800; letter-spacing: 0.01em; }
+  /* quem tem o sistema configurado para reduzir animações fica com a cor, sem o piscar */
+  @media (prefers-reduced-motion: reduce) {
+    .liq-t1, .liq-t2, .liq-t3 { animation: none; }
+    .liq-t1 { color: #d9a400; } .liq-t2 { color: #d03b3b; } .liq-t3 { color: #ff1f1f; }
+  }
 
   /* ---------- pm big-bet alerts ---------- */
   .bet-alert { display: block; padding: 9px 14px; border-bottom: 1px solid var(--grid); }
@@ -2143,6 +2169,10 @@ function renderListingRows() {
 $("listingSearch").addEventListener("input", onFrame(renderListingRows));
 
 /* ---------------- Hyperliquid perps (public info API) ---------------- */
+/* quando foi o último 429 da Hyperliquid. A re-leitura rápida das carteiras à vista consulta isto
+   antes de disparar: preferir não pedir durante um minuto a levar com a porta fechada na cara e
+   ficar sem varrimento nenhum. */
+let hl429At = 0;
 async function fetchHL(body) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 15000);
@@ -2151,7 +2181,7 @@ async function fetchHL(body) {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body), signal: ctl.signal
     });
-    if (!r.ok) throw new Error("HTTP " + r.status);
+    if (!r.ok) { if (r.status === 429) hl429At = Date.now(); throw new Error("HTTP " + r.status); }
     return await r.json();
   } finally { clearTimeout(t); }
 }
@@ -2621,7 +2651,7 @@ async function loadLendLive() {
           '<span class="proto-badge">' + esc(p.sym) + "/" + esc(p.loan) + "</span>" +
           '<span class="chain-badge">' + esc(p.chain) + "</span>" +
           "<span>" + fmtBig(p.col) + " · HF " + p.hf.toFixed(3) + "</span>" +
-          '<span class="liq-dist ' + (p.dist < 10 ? "chg-down" : "") + '">−' + p.dist.toFixed(1) + "% away</span></a>"
+          '<span class="liq-dist ' + distCls(p.dist) + '">−' + p.dist.toFixed(1) + "% away</span></a>"
       ).join("") +
     "</div>";
   }
@@ -2736,7 +2766,7 @@ async function loadLiquidations() {
             '<span class="proto-badge">' + esc(p.protocol || "?") + "</span>" +
             '<span class="chain-badge">' + esc(p.chain || "") + "</span>" +
             "<span>" + fmtBig(p.collateralValue) + " · liq @ " + fmtPrice(p.liqPrice) + "</span>" +
-            '<span class="liq-dist ' + (dist < 10 ? "chg-down" : "") + '">−' + dist.toFixed(1) + "% away</span></a>";
+            '<span class="liq-dist ' + distCls(dist) + '">−' + dist.toFixed(1) + "% away</span></a>";
         }).join("") +
       "</div>"});
     }
@@ -2941,11 +2971,103 @@ function renderWatchlist() {
     }).join("") + "</div>";
 }
 const whaleAlert = r => r.value >= 25_000_000 && r.dist != null && r.dist <= 10; /* flashing-red condition */
+/* A que distância do preço de liquidação é que a linha começa a gritar. Sem distância real
+   (posição sem preço de liquidação deste lado) não há classe nenhuma — nunca se inventa um número. */
+function distCls(d) {
+  if (d == null) return "wrow-meta";
+  if (d <= 1)  return "liq-t3";   /* a um por cento: vermelho intenso, ao dobro da velocidade */
+  if (d <= 5)  return "liq-t2";   /* até cinco por cento: vermelho */
+  if (d <= 10) return "liq-t1";   /* de 10% a 5,1%: amarelo */
+  return "wrow-meta";
+}
+
+/* ---- registo das posições grandes: uma linha só sai quando fecha mesmo ----------------------
+   Uma posição desaparecia do painel por duas razões que o painel não sabia distinguir: ou a
+   carteira fechou mesmo, ou um dos pedidos falhou naquele instante. O caso que o Bullot apanhou
+   (quatro posições, refresh, três posições) é o segundo: o clearinghouseState do dex "xyz" tem um
+   catch e, quando falha, as posições xyz daquela carteira somem sem uma palavra.
+   A partir daqui uma linha só desaparece quando a leitura da carteira CORREU BEM e a posição não
+   estava lá — isso é um fecho verdadeiro. Uma leitura falhada não apaga nada: a linha fica de pé
+   com a hora da última leitura boa à vista, e sai por decurso de prazo ao fim de 30 minutos sem
+   confirmação. O registo sobrevive a um refresh da página (localStorage), que é precisamente
+   quando ele deu por falta das posições. */
+const WHALE_REG_TTL = 30 * 60_000, WHALE_REG_KEY = "cryptopulse-whale-reg";
+let whaleReg = {}, whalePaintSig = "";
+function whaleRegKey(r) { return r.addr + "|" + exCanon(r.coin); }
+function whaleRegPut(r, live) {
+  const k = whaleRegKey(r), prev = whaleReg[k], now = Date.now();
+  /* o varrimento ao vivo tem segundos, o índice do bot tem minutos: o índice não escreve por cima
+     de uma leitura ao vivo recente */
+  if (!live && prev && prev.live && now - prev.at < 150_000) return;
+  whaleReg[k] = {r: r, at: now, live: !!live};
+}
+/* leitura boa desta carteira: tudo o que não veio nesta lista fechou mesmo.
+   skipPrefix serve para o dex xyz — se o pedido do xyz não correu (ou nem foi feito), as posições
+   xyz desta carteira não podem ser dadas como fechadas, porque ninguém olhou para elas. */
+function whaleRegConfirm(addr, presentKeys, skipPrefix) {
+  Object.keys(whaleReg).forEach(k => {
+    const r = whaleReg[k].r;
+    if (!r || r.addr !== addr) return;
+    if (presentKeys.has(k)) return;
+    if (skipPrefix && String(r.coin).indexOf(skipPrefix) === 0) return;
+    delete whaleReg[k];
+  });
+}
+function whaleRegRows() {
+  const now = Date.now(), out = [];
+  Object.keys(whaleReg).forEach(k => {
+    const e = whaleReg[k];
+    if (!e || !e.r || !e.r.addr || now - (e.at || 0) > WHALE_REG_TTL) { delete whaleReg[k]; return; }
+    e.r.readAt = e.at;
+    out.push(e.r);
+  });
+  return out;
+}
+function whaleRegSave() {
+  try {
+    const now = Date.now(), o = {};
+    /* só as 200 maiores vão para o localStorage. O painel mostra 40; guardar tudo o que passou
+       pelo registo nos últimos 30 minutos era encher o armazenamento com linhas que ninguém
+       chega a ver, e o universo de moedas já lá está a ocupar espaço. */
+    Object.keys(whaleReg)
+      .filter(k => now - (whaleReg[k].at || 0) < WHALE_REG_TTL)
+      .sort((a, b) => (whaleReg[b].r.value || 0) - (whaleReg[a].r.value || 0))
+      .slice(0, 200)
+      .forEach(k => { o[k] = whaleReg[k]; });
+    localStorage.setItem(WHALE_REG_KEY, JSON.stringify(o));
+  } catch (e) {}
+}
+(function whaleRegRestore() {
+  try {
+    const j = JSON.parse(localStorage.getItem(WHALE_REG_KEY) || "null");
+    if (!j) return;
+    const now = Date.now();
+    Object.keys(j).forEach(k => {
+      if (j[k] && j[k].r && j[k].r.addr && now - (j[k].at || 0) < WHALE_REG_TTL) whaleReg[k] = j[k];
+    });
+  } catch (e) {}
+})();
+/* a maior primeiro, sempre — só o alerta de proximidade de liquidação é que passa à frente do tamanho */
+function whaleSort(list) {
+  return list.sort((a, b) => {
+    const fa = whaleAlert(a), fb = whaleAlert(b);
+    if (fa !== fb) return fb - fa;
+    if (fa && fb) return a.dist - b.dist;
+    return b.value - a.value;
+  });
+}
+function whaleSig(rows) { return rows.map(r => whaleRegKey(r)).join(","); }
+/* há quantos minutos é que esta linha foi lida da chain. Só aparece a partir dos 2 minutos —
+   abaixo disso é ruído, acima disso é informação que ele tem direito a ver. */
+function whaleAge(r) {
+  const m = Math.floor((Date.now() - (r.readAt || 0)) / 60_000);
+  return r.readAt && m >= 2 ? m + "m" : "";
+}
 function renderWhaleRows(rows, note) {
   return (note ? '<div class="empty" style="padding:8px 14px;text-align:left">' + note + "</div>" : "") +
     rows.map(r => {
       const distTxt = r.dist == null ? "" :
-        '<span class="pos-liq ' + (r.dist < 10 ? "chg-down" : "wrow-meta") + '">liq @ ' + fmtPrice(r.liq) + " · " + r.dist.toFixed(1) + "% away</span>";
+        '<span class="pos-liq ' + distCls(r.dist) + '">liq @ ' + fmtPrice(r.liq) + " · " + r.dist.toFixed(1) + "% away</span>";
       return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" data-addr="' + esc(r.addr) +
         '" data-coin="' + esc(r.coin) + '" data-liq="' + (r.liq || 0) + '" data-szi="' + r.szi +
         '" data-mark0="' + r.mark + '" data-val0="' + r.value + '" data-upnl0="' + r.upnl +
@@ -2974,7 +3096,8 @@ function renderWhaleRows(rows, note) {
           '<button class="pin-btn' + (getPinned().includes(r.addr) ? " pin-on" : "") + '" data-pin="' + esc(r.addr) + '" title="Watch this wallet">' +
             (getPinned().includes(r.addr) ? "★" : "☆") + "</button>" +
           '<span class="whale-addr">' + esc(r.addr.slice(0, 6) + "…" + r.addr.slice(-4)) + "</span>" +
-          '<span class="wrow-meta">entry ' + fmtPrice(r.entry) + "</span>" +
+          '<span class="wrow-meta">entry ' + fmtPrice(r.entry) +
+            (whaleAge(r) ? " · read " + whaleAge(r) + " ago" : "") + "</span>" +
           '<span class="pos-liq ' + (r.upnl >= 0 ? "chg-up" : "chg-down") + '">uPnL ' + (r.upnl >= 0 ? "+" : "−") + fmtBig(Math.abs(r.upnl)).slice(1) + "</span>" +
         "</div>" +
       "</a>";
@@ -3007,23 +3130,35 @@ async function loadWhales() {
       const chunk = await Promise.allSettled(candidates.slice(i, i + 10).map(a =>
         Promise.all([
           fetchHL({type: "clearinghouseState", user: a}),
-          fetchHL({type: "clearinghouseState", user: a, dex: "xyz"}).catch(() => null)
+          /* o sentinela distingue "esta carteira não tem nada no dex xyz" de "o pedido do xyz
+             falhou". Sem ele, uma falha do xyz apagava as posições xyz como se tivessem fechado —
+             era isto que fazia sumir a XYZ100 e a SP500 entre dois refreshes. */
+          fetchHL({type: "clearinghouseState", user: a, dex: "xyz"}).catch(() => ({__fail: 1}))
         ]).then(([s, sx]) => {
-          if (sx && Array.isArray(sx.assetPositions) && sx.assetPositions.length)
+          const xyzOk = !(sx && sx.__fail);
+          if (xyzOk && sx && Array.isArray(sx.assetPositions) && sx.assetPositions.length)
             s = Object.assign({}, s, {assetPositions: (s.assetPositions || []).concat(sx.assetPositions)});
-          return {addr: a, s};
+          return {addr: a, s, xyzOk};
         })
       ));
       chunk.forEach(c => {
-        if (c.status !== "fulfilled") return;
+        if (c.status !== "fulfilled" || !c.value.s) return;
         const isPinned = getPinned().includes(c.value.addr);
-        const posMap = {};
+        const posMap = {}, present = new Set();
         (c.value.s.assetPositions || []).forEach(ap => {
           const p = ap.position;
           const v = Math.abs(parseFloat(p.positionValue));
           if (isPinned && v > 0) posMap[p.coin] = parseFloat(p.szi) >= 0 ? v : -v;
-          if (v >= WHALE_MIN) found.push(whaleRow(p, c.value.addr, mids));
+          if (v >= WHALE_MIN) {
+            const row = whaleRow(p, c.value.addr, mids);
+            found.push(row);
+            present.add(whaleRegKey(row));
+            whaleRegPut(row, true);
+          }
         });
+        /* leitura boa: o que esta carteira já não tem, fechou. Se o xyz falhou, as linhas xyz
+           ficam de pé — não foram vistas, logo não podem ser dadas como fechadas. */
+        whaleRegConfirm(c.value.addr, present, c.value.xyzOk ? null : "xyz:");
         if (isPinned) {
           const accV = parseFloat(c.value.s.marginSummary && c.value.s.marginSummary.accountValue) || 0;
           if (diffWatched(c.value.addr, posMap, accV) > 0) playBeep();
@@ -3059,6 +3194,13 @@ async function loadWhales() {
         whaleIdxT = idx.t || 0;
       }
     } catch (e) { whaleIdxT = 0; }
+    /* O painel passa a pintar o registo e não o resultado cru deste varrimento. Assim as posições
+       que este varrimento não chegou a olhar — ou não conseguiu ler — continuam lá, com a idade da
+       última leitura boa à vista, em vez de desaparecerem sem explicação. */
+    found.forEach(r => whaleRegPut(r, !r.fromBot));
+    found.length = 0;
+    Array.prototype.push.apply(found, whaleRegRows().filter(r => r.value >= WHALE_MIN));
+    whaleRegSave();
     /* kept so the token search can answer "who is in X" without re-scanning every wallet */
     whaleFound = found;
     whaleScanMeta = {wallets: candidates.length, t: Date.now()};
@@ -3085,6 +3227,7 @@ async function loadWhales() {
         renderWatchlist(); return;
       }
       body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
+      whalePaintSig = whaleSig(found.slice(0, 40));
       renderWatchlist();
       body.dataset.home = "1";
       whalesLiveAt = Date.now();
@@ -3351,38 +3494,113 @@ async function loadWhalesFast() {
       done.add(want);
       hlPosRows(j, want).rows.forEach(r => { if (r.value >= WHALE_MIN) found.push(r); });
     });
-    /* simétrico ao merge do varrimento ao vivo: as carteiras que só o varrimento ao vivo viu (não
-       estão no índice do bot) têm de sobreviver a esta repintura, senão o painel voltava a oscilar
-       entre dois conjuntos diferentes de linhas de dois em dois minutos — e o detector de
-       liquidações, que trabalha por comparação com a passagem anterior, ficava a olhar para
-       aparecimentos e desaparecimentos que eram só a alternância entre as duas fontes. */
-    const inIdx = new Set(found.map(r => r.addr + "|" + exCanon(r.coin)));
-    if (Date.now() - whaleScanMeta.t < 600_000) {
-      (whaleFound || []).forEach(r => {
-        if (r.fromBot || r.value < WHALE_MIN) return;
-        const k = r.addr + "|" + exCanon(r.coin);
-        if (inIdx.has(k)) return;
-        inIdx.add(k);
-        found.push(r);
-      });
-    }
-    if (!found.length) return;
-    hlDetectLiqs(found);
-    found.sort((a, b) => {
-      const fa = whaleAlert(a), fb = whaleAlert(b);
-      if (fa !== fb) return fb - fa;
-      if (fa && fb) return a.dist - b.dist;
-      return b.value - a.value;
-    });
-    whaleFound = found;
-    body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
+    /* O índice do bot só sabe acrescentar. Nunca prova que uma posição fechou, porque o bot anda a
+       rodar pela população de carteiras e pode simplesmente ainda não ter voltado àquela. Por isso
+       alimenta o registo e o painel pinta o registo inteiro — que é a união das duas fontes, com a
+       leitura ao vivo a ganhar sempre que existe. */
+    found.forEach(r => whaleRegPut(r, false));
+    const all = whaleRegRows().filter(r => r.value >= WHALE_MIN);
+    whaleRegSave();
+    if (!all.length) return;
+    hlDetectLiqs(all);
+    whaleSort(all);
+    whaleFound = all;
+    body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(all.slice(0, 40));
+    whalePaintSig = whaleSig(all.slice(0, 40));
     renderWatchlist();
     body.dataset.home = "1";
-    $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · collector index " +
+    $("whalesSub").textContent = "on-chain · " + all.length + " positions ≥ $5M · collector index " +
       timeAgo(j.t) + (whalesLiveAt ? " + live scan " + timeAgo(whalesLiveAt) : " · live scan running");
     hlPosHealth();
     markUpdated();
   } catch (e) { /* the live scan is already on its way — no message, no fake data */ }
+}
+
+/* ---- re-leitura contínua das carteiras que estão no painel -----------------------------------
+   O varrimento completo são ~125 carteiras em dois dexes e não pode correr ao segundo sem levar
+   com um 429 da Hyperliquid. Mas as ~25 carteiras que estão à vista podem: são dois pedidos cada,
+   de 20 em 20 segundos. É isto que faz com que uma posição fechada saia do painel em 20 s em vez
+   de 4 minutos, e que um aumento ou uma redução de tamanho apareça sem esperar pelo varrimento.
+   O valor e a distância à liquidação já vinham a actualizar ao segundo pelo WebSocket dos mids;
+   o que faltava era a posição em si — o tamanho, o preço de liquidação, e o facto de existir. */
+let whaleFastBusy = false;
+const hlXyzSeen = {};   /* carteiras a quem já se viu posições no dex xyz — só a essas se pede o xyz */
+async function whaleRefreshShown() {
+  const body = document.getElementById("whalesBody");
+  if (!body || body.dataset.home === "0" || whaleFastBusy) return;
+  if (Date.now() - hl429At < 60_000) return;   /* apanhámos um 429 há pouco: dar espaço à API */
+  const rows = whaleRegRows();
+  rows.forEach(r => { if (String(r.coin).indexOf("xyz:") === 0) hlXyzSeen[r.addr] = 1; });
+  const addrs = [...new Set(rows.sort((a, b) => b.value - a.value).map(r => r.addr))].slice(0, 25);
+  if (!addrs.length) return;
+  whaleFastBusy = true;
+  try {
+    let mids = hlMids;
+    if (!mids || !Object.keys(mids).length) {
+      mids = await fetchHL({type: "allMids"}).catch(() => null);
+      if (mids) hlMids = mids;
+    }
+    if (!mids) return;
+    const res = await Promise.allSettled(addrs.map(a =>
+      Promise.all([
+        fetchHL({type: "clearinghouseState", user: a}),
+        hlXyzSeen[a]
+          ? fetchHL({type: "clearinghouseState", user: a, dex: "xyz"}).catch(() => ({__fail: 1}))
+          : Promise.resolve(null)
+      ]).then(([st, sx]) => ({addr: a, st: st, sx: sx}))
+    ));
+    let changed = false;
+    res.forEach(c => {
+      if (c.status !== "fulfilled" || !c.value.st) return;
+      const addr = c.value.addr, sx = c.value.sx;
+      const xyzChecked = !!sx && !sx.__fail;
+      let aps = c.value.st.assetPositions || [];
+      if (xyzChecked && Array.isArray(sx.assetPositions) && sx.assetPositions.length) {
+        aps = aps.concat(sx.assetPositions);
+        hlXyzSeen[addr] = 1;
+      }
+      const present = new Set();
+      aps.forEach(ap => {
+        const p = ap.position;
+        if (Math.abs(parseFloat(p.positionValue)) < WHALE_MIN) return;
+        const row = whaleRow(p, addr, mids);
+        const k = whaleRegKey(row);
+        present.add(k);
+        const prev = whaleReg[k];
+        /* mudou o tamanho da posição, não só o preço: isso obriga a repintar a linha */
+        if (!prev || !prev.r || Math.abs((+prev.r.szi || 0) - row.szi) > 1e-9) changed = true;
+        whaleRegPut(row, true);
+      });
+      const before = Object.keys(whaleReg).length;
+      /* se o xyz não foi lido (nem pedido, ou pedido e falhado) as posições xyz desta carteira não
+         entram na conta dos fechos — ninguém olhou para elas */
+      whaleRegConfirm(addr, present, xyzChecked ? null : "xyz:");
+      if (Object.keys(whaleReg).length !== before) changed = true;
+    });
+    whaleRegSave();
+    whaleFastPaint(changed);
+  } catch (e) { /* falha de rede: o registo fica como está, ninguém apaga nada */ }
+  finally { whaleFastBusy = false; }
+}
+function whaleFastPaint(force) {
+  const body = document.getElementById("whalesBody");
+  if (!body || body.dataset.home === "0") return;
+  const all = whaleRegRows().filter(r => r.value >= WHALE_MIN);
+  if (!all.length) return;
+  whaleSort(all);
+  whaleFound = all;
+  const top = all.slice(0, 40);
+  const sig = whaleSig(top);
+  /* Repintar arrasta todas as animações de volta ao princípio e faz o painel dar um salto debaixo
+     do rato. Por isso só se repinta quando o conjunto de linhas muda mesmo; enquanto forem só os
+     números a mexer, quem os escreve é o updateWhaleLive, ao segundo, sem tocar no HTML. */
+  if (!force && sig === whalePaintSig) { updateWhaleLive(); return; }
+  whalePaintSig = sig;
+  body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(top);
+  renderWatchlist();
+  body.dataset.home = "1";
+  updateWhaleLive();
+  markUpdated();
 }
 
 /* Long vs Short from the same index. The index holds every position ≥ $250k the bot has seen across
@@ -5147,6 +5365,15 @@ function hlDetectLiqs(found) {
   } catch (e) {}
 }
 setInterval(hlTrackExtremes, 1000);
+/* Rede de segurança da cadência de um segundo: o updateWhaleLive é normalmente disparado por cada
+   mensagem do WebSocket dos mids, mas se o socket ficar calado (reconexão, moeda sem trades) as
+   linhas congelavam sem que nada o dissesse. Este relógio garante o segundo a segundo de qualquer
+   maneira, e não pede nada a ninguém — pinta com os últimos preços que já entraram. */
+setInterval(() => {
+  if (Date.now() - whaleThrottle < 900) return;
+  whaleThrottle = Date.now();
+  try { updateWhaleLive(); updateOiLive(); } catch (e) {}
+}, 1000);
 function updateWhaleLive() {
   document.querySelectorAll("#whalesBody .wrow[data-coin]").forEach(row => {
     const coin = row.dataset.coin;
@@ -5164,7 +5391,7 @@ function updateWhaleLive() {
     }
     const distEl = row.querySelector(".pos-liq");
     if (distEl && dist != null) {
-      distEl.className = "pos-liq " + (dist < 10 ? "chg-down" : "wrow-meta");
+      distEl.className = "pos-liq " + distCls(dist);
       distEl.textContent = "liq @ " + fmtPrice(liq) + " · " + dist.toFixed(1) + "% away";
     }
     const valEl = row.querySelector(".wrow-val");
@@ -7157,6 +7384,8 @@ every(() => {
 loadWhalesFast(); loadLongShortFast();
 every(loadLongShortFast, 60_000, 3_000);
 every(loadWhalesFast, 90_000, 45_000);  /* o índice do bot, relido sozinho entre varrimentos ao vivo */
+/* as carteiras que estão à vista são relidas de 20 em 20 s — ver o comentário em whaleRefreshShown */
+every(whaleRefreshShown, 20_000, 12_000);
 setTimeout(loadLongShort, 8_000); every(loadLongShort, 300_000, 308_000); /* 500-wallet positioning scan every 5 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
