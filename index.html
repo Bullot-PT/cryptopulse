@@ -1311,10 +1311,11 @@ async function getCgWide() {
   if (cgWide.length && Date.now() - cgWideT < 300_000) return cgWide;
   try {
     const mir = await fetchCgMirror();
-    /* a snapshot older than 15 min is not a price any more — drop it rather than compare against it */
-    if (mir && Array.isArray(mir.markets) && mir.markets.length && Date.now() - (mir.t || 0) < 900_000) {
+    /* the bot refreshes this every 10 min; past ~25 it is no longer a price, so it gets dropped
+       rather than compared against. Anything sourced from it is marked not-live and never alerts. */
+    if (mir && Array.isArray(mir.markets) && mir.markets.length && Date.now() - (mir.t || 0) < 1_500_000) {
       cgWide = mir.markets; cgWideT = Date.now(); cgNameKey = "";
-    } else if (Date.now() - (mir && mir.t || 0) >= 900_000) { cgWide = []; cgNameKey = ""; }
+    } else { cgWide = []; cgNameKey = ""; }
   } catch (e) {}
   return cgWide;
 }
@@ -1376,7 +1377,7 @@ function upPrem(sym) {
   const hit = upNameCoin(sym);
   if (hit && hit.c.current_price > 0) {
     const v = (usd / hit.c.current_price - 1) * 100;
-    if (isFinite(v)) return {v: v, ref: "the world average price", live: !!hit.live};
+    if (isFinite(v)) return {v: v, ref: hit.live ? "the world average price" : "the world average price of ≤10 min ago", live: !!hit.live};
   }
   return null;
 }
