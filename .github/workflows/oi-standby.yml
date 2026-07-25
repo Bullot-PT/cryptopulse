@@ -19,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       # Same pin as the primary — a takeover has to run the collector on the same runtime, or the
       # WebSocket-based wallet discovery would be missing for as long as the standby is in charge.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
         with:
           node-version: '22'
       - name: Take over only if the data has stopped moving

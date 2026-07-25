@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       # Pinned, not left to whatever the runner image happens to ship. The collector listens to the
       # Hyperliquid trade feed over a WebSocket to find wallets the leaderboard does not rank, and the
       # global WebSocket is only on by default from Node 22 — on an older runtime that discovery would
       # silently switch itself off and the site would quietly lose coverage of the smaller coins.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
         with:
           node-version: '22'
       - name: Sample every 5 minutes for one hour
