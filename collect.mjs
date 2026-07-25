@@ -522,7 +522,7 @@ try {
      in roughly twenty passes. What the rotation reads is carried forward between passes with the minute
      it was read stamped on it, and the dashboard shows that age — a carried position is presented as
      "seen N minutes ago", never as if it had just been checked. */
-  const CORE_N = 800, ROT_N = 700, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
+  const CORE_N = 800, ROT_N = 600, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
   let prevPos = null;
   try { prevPos = JSON.parse(fs.readFileSync('data/hl-pos.json', 'utf8')); } catch (e) {}
   const rotPool = wallets.slice(CORE_N);
@@ -534,6 +534,110 @@ try {
   const scannedAddrs = new Set();
   const NOW_MIN = Math.round(now / 60000);
   let rlDrop = 0;
+
+  /* ---- addresses the leaderboard does not know about ----
+     The leaderboard ranks by account value, so a wallet running a large position in a small coin can sit
+     below every cut-off and still be the biggest holder of that coin. Those wallets do show themselves in
+     one place: the public trade feed names both sides of every fill. So we listen to it.
+
+     The listening costs nothing against the REST rate limit — it is a separate WebSocket, and it runs
+     alongside the wallet scan rather than before it, so it adds no time to the pass. What it produces is
+     a pool of addresses kept in data/hl-seen.json, and each pass spends a fixed slice of its request
+     budget reading a few hundred of them. An address that turns out to hold a real position is marked and
+     re-read often; one that never does drifts to the back of the queue and eventually ages out. */
+  const WS_N = 250, HARVEST_MS = 120000, HARVEST_COINS = 30, SEEN_MAX = 25000, SEEN_TTL = 2880;
+
+  function harvestTraders(coins, ms) {
+    return new Promise(resolve => {
+      const found = new Map();
+      if (typeof WebSocket !== 'function') {
+        console.log('trade-feed harvest: this Node has no WebSocket — discovery is off this pass');
+        return resolve(found);
+      }
+      if (!coins.length) return resolve(found);
+      let ws;
+      try { ws = new WebSocket('wss://api.hyperliquid.xyz/ws'); } catch (e) { return resolve(found); }
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch (e) {}
+        resolve(found);
+      };
+      const timer = setTimeout(finish, ms);
+      ws.onopen = () => {
+        try {
+          coins.forEach(c => ws.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'trades', coin: c } })));
+        } catch (e) { finish(); }
+      };
+      ws.onerror = finish;
+      ws.onclose = finish;
+      ws.onmessage = ev => {
+        let m;
+        try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : String(ev.data)); } catch (e) { return; }
+        if (!m || m.channel !== 'trades' || !Array.isArray(m.data)) return;
+        m.data.forEach(t => (t.users || []).forEach(u => {
+          if (typeof u !== 'string' || !u.startsWith('0x')) return;
+          const a = u.toLowerCase();
+          found.set(a, (found.get(a) || 0) + 1);
+        }));
+      };
+    });
+  }
+
+  /* Listen where the picture is thinnest. A coin whose indexed positions came to only a fraction of its
+     real open interest last pass is a coin whose holders we are missing, so it goes to the front of the
+     subscription list; the rest of the slots rotate through the other tradeable coins so nothing is
+     permanently ignored. */
+  let seen = {}, prevWo = 0;
+  try {
+    const sf = JSON.parse(fs.readFileSync('data/hl-seen.json', 'utf8'));
+    seen = sf.a || {};
+    prevWo = sf.wo || 0;
+  } catch (e) {}
+  const prevCoins = (prevPos && prevPos.coins) || {};
+  const tradeable = Object.keys(MIDS).filter(c => !/^[@#]/.test(c) && !c.startsWith('xyz:'));
+  const thin = Object.keys(prevCoins)
+    .filter(c => tradeable.includes(c) && prevCoins[c].cov != null && prevCoins[c].cov < 50)
+    .sort((a, b) => prevCoins[a].cov - prevCoins[b].cov)
+    .slice(0, 20);
+  const wsOff = prevWo % Math.max(1, tradeable.length);
+  const harvestCoins = thin.slice();
+  for (let k = 0; harvestCoins.length < HARVEST_COINS && k < tradeable.length; k++) {
+    const c = tradeable[(wsOff + k) % tradeable.length];
+    if (!harvestCoins.includes(c)) harvestCoins.push(c);
+  }
+  const nextWo = tradeable.length ? (wsOff + HARVEST_COINS) % tradeable.length : 0;
+  const harvesting = harvestTraders(harvestCoins, HARVEST_MS);
+
+  /* Spend this pass's discovery budget on the pool built by earlier passes. Proven holders first — an
+     address we have already caught holding a large position is worth re-reading — but they are capped at
+     half the budget so newly-seen addresses always get their turn. */
+  const lbSet = new Set(wallets.map(r => String(r.ethAddress).toLowerCase()));
+  const seenList = Object.keys(seen).filter(a => !lbSet.has(a));
+  const rank = a => {
+    const e = seen[a] || [0, 0, 0];
+    return e[2] > 0 ? 0 : (!e[1] ? 1 : 2);
+  };
+  seenList.sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return ((seen[a] || [0, 0, 0])[1] || 0) - ((seen[b] || [0, 0, 0])[1] || 0);
+  });
+  const wsPick = [];
+  let hitTaken = 0;
+  for (const a of seenList) {
+    if (wsPick.length >= WS_N) break;
+    if (rank(a) === 0) {
+      if (hitTaken >= Math.floor(WS_N / 2)) continue;
+      hitTaken++;
+    }
+    wsPick.push(a);
+  }
+  wsPick.forEach(a => scanList.push({ ethAddress: a, __ws: true }));
+  const wsHits = new Set();
+  let seenPool = 0, seenHolders = 0;
   for (let i = 0; i < scanList.length; i += CHUNK) {
     const t0 = Date.now();
     const slice = scanList.slice(i, i + CHUNK);
@@ -558,6 +662,7 @@ try {
         const px = parseFloat(MIDS[p.coin]);
         /* index first — the liq-book's sanity filters below must not drop rows from the search index */
         if (v >= POS_MIN && wAddr) {
+          if (seen[wAddr.toLowerCase()]) wsHits.add(wAddr.toLowerCase());
           const szi = parseFloat(p.szi) || 0;
           (posIdx[p.coin] || (posIdx[p.coin] = [])).push([
             addrRef(wAddr),
@@ -584,6 +689,38 @@ try {
     if (spent < want) await new Promise(r => setTimeout(r, want - spent));
   }
   if (rlDrop) console.log('wallet scan: ' + rlDrop + ' of ' + scanList.length + ' unreadable this pass');
+
+  /* Fold this pass's listening into the pool and write it back. Each entry is
+     [minute last seen trading, minute last read on-chain, times it held an indexed position].
+     Entries that have not traded in SEEN_TTL minutes and never held anything are dropped — the pool is a
+     working queue, not an archive, and letting it grow forever would only dilute the discovery budget. */
+  try {
+    const harvested = await harvesting;
+    let fresh = 0;
+    harvested.forEach((cnt, a) => {
+      if (lbSet.has(a)) return;              // already covered by the leaderboard scan
+      if (!seen[a]) { seen[a] = [NOW_MIN, 0, 0]; fresh++; }
+      else seen[a][0] = NOW_MIN;
+    });
+    scannedAddrs.forEach(a => { if (seen[a]) seen[a][1] = NOW_MIN; });
+    wsHits.forEach(a => { if (seen[a]) seen[a][2] = (seen[a][2] || 0) + 1; });
+    let pool = Object.keys(seen).filter(a => (seen[a][2] > 0) || (NOW_MIN - seen[a][0] <= SEEN_TTL));
+    if (pool.length > SEEN_MAX) {
+      pool.sort((a, b) => (seen[b][2] - seen[a][2]) || (seen[b][0] - seen[a][0]));
+      pool = pool.slice(0, SEEN_MAX);
+    }
+    const keptSeen = {};
+    pool.forEach(a => { keptSeen[a] = seen[a]; });
+    seen = keptSeen;
+    fs.writeFileSync('data/hl-seen.json', JSON.stringify({ t: now, wo: nextWo, a: seen }));
+    seenPool = pool.length;
+    seenHolders = pool.filter(a => seen[a][2] > 0).length;
+    console.log('trade-feed harvest:', harvested.size, 'addresses on', harvestCoins.length, 'coins,',
+      fresh, 'new · pool', seenPool, '(' + seenHolders, 'proven holders) ·', wsPick.length, 'read this pass,',
+      wsHits.size, 'holding');
+  } catch (e) {
+    console.log('trade-feed harvest skipped:', e.message);
+  }
   Object.values(book).forEach(co => {
     Object.keys(co.bins).forEach(b => { co.bins[b] = [Math.round(co.bins[b][0]), Math.round(co.bins[b][1])]; });
   });
@@ -651,6 +788,9 @@ try {
       wallets: scanned,          // wallets read on THIS pass
       pool: wallets.length,      // how many are in the rotation altogether
       ro: nextRo,                // where the next pass picks the rotation up
+      ws: wsPick.length,         // addresses read this pass that came from the trade feed, not the leaderboard
+      wsp: seenPool,             // how many such addresses are queued altogether
+      wsh: seenHolders,          // of those, how many have been caught holding a large position
       carried,                   // rows kept from earlier passes, each with its own read time
       min: POS_MIN,
       cap: POS_PER_COIN,
