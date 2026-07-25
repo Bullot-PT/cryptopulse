@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-+uVpXSA1KP+xKIAluRS8NWActUIiXAnBINQxeuhaHH8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-kKwiv8/FC0Y0sq8jTcnwNlK2t3yE5CAVkG5PoK2pRY8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -453,6 +453,12 @@
   .wrow-val { font-size: 12.5px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
   .wrow-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .whale-addr { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  /* quem é a carteira, segundo a Nansen. Cinzento para as categorias, a sério para os nomes. */
+  .ns-name {
+    font-size: 11px; color: var(--text); font-weight: 600; cursor: help;
+    max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ns-name.ns-gen { color: var(--muted); font-weight: 400; }
   .side-badge {
     font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
     letter-spacing: 0.03em; white-space: nowrap;
@@ -3091,7 +3097,52 @@ function whaleAge(r) {
   const m = Math.floor((Date.now() - (r.readAt || 0)) / 60_000);
   return r.readAt && m >= 2 ? m + "m" : "";
 }
+/* ---- nomes das carteiras (data/nansen-names.json) -------------------------------------------
+   Estático, público, sem chave nenhuma. Ver o cabeçalho do p121 para o formato. */
+const nsN = {a: null, d: null, k: 12, at: 0, busy: false};
+function nsLoad() {
+  if (nsN.busy) return;
+  if (nsN.a && Date.now() - nsN.at < 6 * 3600_000) return;
+  nsN.busy = true;
+  fetchJSONraw("data/nansen-names.json", {timeout: 20000}).then(function (j) {
+    if (j && j.a && Array.isArray(j.d)) {
+      nsN.a = j.a; nsN.d = j.d; nsN.k = j.k || 12; nsN.at = Date.now();
+      nsPaint();   /* as linhas já estão pintadas; entram-lhes os nomes sem reconstruir nada */
+    }
+  }).catch(function () { /* sem nomes a página funciona exactamente como antes */ })
+    .finally(function () { nsN.busy = false; });
+}
+/* Categoria ou nome próprio. A Nansen mistura as duas coisas no mesmo campo. */
+const NS_GEN = /^(HL Perps .*(Trader|Whale|Perma-Bull|Perma-Bear)|Former Smart Trader|Smart HL Perps Trader|High Balance|High Activity|Token Millionaire|Fresh Wallet|Heavy DEX Trader|Consistent Perps Winner|Boros Trader|Yield Farmer|.*Whale)$/;
+function nsLabel(addr) {
+  if (!nsN.a || !addr) return null;
+  const i = nsN.a[String(addr).toLowerCase().replace(/^0x/, "").slice(0, nsN.k)];
+  if (i === undefined) return null;
+  const t = nsN.d[i];
+  if (!t) return null;
+  return {t: t, gen: NS_GEN.test(t.replace(/^[^\p{L}\p{N}]+/u, "").trim())};
+}
+function nsBadge(addr) {
+  const l = nsLabel(addr);
+  if (!l) return "";
+  return '<span class="ns-name' + (l.gen ? " ns-gen" : "") + '" title="' + esc(l.t) +
+    ' — etiqueta da Nansen para esta carteira">' + esc(l.t) + "</span>";
+}
+/* O ficheiro chega depois das linhas estarem no ecrã. Em vez de repintar tudo (o que reiniciaria
+   as animações e apagaria os crachás 🆕/💰), enfia-se o nome ao lado do endereço que já lá está. */
+function nsPaint() {
+  const rows = document.querySelectorAll(".wrow[data-addr]");
+  for (let i = 0; i < rows.length; i++) {
+    const el = rows[i];
+    if (el.querySelector(".ns-name")) continue;
+    const b = nsBadge(el.dataset.addr);
+    if (!b) continue;
+    const a = el.querySelector(".whale-addr");
+    if (a) a.insertAdjacentHTML("afterend", b);
+  }
+}
 function renderWhaleRows(rows, note) {
+  nsLoad();   /* só se paga o ficheiro quando o painel das baleias é mesmo usado */
   return (note ? '<div class="empty" style="padding:8px 14px;text-align:left">' + note + "</div>" : "") +
     rows.map(r => {
       const distTxt = r.dist == null ? "" :
@@ -3124,6 +3175,7 @@ function renderWhaleRows(rows, note) {
           '<button class="pin-btn' + (getPinned().includes(r.addr) ? " pin-on" : "") + '" data-pin="' + esc(r.addr) + '" title="Watch this wallet">' +
             (getPinned().includes(r.addr) ? "★" : "☆") + "</button>" +
           '<span class="whale-addr">' + esc(r.addr.slice(0, 6) + "…" + r.addr.slice(-4)) + "</span>" +
+          nsBadge(r.addr) +
           '<span class="wrow-meta">entry ' + fmtPrice(r.entry) +
             (whaleAge(r) ? " · read " + whaleAge(r) + " ago" : "") + "</span>" +
           '<span class="pos-liq ' + (r.upnl >= 0 ? "chg-up" : "chg-down") + '">uPnL ' + (r.upnl >= 0 ? "+" : "−") + fmtBig(Math.abs(r.upnl)).slice(1) + "</span>" +
