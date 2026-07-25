@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-Op9FrjeLAPeHB0n+ZPR8l5miY0127Ma5iRgMM6tKRFU=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-AbOkszvqu5sr1sKwDUYQcKZrF3MITYSdRbvABW8+z7g=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -795,7 +795,7 @@
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:4px 7px;color:var(--muted)"></button>
           <button class="btn-ghost" id="pmFavBtn" title="Favourite markets — click to open/close the list" style="padding:2px 8px">⭐ 0</button>
           <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button>
-          <button class="btn-ghost" id="pmOrdBtn" title="Reset the manual order — favourites stay on top" style="padding:2px 8px">↕ reset</button></div>
+          <button class="btn-ghost" id="pmOrdBtn" title="Reset the manual order — favourites stay on top" style="padding:2px 8px">↕</button></div>
         <div class="panel-body" id="pmOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
           <div id="pmBody"><div class="empty">Loading markets…</div></div>
@@ -4643,7 +4643,9 @@ function pmOrderedCards() {
 }
 function pmOrdPaint() {
   const b = $("pmOrdBtn");
-  if (b) b.style.display = pmOrder.load().length ? "" : "none";
+  /* atenção: style.display = "" apaga o inline e devolve o comando à regra CSS #pmOrdBtn
+     { display: none } — o botão nunca aparecia. Tem de ser um valor explícito. */
+  if (b) b.style.display = pmOrder.load().length ? "inline-block" : "none";
 }
 /* declarados aqui em cima porque o handler de click do painel (mais abaixo) lê o pmDropAt */
 let pmDragSlug = null, pmDropAt = 0;
