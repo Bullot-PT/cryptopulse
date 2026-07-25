@@ -49,7 +49,12 @@ jobs:
             echo "disjuntor disparado — não despacho sucessora"
             exit 0
           fi
-          if gh workflow run "$WF" --ref main; then
+          # O -R é obrigatório: este passo corre ANTES do actions/checkout, portanto o runner ainda não
+          # tem nenhum repositório git na pasta de trabalho. Sem -R o gh tenta descobrir o repo pelo
+          # remote do git e morre com "fatal: not a git repository" — foi exactamente isso que aconteceu
+          # na run #2 do standby às 14:09Z de 25-jul-2026, e a corrente ficou sem despachar ninguém.
+          # (O gh api acima já funcionava porque tem o repo escrito no caminho.)
+          if gh workflow run "$WF" --ref main -R "${GITHUB_REPOSITORY}"; then
             echo "sucessora em fila — arranca no instante em que esta run terminar"
           else
             echo "não consegui despachar a sucessora — o cron fica como rede"
