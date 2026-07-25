@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-ypUXLHR+X7qsl0ewaPvHqQF8rN944i8lyYi/suv1BHE=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-7iHEDWoZr6wdLb6KMwxaiBSJcmTEJfgkmKeNod6dOkQ=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -790,7 +790,7 @@
     </div>
     <div class="grid-stack-item" gs-id="liqs">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Liquidation Risk <span class="sub">live Morpho + DefiLlama · all lenders</span></div>
+        <div class="panel-head">💥 Liquidation Risk <span class="sub">live Morpho · Aave · Euler · Kamino + DefiLlama</span></div>
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
       </div></div>
     </div>
@@ -2433,48 +2433,188 @@ function renderHyperRows() {
 $("hyperSearch").addEventListener("input", onFrame(() => { if (hyperRows.length) renderHyperRows(); }));
 
 /* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
-/* ---- LIVE lending risk from Morpho's public API (real-time, all its chains) ----
-   healthFactor H means the position liquidates if collateral drops by (1 - 1/H). */
-async function loadMorphoLive() {
+/* ---- risco de liquidação em direto: Morpho + Euler + Aave + Kamino ----
+   O healthFactor H significa que a posição é liquidada se o colateral cair (1 - 1/H).
+   O Morpho publica esse número já calculado em priceVariationToLiquidationPrice, que respeita
+   a configuração real do mercado; usamos esse e só caímos para (1 - 1/H) se vier a null. */
+
+const LEND_CHAINS = {1: "ethereum", 10: "optimism", 56: "bsc", 100: "gnosis", 130: "unichain",
+  137: "polygon", 143: "monad", 146: "sonic", 324: "zksync", 480: "world", 988: "stable",
+  999: "hyperevm", 1088: "metis", 4217: "tempo", 4663: "robinhood", 5042: "arc",
+  8453: "base", 42161: "arbitrum", 43114: "avalanche", 59144: "linea", 534352: "scroll",
+  747474: "katana", 9745: "plasma"};
+const lendChain = id => LEND_CHAINS[id] || ("chain " + id);
+
+async function morphoGQL(query, timeout) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), timeout || 20000);
+  try {
+    const r = await fetch("https://api.morpho.org/graphql", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({query: query}), signal: ctl.signal
+    });
+    const j = await r.json();
+    if (j.errors) throw new Error("graphql");
+    return j.data;
+  } finally { clearTimeout(t); }
+}
+
+/* ---- tamanho de cada protocolo, um pedido por protocolo ---- */
+async function lendSizeMorpho() {
+  const d = await morphoGQL("{ morphoBlues(first: 40) { items { state { totalDepositUsd totalBorrowUsd marketCount } } } }");
+  const it = (d.morphoBlues.items || []).filter(x => x.state);
+  if (!it.length) throw new Error("vazio");
+  return {name: "Morpho", dep: it.reduce((a, x) => a + (x.state.totalDepositUsd || 0), 0),
+    bor: it.reduce((a, x) => a + (x.state.totalBorrowUsd || 0), 0),
+    note: it.reduce((a, x) => a + (x.state.marketCount || 0), 0) + " markets · " + it.length + " chains",
+    url: "https://app.morpho.org"};
+}
+async function lendSizeEuler() {
+  const j = await fetchJSON("https://v3.euler.finance/v3/protocol/stats", {timeout: 20000});
+  const d = j.data || j;
+  if (!d || !d.totalSuppliedUsd) throw new Error("vazio");
+  return {name: "Euler v2", dep: d.totalSuppliedUsd, bor: d.totalBorrowedUsd,
+    note: d.vaultCount + " vaults · " + d.chainCount + " chains · " + (d.utilization * 100).toFixed(0) + "% util",
+    url: "https://app.euler.finance"};
+}
+/* api.v3.aave.com é o host da documentação; o SDK aponta para api.aave.com e responde igual */
+async function aaveGQL(query, ctl) {
+  for (const host of ["https://api.v3.aave.com", "https://api.aave.com"]) {
+    try {
+      const r = await fetch(host + "/graphql", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({query: query}), signal: ctl.signal});
+      const x = await r.json();
+      if (x.data) return x.data;
+    } catch (e) {}
+  }
+  return null;
+}
+async function lendSizeAave() {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    /* chainIds é obrigatório e a lista muda — pedir uma cadeia que a Aave ainda não suporta faz a
+       query inteira rebentar com "chain id is not supported" e o painel perdia a Aave toda.
+       Por isso a lista vem da própria API (query chains), sem testnets, em vez de estar fixa aqui. */
+    const ch = await aaveGQL("query { chains { chainId isTestnet } }", ctl);
+    const ids = ((ch && ch.chains) || []).filter(c => !c.isTestnet).map(c => c.chainId);
+    if (!ids.length) throw new Error("sem chains");
+    const d = await aaveGQL("query { markets(request: { chainIds: [" + ids.join(",") +
+      "] }) { name totalMarketSize totalAvailableLiquidity } }", ctl);
+    const m = (d && d.markets) || [];
+    if (!m.length) throw new Error("vazio");
+    const dep = m.reduce((a, x) => a + (+x.totalMarketSize || 0), 0);
+    const liq = m.reduce((a, x) => a + (+x.totalAvailableLiquidity || 0), 0);
+    return {name: "Aave v3", dep: dep, bor: dep - liq,
+      note: m.length + " markets · " + ids.length + " chains", url: "https://app.aave.com"};
+  } finally { clearTimeout(t); }
+}
+async function lendSizeKamino() {
+  const list = await fetchJSON("https://api.kamino.finance/v2/kamino-market", {timeout: 20000});
+  const cur = (list || []).filter(m => m.isCurated || m.isPrimary).slice(0, 10);
+  if (!cur.length) throw new Error("vazio");
+  const res = await Promise.allSettled(cur.map(m =>
+    fetchJSON("https://api.kamino.finance/kamino-market/" + m.lendingMarket + "/reserves/metrics", {timeout: 20000})));
+  let dep = 0, bor = 0, n = 0;
+  res.forEach(r => { if (r.status === "fulfilled" && Array.isArray(r.value)) r.value.forEach(x => {
+    dep += +x.totalSupplyUsd || 0; bor += +x.totalBorrowUsd || 0; n++;
+  }); });
+  if (!n) throw new Error("vazio");
+  return {name: "Kamino", dep: dep, bor: bor, note: n + " reserves · solana", url: "https://app.kamino.finance"};
+}
+
+/* ---- posições do Morpho perto da liquidação ----
+   6 páginas de 1000: medido em direto, a 4.ª página já não muda o valor dos baldes, e o varrimento
+   completo (14 páginas) só acrescentava 0,5% a troco de 2,5x o tempo. */
+async function morphoAtRisk() {
+  const Q = n => "{ marketPositions(first: 1000, skip: " + n + ", orderBy: BorrowShares, orderDirection: Desc," +
+    " where: { marketListed: true, healthFactor_lte: 1.25, borrowShares_gte: 1 })" +
+    " { pageInfo { countTotal } items { healthFactor priceVariationToLiquidationPrice user { address }" +
+    " state { collateralUsd borrowAssetsUsd } market { collateralAsset { symbol } loanAsset { symbol } chain { id } } } } }";
+  const pages = await Promise.allSettled([0, 1000, 2000, 3000, 4000, 5000].map(n => morphoGQL(Q(n), 25000)));
+  const ok = pages.filter(p => p.status === "fulfilled").map(p => p.value.marketPositions);
+  if (!ok.length) throw new Error("sem páginas");
+  const total = ok[0].pageInfo ? ok[0].pageInfo.countTotal : 0;
+  const items = ok.flatMap(p => p.items || [])
+    .filter(i => i.state && i.state.collateralUsd >= 50000 && i.healthFactor >= 1 && i.market && i.market.loanAsset)
+    .map(i => ({
+      hf: i.healthFactor, col: i.state.collateralUsd,
+      /* o sinal vem negativo da API (queda necessária); guardamos em positivo */
+      dist: i.priceVariationToLiquidationPrice != null
+        ? Math.abs(i.priceVariationToLiquidationPrice) * 100
+        : (1 - 1 / i.healthFactor) * 100,
+      sym: i.market.collateralAsset ? i.market.collateralAsset.symbol : "idle",
+      loan: i.market.loanAsset.symbol,
+      chain: lendChain(i.market.chain && i.market.chain.id),
+      addr: i.user.address
+    }));
+  return {items: items, scanned: Math.min(6000, total), total: total};
+}
+
+/* ---- liquidações já executadas no Euler (evento real, não estimativa) ---- */
+async function eulerLiqs(hours) {
+  const now = Math.floor(Date.now() / 1000);
+  const chains = [1, 8453, 42161, 999, 130];
+  const res = await Promise.allSettled(chains.map(c =>
+    fetchJSON("https://v3.euler.finance/v3/liquidations?chainId=" + c + "&from=" + (now - hours * 3600) + "&to=" + now + "&limit=100", {timeout: 20000})));
+  let n = 0, usd = 0;
+  res.forEach(r => { if (r.status === "fulfilled" && r.value && Array.isArray(r.value.data)) r.value.data.forEach(e => {
+    n++; usd += +e.repayAssetsUsd || 0;
+  }); });
+  return {n: n, usd: usd};
+}
+
+let lendLiveT = 0;
+async function loadLendLive() {
   const box = document.getElementById("morphoLive");
   if (!box) return;
-  try {
-    const q = {query: "{ marketPositions(first:300, orderBy: HealthFactor, orderDirection: Asc, where:{healthFactor_lte:1.25, healthFactor_gte:1.0}) { items { healthFactor state{ collateralUsd } user{ address } market{ collateralAsset{ symbol } loanAsset{ symbol } morphoBlue{ chain{ network } } } } } }"};
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 20000);
-    const r = await fetch("https://blue-api.morpho.org/graphql", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(q), signal: ctl.signal
-    });
-    clearTimeout(t);
-    const j = await r.json();
-    const items = ((j.data && j.data.marketPositions.items) || [])
-      .filter(i => i.state && i.state.collateralUsd >= 50000 && i.healthFactor >= 1)
-      .map(i => ({
-        hf: i.healthFactor, col: i.state.collateralUsd,
-        dist: (1 - 1 / i.healthFactor) * 100,
-        sym: i.market.collateralAsset.symbol, loan: i.market.loanAsset.symbol,
-        chain: (i.market.morphoBlue.chain.network || "").toLowerCase(),
-        addr: i.user.address
-      }));
-    if (!items.length) { box.innerHTML = ""; return; }
-    const within = d => items.filter(i => i.dist <= d).reduce((s, i) => s + i.col, 0);
-    const w5 = within(5), w10 = within(10), w20 = within(20);
+  const [sizes, risk, liq24] = await Promise.all([
+    Promise.allSettled([lendSizeMorpho(), lendSizeAave(), lendSizeEuler(), lendSizeKamino()]),
+    morphoAtRisk().catch(() => null),
+    /* 7 dias e não 24 h: medido a 25-jul-2026, o Euler teve 1 liquidação em 24 h ($257) e 29 em
+       7 dias ($38k) — a janela de um dia dá um número verdadeiro mas sem significado nenhum */
+    eulerLiqs(168).catch(() => null)
+  ]);
+  const rows = sizes.filter(r => r.status === "fulfilled").map(r => r.value).sort((a, b) => b.dep - a.dep);
+  const failed = sizes.filter(r => r.status === "rejected").length;
+  if (!rows.length && !risk) return;   /* nada novo: mantém o que lá está */
+
+  let html = "";
+
+  if (rows.length) {
+    const dep = rows.reduce((a, r) => a + r.dep, 0), bor = rows.reduce((a, r) => a + r.bor, 0);
+    html += '<div class="liq-asset">' +
+      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">🏦 LENDING</span>' +
+      '<span class="liq-px">live · no snapshots</span>' +
+      '<span class="liq-total">' + fmtBig(dep) + " supplied · " + fmtBig(bor) + " borrowed" +
+      (failed ? " · " + failed + " source" + (failed > 1 ? "s" : "") + " unreachable" : "") + "</span></div>" +
+      rows.map(r =>
+        '<a class="liq-pos" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+          '<span class="proto-badge">' + esc(r.name) + "</span>" +
+          "<span>" + fmtBig(r.dep) + " supplied · " + fmtBig(r.bor) + " borrowed</span>" +
+          '<span class="liq-dist" style="color:var(--muted)">' + esc(r.note) + "</span></a>").join("") +
+    "</div>";
+  }
+
+  if (risk && risk.items.length) {
+    const it = risk.items;
+    const within = d => it.filter(i => i.dist <= d).reduce((a, i) => a + i.col, 0);
     const bySym = {};
-    items.forEach(i => { bySym[i.sym] = (bySym[i.sym] || 0) + i.col; });
+    it.forEach(i => { bySym[i.sym] = (bySym[i.sym] || 0) + i.col; });
     const topSyms = Object.entries(bySym).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const top = items.sort((a, b) => b.col - a.col).slice(0, 3);
-    box.innerHTML = '<div class="liq-asset">' +
+    const top = it.slice().sort((a, b) => b.col - a.col).slice(0, 3);
+    html += '<div class="liq-asset">' +
       '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">⛓ LIVE</span>' +
       '<span class="liq-px">Morpho · real-time on-chain</span>' +
-      '<span class="liq-total">' + items.length + " positions ≥ $50k near liquidation</span></div>" +
+      '<span class="liq-total">' + it.length + " positions ≥ $50k · " + risk.scanned + " of " +
+        risk.total + " scanned</span></div>" +
       '<div class="liq-buckets">' +
-        '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(w5) + "</div></div>" +
-        '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(w10) + "</div></div>" +
-        '<div class="liq-bucket"><div class="b-label">within −20%</div><div class="b-val">' + fmtBig(w20) + "</div></div>" +
+        '<div class="liq-bucket"><div class="b-label">liq. within −5%</div><div class="b-val">' + fmtBig(within(5)) + "</div></div>" +
+        '<div class="liq-bucket"><div class="b-label">within −10%</div><div class="b-val">' + fmtBig(within(10)) + "</div></div>" +
+        '<div class="liq-bucket"><div class="b-label">within −20%</div><div class="b-val">' + fmtBig(within(20)) + "</div></div>" +
       "</div>" +
-      '<div class="liq-aave">' + topSyms.map(([s, v]) =>
-        '<span class="proto-badge">' + esc(s) + "</span> <b>" + fmtBig(v) + "</b>").join(" · ") +
+      '<div class="liq-aave">' + topSyms.map(([sym, v]) =>
+        '<span class="proto-badge">' + esc(sym) + "</span> <b>" + fmtBig(v) + "</b>").join(" · ") +
         " <span style='color:var(--muted)'>collateral at risk</span></div>" +
       top.map(p =>
         '<a class="liq-pos" href="https://debank.com/profile/' + esc(p.addr) + '" target="_blank" rel="noopener">' +
@@ -2484,9 +2624,19 @@ async function loadMorphoLive() {
           '<span class="liq-dist ' + (p.dist < 10 ? "chg-down" : "") + '">−' + p.dist.toFixed(1) + "% away</span></a>"
       ).join("") +
     "</div>";
-    markUpdated();
-  } catch (e) { /* keep previous content */ }
+  }
+
+  if (liq24 && liq24.n) {
+    html += '<div class="liq-asset"><div class="liq-head" style="margin:0">' +
+      '<span class="liq-sym" style="font-size:12.5px">⚡ ' + liq24.n + " Euler liquidation" +
+        (liq24.n > 1 ? "s" : "") + " executed · last 7d</span>" +
+      '<span class="liq-total">' + fmtBig(liq24.usd) + " of debt repaid by liquidators</span></div></div>";
+  }
+
+  if (html) { box.innerHTML = html; lendLiveT = Date.now(); markUpdated(); }
 }
+/* o nome antigo continua a existir: é chamado no fim do loadLiquidations */
+async function loadMorphoLive() { try { await loadLendLive(); } catch (e) { /* mantém o conteúdo anterior */ } }
 
 const LIQ_FALLBACK = ["eth", "wbtc", "btc", "steth", "wsteth", "weeth", "sol", "avax", "link", "matic"];
 /* map DefiLlama asset keys to CoinGecko ids so buckets are computed against LIVE prices,
@@ -2603,6 +2753,10 @@ async function loadLiquidations() {
     loadMorphoLive();
     markUpdated();
   } catch (e) {
+    /* o DefiLlama caiu, mas o bloco em direto (Morpho/Euler/Aave/Kamino) não depende dele:
+       prepara o contentor e deixa-o pintar, em vez de tapar o painel com um erro */
+    if (!body.querySelector("#morphoLive")) body.innerHTML = '<div id="morphoLive"></div>';
+    await loadMorphoLive();
     if (!body.querySelector(".liq-asset"))
       setError(body, "Liquidation data unavailable right now — retrying automatically.");
   }
