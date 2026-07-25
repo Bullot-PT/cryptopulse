@@ -10,9 +10,11 @@
  * Daí três modos:
  *
  *   probe   ~5 créditos   valida a chave e mostra o que a Nansen devolve. Corre à mão.
- *   sweep   ~180 créditos varrimento intensivo, uma vez. Semeia a cache de nomes com milhares
- *                         de endereços de uma assentada. É o que ele pediu para fazer antes do
- *                         fim do mês, enquanto os créditos de Julho ainda estão quase intactos.
+ *   sweep   ~750 créditos varrimento intensivo, uma vez. Semeia a cache de nomes com milhares
+ *                         de endereços de uma assentada — 620 são as quatro chamadas premium,
+ *                         que é o que compra NOMES em vez de categorias. É o que ele pediu para
+ *                         fazer antes do fim do mês, enquanto os créditos de Julho estão quase
+ *                         intactos e o mês reinicia daqui a seis dias.
  *   daily   ~45 créditos  manutenção, uma vez por dia. 45×30 = 1350/mês, sobra folga.
  *
  * A CACHE DE NOMES NUNCA É RECONSULTADA. Um nome que já sabemos custa zero para sempre, por isso
@@ -22,6 +24,15 @@
  * créditos POR ENDEREÇO. Com 2000/mês dariam para 20 carteiras. Mas o perp-leaderboard e o
  * tgm/perp-positions custam 5 créditos por chamada, devolvem até 1000 linhas cada, e cada linha
  * já traz o nome. É por aí que vamos: os nomes vêm de borla à boleia dos dados de posições.
+ *
+ * O QUE O premium-test MEDIU (25-jul-2026, run #3, está em budget.premiumTest)
+ * Com premium_labels:false o que vem são categorias — "HL Perps Whale", "High Balance". Com
+ * premium_labels:true vêm nomes a sério: "Abraxas Capital", "Former Smart Trader", "👤 CBB".
+ * A sobretaxa premium É cobrada no perp-leaderboard (150, apesar de a tabela não o listar), mas
+ * é POR CHAMADA e não por linha: a chamada de 10 linhas custou exactamente os mesmos 155 que
+ * custaria uma de 1000. Daí a regra que rege o sweep — se se pagam labels premium, pagam-se
+ * sempre com per_page no máximo. 155 créditos por 1000 nomes próprios são 0,155 cada; os
+ * endpoints dedicados cobram 500 por um. É 3200 vezes mais barato por este caminho.
  *
  * Uso:  NANSEN_KEY=... node nansen-collector.mjs probe|sweep|daily [--dry]
  */
@@ -264,18 +275,25 @@ async function perpPositions(symbol, perPage) {
   }));
 }
 
-async function leaderboard(pages, perPage, days, dir) {
+/* premium=true só se justifica com perPage no máximo: a sobretaxa de 150 é por chamada.
+   Uma chamada premium de 10 linhas e uma de 1000 custam exactamente o mesmo. */
+const PREMIUM_CALL = 155;
+async function leaderboard(pages, perPage, days, dir, premium) {
   const seen = [];
   const date = dateRange(days || 7);
   for (let p = 1; p <= pages; p++) {
+    if (premium && remaining() < PREMIUM_CALL + 50) {
+      console.log(`  paro as premium: só sobram ${remaining()} créditos e cada uma custa ${PREMIUM_CALL}`);
+      break;
+    }
     const j = await call("/perp-leaderboard", {
       date,
-      /* Vem a true por omissão no esquema deles, e as labels premium são exactamente o que
-         dispara a sobretaxa de 150 créditos. Escrito à mão para não depender do padrão. */
-      premium_labels: false,
+      /* Vem a true por omissão no esquema deles, e é o que dispara a sobretaxa de 150. Escrito
+         à mão nos dois sentidos para nunca depender do padrão deles. */
+      premium_labels: !!premium,
       pagination: { page: p, per_page: perPage },
       order_by: [{ field: "total_pnl", direction: dir || "DESC" }],
-    });
+    }, premium ? 200 : undefined);
     const rows = Array.isArray(j?.data) ? j.data : [];
     for (const r of rows) {
       keepLabel(r.trader_address, r.trader_address_label);
@@ -358,18 +376,24 @@ async function run() {
   }
 
   else if (MODE === "sweep") {
-    /* O varrimento intensivo de uma vez só. Isto é o que semeia a cache de nomes: 5 páginas de
-       1000 do leaderboard e as 25 maiores moedas com o livro inteiro. Cada chamada 5 créditos. */
-    /* Três varreduras com janelas e sentidos diferentes porque devolvem gente diferente, e o
-       que nos interessa aqui são NOMES, não o PnL: os campeões do mês, os do dia (outra malta
-       — quem faz scalping não aparece no top de 30 dias) e, ao contrário, os que mais perderam.
-       Estes últimos são precisamente os que aparecem no painel perto da liquidação. */
-    console.log("-- leaderboard 30d, os que mais ganharam (5 × 1000)");
-    await leaderboard(5, 1000, 30, "DESC");
-    console.log("-- leaderboard 30d, os que mais perderam (2 × 1000)");
-    await leaderboard(2, 1000, 30, "ASC");
-    console.log("-- leaderboard 1d, o movimento de hoje (3 × 1000)");
-    await leaderboard(3, 1000, 1, "DESC");
+    /* O varrimento intensivo de uma vez só, e é aqui que se gastam os nomes próprios.
+       Quatro chamadas premium de 1000 linhas: 4 × 155 = 620 créditos por até 4000 carteiras
+       com nome a sério, guardadas para sempre. Ao pé dos 500 créditos que o endpoint dedicado
+       cobra por UM endereço, isto é a única forma de fazer isto com 2000/mês.
+
+       As quatro passagens são escolhidas para se sobreporem o menos possível:
+         30d DESC pág. 1 e 2  — os 2000 maiores do mês, garantidamente distintos entre si
+         30d ASC  pág. 1      — o fundo da mesma tabela, os que mais perderam. São exactamente
+                                as carteiras que aparecem no painel perto da liquidação.
+         1d  DESC pág. 1      — o movimento de hoje, outra malta: quem faz scalping nunca
+                                aparece no acumulado de 30 dias. */
+    console.log("-- leaderboard 30d premium, os maiores do mês (2 × 1000)");
+    await leaderboard(2, 1000, 30, "DESC", true);
+    console.log("-- leaderboard 30d premium, os que mais perderam (1 × 1000)");
+    await leaderboard(1, 1000, 30, "ASC", true);
+    console.log("-- leaderboard 1d premium, o movimento de hoje (1 × 1000)");
+    await leaderboard(1, 1000, 1, "DESC", true);
+    console.log(`-- nomes até agora: ${newLabels} novos, ${Object.keys(labels).length} no total`);
 
     const coins = topCoins(25);
     console.log(`-- posições por moeda (${coins.length}): ${coins.join(" ")}`);
