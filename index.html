@@ -211,6 +211,9 @@
   .pm-q { font-size: 13px; font-weight: 550; line-height: 1.4; margin-bottom: 7px; }
   .pm-row { display: flex; align-items: center; gap: 10px; }
   .pm-odds { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* a moved odd flashes once so a change that happens while you are looking elsewhere is not silent */
+  @keyframes pmTick { from { background: rgba(240,180,40,.38); } to { background: transparent; } }
+  .pm-tick { animation: pmTick .9s ease-out; border-radius: 3px; }
   .pm-brand { display: inline-flex; align-items: center; gap: 7px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-weight: 800; letter-spacing: -0.015em; font-size: 14.5px; color: var(--ink); }
@@ -320,6 +323,7 @@
   .gx-row { display: grid; grid-template-columns: minmax(0,1fr) 70px auto; gap: 10px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--grid); }
   .gx-row:last-child { border-bottom: none; }
   .gx-name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gx-rank { font-size: 10px; font-weight: 700; color: var(--muted); opacity: .8; }
   .gx-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
   .gx-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
   .gx-val { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; text-align: right; }
@@ -1500,11 +1504,35 @@ function upPremColor(p) {
   if (Math.abs(p) >= 0.7) return "var(--warn)";
   return "var(--ink-2)";
 }
+/* Upbit's own ticker endpoint answers in well under a second. What made this panel feel broken was the
+   ORDER: three other fetches (the bot's market meta, Binance spot, the CoinGecko wide list) were awaited
+   one after another BEFORE the ticker was even requested, so a cold start stacked three timeouts —
+   up to ~45s — in front of the first pixel. Those three only supply the 🇰🇷 premium badge and the
+   full asset names; the prices do not need them. So the ticker goes first and renders, and the three
+   enrichers run together in the background and repaint when they land. */
+let upEnrichAt = 0, upEnrichBusy = false;
+function upEnrich(force) {
+  if (upEnrichBusy) return;
+  if (!force && Date.now() - upEnrichAt < 240_000) return;
+  upEnrichBusy = true;
+  Promise.all([
+    (!upMeta || Date.now() - upMetaT > 300_000) ? fetchUpMeta().catch(() => null) : Promise.resolve(null),
+    getBinSpot().catch(() => null),
+    getCgWide().catch(() => null)     /* full asset names + world average prices — the second identity check */
+  ]).then(() => {
+    upEnrichAt = Date.now();
+    if (!upTick.length) return;
+    renderUpbit();
+    upScanAlerts();
+    if (priceCoins.length) renderPriceRows();
+    if (typeof trendCoins !== "undefined" && trendCoins.length) renderTrending(trendCoins, trendCachedAt);
+    if (typeof fdData !== "undefined" && fdData) renderFunding();
+    renderListingRows();
+  }).catch(() => {}).finally(() => { upEnrichBusy = false; });
+}
 async function loadUpbit() {
   const body = $("upBody");
-  if (!upMeta || Date.now() - upMetaT > 300_000) await fetchUpMeta();
-  await getBinSpot();
-  await getCgWide();   /* full asset names + world average prices — the second identity check */
+  upEnrich();          /* fire-and-forget — never blocks the price render */
   try {
     const j = await fetchJSONraw("https://api.upbit.com/v1/ticker/all?quoteCurrencies=KRW", {timeout: 20000});
     if (!Array.isArray(j) || !j.length) throw new Error("empty");
@@ -1708,6 +1736,57 @@ const pricePop = document.createElement("div");
 pricePop.className = "price-pop";
 document.body.appendChild(pricePop);
 
+/* ---------------- popup placement and dismissal ------------------------------------------------
+   Two separate complaints, two separate causes.
+
+   (1) "it shows up at the top instead of where my mouse is." The popup was anchored to the hovered
+   ROW and then clamped with Math.min(rowTop, innerHeight − popupHeight − 8). The chart popup is
+   ~330px tall, so for any row in the lower half of the window that clamp won, and the box jumped to
+   wherever it happened to fit — visually, the top of the screen. It now anchors to the CURSOR and,
+   when there is no room below, flips to sit ABOVE the cursor rather than being dragged to the top of
+   the viewport. It ends up next to the pointer either way.
+
+   (2) "it disappears before I can change the timeframe." The popup is a child of <body>, positioned
+   10px clear of the row, so the moment the pointer crossed that gap the row's mouseout fired with a
+   relatedTarget that was neither the row nor the popup, and the box vanished mid-reach. Hiding is now
+   deferred by a grace period, and any mouse entering the popup cancels it outright. That is the whole
+   "predict that I am going to change the timeframe" — you get an unhurried path from the row to the
+   buttons, and once you are on the popup it stays for as long as you are on it. */
+let popCursor = {x: 0, y: 0};
+document.addEventListener("mousemove", e => { popCursor = {x: e.clientX, y: e.clientY}; }, {passive: true});
+/* 260ms: long enough to cross a 10px gap at any human speed, short enough that the popup still feels
+   like it is following the pointer rather than lingering. */
+const POP_GRACE = 260;
+let popHideTimer = null;
+function popCancelHide() { if (popHideTimer) { clearTimeout(popHideTimer); popHideTimer = null; } }
+function popHideSoon(fn) {
+  popCancelHide();
+  popHideTimer = setTimeout(() => { popHideTimer = null; fn(); }, POP_GRACE);
+}
+/* Place the popup beside the pointer. rect is the hovered row, used only to pick a side so the box
+   never lands on top of the thing being read. */
+function popPlace(rect, opts) {
+  opts = opts || {};
+  pricePop.style.display = "block";
+  if (opts.interactive !== false) pricePop.style.pointerEvents = "auto";
+  const pw = pricePop.offsetWidth || 300, ph = pricePop.offsetHeight || 200;
+  const r = rect || {left: popCursor.x, right: popCursor.x, top: popCursor.y};
+  let x = r.right + 10;
+  if (x + pw > window.innerWidth - 8) x = r.left - pw - 10;
+  if (x < 8) x = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left));
+  /* vertical: centre-ish on the cursor, flip above it if it would run off the bottom */
+  const cy = popCursor.y || r.top;
+  let y = cy - 40;
+  if (y + ph > window.innerHeight - 8) y = cy - ph + 40;      /* flip: bottom edge near the cursor */
+  if (y < 8) y = 8;
+  if (y + ph > window.innerHeight - 8) y = Math.max(8, window.innerHeight - ph - 8);  /* taller than the window */
+  pricePop.style.left = Math.round(x) + "px";
+  pricePop.style.top = Math.round(y) + "px";
+}
+/* Being on the popup itself always cancels a pending hide — this is what makes the timeframe buttons
+   reachable, and it applies to every panel that uses this popup, not just Prices. */
+pricePop.addEventListener("mouseenter", popCancelHide);
+
 function popChartSVG(points, high, low, up) {
   const w = 276, h = 110, padL = 4, padR = 60, padY = 12;
   let min = Math.min(...points), max = Math.max(...points);
@@ -1759,19 +1838,21 @@ async function renderPricePop() {
     '<span class="pp-px pp-livepx" data-sym="' + esc((c.symbol||"").toUpperCase()) + '">' + fmtPrice(c.current_price) + "</span>" +
     '<span class="pp-tag">' + esc(priceTf) + "</span></div>" +
     '<div style="display:flex;gap:3px;margin-bottom:5px">' + btns + "</div>";
+  /* Redrawing on a timeframe click must not make the popup jump out from under the pointer, so after
+     the first placement the box holds its position while it is being used. */
   const place = () => {
-    const r = row.getBoundingClientRect();
-    pricePop.style.display = "block"; pricePop.style.pointerEvents = "auto";
-    const pw = 300, ph = pricePop.offsetHeight || 190;
-    let x = r.right + 10;
-    if (x + pw > window.innerWidth - 8) x = r.left - pw - 10;
-    if (x < 8) x = Math.min(window.innerWidth - pw - 8, Math.max(8, r.left));
-    pricePop.style.left = x + "px";
-    pricePop.style.top = Math.min(Math.max(8, r.top - 30), window.innerHeight - ph - 8) + "px";
+    popCancelHide();
+    if (pricePop.dataset.anchored === pricePopId && pricePop.style.display === "block") {
+      pricePop.style.pointerEvents = "auto";
+      return;
+    }
+    popPlace(row.getBoundingClientRect());
+    pricePop.dataset.anchored = pricePopId;
   };
   const wireBtns = () => {
     pricePop.querySelectorAll(".tf-btn").forEach(b => b.addEventListener("click", ev => {
-      ev.stopPropagation(); priceTf = b.dataset.ptf;
+      ev.stopPropagation(); ev.preventDefault(); popCancelHide();
+      priceTf = b.dataset.ptf;
       try { localStorage.setItem("cryptopulse-price-tf", priceTf); } catch (e) {}
       renderPricePop();
     }));
@@ -1810,12 +1891,29 @@ async function renderPricePop() {
 pricePop.addEventListener("click", e => { if (e.target.closest(".tf-btn")) e.stopPropagation(); });
 $("pricesBody").addEventListener("mouseover", e => {
   const row = e.target.closest(".price-row");
-  if (row && row.dataset.i != null) showPricePop(row);
+  if (!row || row.dataset.i == null) return;
+  popCancelHide();
+  const c = priceCoins[Number(row.dataset.i)];
+  if (c && pricePopId === c.id && pricePop.style.display === "block") return;  /* same row — leave it be */
+  pricePop.dataset.anchored = "";
+  showPricePop(row);
 });
+function pricePopHide() {
+  pricePop.style.display = "none"; pricePop.style.pointerEvents = "none";
+  pricePop.dataset.anchored = ""; pricePopRow = null; pricePopId = null;
+}
 $("pricesBody").addEventListener("mouseout", e => {
   const to = e.relatedTarget;
   if (to && to.closest && (to.closest(".price-row") || to.closest(".price-pop"))) return;
-  pricePop.style.display = "none"; pricePop.style.pointerEvents = "none"; pricePopRow = null; pricePopId = null;
+  popHideSoon(pricePopHide);
+});
+/* leaving the popup for anywhere other than the price list closes it — same grace period, so a slip
+   of the mouse off the edge and straight back is not punished */
+pricePop.addEventListener("mouseleave", e => {
+  if (!pricePopId) return;
+  const to = e.relatedTarget;
+  if (to && to.closest && to.closest(".price-row")) return;
+  popHideSoon(pricePopHide);
 });
 
 /* ---------------- global stats (CoinGecko) ---------------- */
@@ -2070,20 +2168,20 @@ async function renderPerpPop() {
       '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history yet — it builds while the dashboard runs" +
       (perpOiSrc === "BN" ? " (Binance history is browser-collected only)" : "") + ".</div>");
   pricePop.querySelectorAll(".tf-btn").forEach(b => b.addEventListener("click", ev => {
-    ev.stopPropagation();
+    ev.stopPropagation(); ev.preventDefault();
+    clearTimeout(perpHideTimer); popCancelHide();
     perpOiView = b.dataset.tf;
     try { localStorage.setItem("cryptopulse-oi-view", perpOiView); } catch (er) {}
     renderPerpPop();
   }));
-  const rect = perpPopRow.getBoundingClientRect();
-  pricePop.style.display = "block";
-  pricePop.style.pointerEvents = "auto";
-  const pw = 300, ph = pricePop.offsetHeight || 210;
-  let x = rect.right + 10;
-  if (x + pw > window.innerWidth - 8) x = rect.left - pw - 10;
-  if (x < 8) x = Math.max(8, window.innerWidth - pw - 8);
-  pricePop.style.left = x + "px";
-  pricePop.style.top = Math.min(Math.max(8, rect.top - 24), window.innerHeight - ph - 8) + "px";
+  /* same rule as the Prices popup: place it by the cursor once, then hold that spot while it is in use
+     so switching timeframe does not teleport the box away from the buttons */
+  if (pricePop.dataset.anchored !== "perp:" + perpPopCoin || pricePop.style.display !== "block") {
+    popPlace(perpPopRow.getBoundingClientRect());
+    pricePop.dataset.anchored = "perp:" + perpPopCoin;
+  } else {
+    pricePop.style.pointerEvents = "auto";
+  }
 }
 pricePop.addEventListener("click", e => {
   const b = e.target.closest(".src-btn");
@@ -2095,12 +2193,14 @@ pricePop.addEventListener("click", e => {
 function hidePerpPop() {
   pricePop.style.display = "none";
   pricePop.style.pointerEvents = "none";
+  pricePop.dataset.anchored = "";
   perpPopCoin = null; perpPopRow = null;
 }
 $("hyperBody").addEventListener("mouseover", e => {
   const row = e.target.closest(".perp-row");
   if (!row || row.dataset.coin == null) return;
-  clearTimeout(perpHideTimer);
+  clearTimeout(perpHideTimer); popCancelHide();
+  if (perpPopCoin === row.dataset.coin && pricePop.style.display === "block") return;
   perpPopCoin = row.dataset.coin; perpPopRow = row;
   renderPerpPop();
 });
@@ -2108,10 +2208,16 @@ $("hyperBody").addEventListener("mouseout", e => {
   const to = e.relatedTarget;
   if (to && to.closest && (to.closest(".perp-row") || to.closest(".price-pop"))) return;
   clearTimeout(perpHideTimer);
-  perpHideTimer = setTimeout(hidePerpPop, 200);
+  perpHideTimer = setTimeout(hidePerpPop, POP_GRACE);
 });
 pricePop.addEventListener("mouseenter", () => { if (perpPopCoin) clearTimeout(perpHideTimer); });
-pricePop.addEventListener("mouseleave", () => { if (perpPopCoin) hidePerpPop(); });
+pricePop.addEventListener("mouseleave", e => {
+  if (!perpPopCoin) return;
+  const to = e.relatedTarget;
+  if (to && to.closest && to.closest(".perp-row")) return;
+  clearTimeout(perpHideTimer);
+  perpHideTimer = setTimeout(hidePerpPop, POP_GRACE);
+});
 async function loadHyperliquid() {
   const body = $("hyperBody");
   try {
@@ -2615,6 +2721,35 @@ async function loadWhales() {
         }
       });
     }
+    /* kept so the token search can answer "who is in X" without re-scanning every wallet */
+    whaleFound = found;
+    whaleScanMeta = {wallets: candidates.length, t: Date.now()};
+    /* Paint here, BEFORE the enrichment passes. The positions are already complete and correct at this
+       point; what follows only adds the 🆕/💰 badges, and it costs ~50 more chain calls. Waiting for it
+       used to leave the panel empty for the whole scan. Now the rows land as soon as they exist and the
+       badges appear on the repaint a few seconds later. */
+    const whalePaint = () => {
+      hlDetectLiqs(found);
+      /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
+         🆕/💰 badges still show on rows wherever they sit. */
+      found.sort((a, b) => {
+        const fa = whaleAlert(a), fb = whaleAlert(b);
+        if (fa !== fb) return fb - fa;
+        if (fa && fb) return a.dist - b.dist;
+        return b.value - a.value;
+      });
+      $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
+      hlPosHealth();
+      if (!found.length) {
+        body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
+        renderWatchlist(); return;
+      }
+      body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
+      renderWatchlist();
+      body.dataset.home = "1";
+      markUpdated();
+    };
+    if (body.dataset.home !== "0") whalePaint();
     /* chain-ledger pass: check the displayed wallets for fresh USDC arriving in the last 48h */
     const uniqAddrs = [...new Set(found.map(r => r.addr))].slice(0, 30);
     for (let i = 0; i < uniqAddrs.length; i += 10) {
@@ -2633,28 +2768,7 @@ async function loadWhales() {
       /* older account than its trading burst implies → it was sitting idle: DORMANT */
       if (r.ageDays != null && r.ageDays > (r.fresh === "week" ? 14 : 45)) r.dormant = true;
     });
-    /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
-       🆕/💰 badges still show on rows wherever they sit. */
-    hlDetectLiqs(found);
-    /* kept so the token search can answer "who is in X" without re-scanning every wallet */
-    whaleFound = found;
-    whaleScanMeta = {wallets: candidates.length, t: Date.now()};
-    found.sort((a, b) => {
-      const fa = whaleAlert(a), fb = whaleAlert(b);
-      if (fa !== fb) return fb - fa;
-      if (fa && fb) return a.dist - b.dist;
-      return b.value - a.value;
-    });
-    $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
-    hlPosHealth();
-    if (!found.length) {
-      body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
-      renderWatchlist(); return;
-    }
-    body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
-    renderWatchlist();
-    body.dataset.home = "1";
-    markUpdated();
+    if (body.dataset.home !== "0") whalePaint();   /* repaint with the 🆕/💰 badges filled in */
   } catch (e) {
     if (!body.querySelector(".wrow"))
       setError(body, "Whale scan unavailable right now — retrying automatically.");
@@ -2669,11 +2783,7 @@ async function loadLongShort() {
     const rows = await getLeaderboard();
     const val = r => parseFloat(r.accountValue) || 0;
     const top = [...rows].sort((a, b) => val(b) - val(a)).slice(0, 500).map(r => r.ethAddress);
-    let totalOI = 0;
-    try {
-      const [meta, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
-      (ctxs || []).forEach(c => { if (c) totalOI += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
-    } catch (e) {}
+    const totalOI = await hlTotalOI();
     const agg = {long: 0, short: 0, coins: {}, wallets: 0};
     const book = {}; /* coin -> [[liqPx, valueUsd, +1 long/-1 short], ...] for the Liq Heatmap */
     for (let i = 0; i < top.length; i += 20) {
@@ -2702,8 +2812,9 @@ async function loadLongShort() {
       });
       await new Promise(r => setTimeout(r, 400)); /* stay under HL rate limits (2 dexes per wallet now) */
     }
+    lsLiveAt = Date.now();
     renderLongShort(agg, totalOI);
-    { const el = $("lsHeadSub"); if (el) el.textContent = "top 500 wallets · on-chain · incl. xyz RWA" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : ""); }
+    { const el = $("lsHeadSub"); if (el) el.textContent = "top 500 wallets · on-chain · incl. xyz RWA · live " + new Date().toLocaleTimeString() + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : ""); }
     /* expose per-coin whale net + reference mark for the Whales-vs-Crowd panel (live-scaled each second) */
     lsSnapshot = {t: Date.now(), coins: {}};
     Object.entries(agg.coins).forEach(([coin, c]) => {
@@ -2784,23 +2895,22 @@ function showWhalePop(row) {
       '<div class="pp-hint">click row to open on Hypurrscan</div>';
   }
   pricePop.innerHTML = inner;
-  const r = row.getBoundingClientRect();
-  pricePop.style.display = "block";
-  const pw = 300, ph = pricePop.offsetHeight || 180;
-  let x = r.left - pw - 10;
-  if (x < 8) x = r.right + 10;
-  if (x + pw > window.innerWidth - 8) x = Math.max(8, window.innerWidth - pw - 8);
-  pricePop.style.left = x + "px";
-  pricePop.style.top = Math.min(Math.max(8, r.top - 20), window.innerHeight - ph - 8) + "px";
+  popPlace(row.getBoundingClientRect(), {interactive: false});
+  pricePop.style.pointerEvents = "none";   /* read-only card — must not swallow a click on the row */
+  pricePop.dataset.anchored = "whale:" + addr;
 }
+const whaleHide = () => { pricePop.style.display = "none"; pricePop.dataset.anchored = ""; };
 $("whalesBody").addEventListener("mouseover", e => {
   const row = e.target.closest(".wrow");
-  if (row) showWhalePop(row);
+  if (!row) return;
+  popCancelHide();
+  if (pricePop.dataset.anchored === "whale:" + row.dataset.addr && pricePop.style.display === "block") return;
+  showWhalePop(row);
 });
-$("whalesBody").addEventListener("mouseleave", () => { pricePop.style.display = "none"; });
+$("whalesBody").addEventListener("mouseleave", () => popHideSoon(whaleHide));
 $("whalesBody").addEventListener("mouseout", e => {
   if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".wrow"))
-    pricePop.style.display = "none";
+    popHideSoon(whaleHide);
 });
 
 /* Every position the last full scan found, kept in memory so a token search is instant and costs
@@ -2862,6 +2972,98 @@ function hlPosRows(j, want) {
   }).filter(r => r.addr);
   return {rows, key, meta: c};
 }
+/* ---- first paint off the bot index ----------------------------------------------------------
+   The live scans below are correct but slow: the whale scan walks ~100 wallets across two dexes and
+   then makes ~50 more chain calls for the badges, and the positioning scan walks 500 wallets in
+   chunks of 20 with a 400ms pause between them. Until they finish, both panels used to sit on
+   "Scanning…". The collector already did this work minutes ago and published the result, so the
+   panels now open on real numbers from the index and the live scan refines them in place.
+   Nothing here is estimated — every row is a position the bot read off the chain, and each one
+   carries the minute it was read. */
+async function loadWhalesFast() {
+  const body = $("whalesBody");
+  if (!body || body.dataset.home === "0" || body.querySelector(".wrow")) return;
+  try {
+    const [j, mids] = await Promise.all([
+      getHlPos(),
+      (hlMids && Object.keys(hlMids).length) ? Promise.resolve(hlMids)
+        : fetchHL({type: "allMids"}).catch(() => null)
+    ]);
+    if (mids && !Object.keys(hlMids || {}).length) hlMids = mids;
+    if (!j || !j.coins) return;
+    if (body.dataset.home === "0" || body.querySelector(".wrow")) return;   /* live scan won the race */
+    const found = [], done = new Set();
+    Object.keys(j.coins).forEach(c => {
+      const want = exCanon(c);
+      if (done.has(want)) return;                 /* two keys can canonicalise to one coin — count it once */
+      done.add(want);
+      hlPosRows(j, want).rows.forEach(r => { if (r.value >= WHALE_MIN) found.push(r); });
+    });
+    if (!found.length) return;
+    hlDetectLiqs(found);
+    found.sort((a, b) => {
+      const fa = whaleAlert(a), fb = whaleAlert(b);
+      if (fa !== fb) return fb - fa;
+      if (fa && fb) return a.dist - b.dist;
+      return b.value - a.value;
+    });
+    whaleFound = found;
+    body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
+    renderWatchlist();
+    body.dataset.home = "1";
+    $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · collector index " +
+      timeAgo(j.t) + " · live scan running";
+    hlPosHealth();
+    markUpdated();
+  } catch (e) { /* the live scan is already on its way — no message, no fake data */ }
+}
+
+/* Long vs Short from the same index. The index holds every position ≥ $250k the bot has seen across
+   ~1700 wallets, which is a wider net than the browser's 500 — but it is a floor, not a replacement:
+   the live scan owns the panel whenever its result is recent. */
+let lsLiveAt = 0, lsOI = {t: 0, v: 0};
+async function hlTotalOI() {
+  if (lsOI.v && Date.now() - lsOI.t < 300_000) return lsOI.v;
+  try {
+    const [meta, ctxs] = await fetchHL({type: "metaAndAssetCtxs"});
+    let tot = 0;
+    (ctxs || []).forEach(c => { if (c) tot += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
+    if (tot) lsOI = {t: Date.now(), v: tot};
+  } catch (e) {}
+  return lsOI.v;
+}
+async function loadLongShortFast() {
+  if (Date.now() - lsLiveAt < 400_000) return;   /* the live scan is fresher — leave it alone */
+  try {
+    const [j, totalOI] = await Promise.all([getHlPos(), hlTotalOI()]);
+    if (!j || !j.coins) return;
+    if (Date.now() - lsLiveAt < 400_000) return;
+    const agg = {long: 0, short: 0, coins: {}, wallets: 0}, seen = new Set();
+    Object.entries(j.coins).forEach(([coin, c]) => {
+      (c.rows || []).forEach(r => {
+        const v = Math.abs(r[1]);
+        if (!v) return;
+        const side = r[1] >= 0 ? "long" : "short";
+        agg[side] += v;
+        const co = agg.coins[coin] || (agg.coins[coin] = {long: 0, short: 0});
+        co[side] += v;
+        seen.add(r[0]);
+      });
+    });
+    agg.wallets = seen.size;
+    if (!(agg.long + agg.short)) return;
+    renderLongShort(agg, totalOI);
+    const el = $("lsHeadSub");
+    if (el) el.textContent = "collector index " + timeAgo(j.t) + " · positions ≥ $250k · live scan refining";
+    lsSnapshot = {t: Date.now(), coins: {}};
+    Object.entries(agg.coins).forEach(([coin, c]) => {
+      lsSnapshot.coins[coin] = {net: c.long - c.short, long: c.long, short: c.short, markRef: liveMark[coin] || null};
+    });
+    renderLsCrowd();
+    markUpdated();
+  } catch (e) {}
+}
+
 /* Refresh exactly the wallets the search returned, straight from the API, so the numbers on screen
    are live and not a snapshot. Only the DIRECTORY of who-holds-what comes from the bot. */
 async function refreshPosLive(want, rows, note, token) {
@@ -3355,6 +3557,19 @@ async function loadGlobalOI() {
     retrySoon(loadGlobalOI, "goi");
   }
 }
+/* Which venues the panel actually prints.
+   The header promises the perp DEXes read straight from their own APIs (HL · dYdX · Lighter · Aster ·
+   GMX), but those venues are small next to Binance and Bybit, so a plain top-14 cut dropped four of the
+   five off the bottom of the list and the promise stopped being true. The top 14 by size still lead the
+   panel; any venue reporting its own OI that fell below the cut is then appended, carrying its REAL rank
+   so nothing is dressed up as bigger than it is. */
+function goiPick(rows) {
+  const ranked = rows.map((e, i) => Object.assign({}, e, {rank: i + 1}));
+  const head = ranked.slice(0, 14);
+  const shown = new Set(head.map(e => e.name));
+  const pinned = ranked.filter(e => e.live && !shown.has(e.name));
+  return head.concat(pinned);
+}
 async function renderGlobalOI(rows, total, cachedAt) {
   const body = $("goiBody");
   const windowMs = goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
@@ -3385,9 +3600,10 @@ async function renderGlobalOI(rows, total, cachedAt) {
       (cachedAt ? ' · <span style="color:var(--warn)">cached ' + timeAgo(cachedAt) + " · refreshing…</span>" : "") + "</div>" +
     (series.length > 1 ? oiPopSVG(series) : '<div class="oi-note">history is building (collected 24/7 by the repo bot)…</div>') +
     "</div>" +
-    rows.slice(0, 14).map(e =>
+    goiPick(rows).map(e =>
       '<div class="gx-row"><span class="gx-name"' +
         (e.live ? ' style="color:var(--up)" title="Real OI straight from the exchange’s own API' + (e.note ? " — " + esc(e.note) : "") + '"' : "") + '>' +
+        (e.rank > 14 ? '<span class="gx-rank" title="ranked #' + e.rank + ' by size — pinned here because it is a perp DEX reporting its own OI">#' + e.rank + "</span> " : "") +
         esc(e.name) + (e.live ? " ⚡" : "") + "</span>" +
       '<div class="gx-bar"><div class="gx-bar-fill" style="width:' + Math.min(100, e.oi / rows[0].oi * 100).toFixed(1) + '%"></div></div>' +
       '<span class="gx-val">' + fmtBig(e.oi) + " · " + (e.oi / total * 100).toFixed(1) + "%</span></div>"
@@ -3553,14 +3769,11 @@ async function showTrendPop(row) {
   trendHoverId = c.id;
   const chg = (c.data && c.data.price_change_percentage_24h && c.data.price_change_percentage_24h.usd) || 0;
   const place = () => {
-    const r = row.getBoundingClientRect();
-    pricePop.style.display = "block";
-    const pw = 300, ph = pricePop.offsetHeight || 170;
-    let x = r.left - pw - 10;
-    if (x < 8) x = r.right + 10;
-    if (x + pw > window.innerWidth - 8) x = Math.max(8, window.innerWidth - pw - 8);
-    pricePop.style.left = x + "px";
-    pricePop.style.top = Math.min(Math.max(8, r.top - 30), window.innerHeight - ph - 8) + "px";
+    popCancelHide();
+    if (pricePop.dataset.anchored === "trend:" + c.id && pricePop.style.display === "block") return;
+    popPlace(row.getBoundingClientRect(), {interactive: false});
+    pricePop.style.pointerEvents = "none";   /* no buttons on this one — let clicks reach the row */
+    pricePop.dataset.anchored = "trend:" + c.id;
   };
   const head = '<div class="pp-head"><span class="pp-name">' + esc(c.name) + "</span>" +
     (c.data && typeof c.data.price === "number" ? '<span class="pp-px">' + fmtPrice(c.data.price) + "</span>" : "") +
@@ -3597,11 +3810,14 @@ $("trendBody").addEventListener("mouseover", e => {
   const row = e.target.closest(".trend-row");
   if (row && row.dataset.t != null) showTrendPop(row);
 });
-$("trendBody").addEventListener("mouseleave", () => { trendHoverId = null; pricePop.style.display = "none"; });
+/* same grace period as every other popup — leaving a row for a fraction of a second on the way to the
+   next one must not make the card blink out and back in */
+const trendHide = () => { trendHoverId = null; pricePop.style.display = "none"; pricePop.dataset.anchored = ""; };
+$("trendBody").addEventListener("mouseleave", () => popHideSoon(trendHide));
 $("trendBody").addEventListener("mouseout", e => {
-  if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest(".trend-row")) {
-    trendHoverId = null; pricePop.style.display = "none";
-  }
+  const to = e.relatedTarget;
+  if (to && to.closest && (to.closest(".trend-row") || to.closest(".price-pop"))) return;
+  popHideSoon(trendHide);
 });
 
 /* ---------------- polymarket (gamma API, sports filtered out) ---------------- */
@@ -3813,12 +4029,19 @@ function pmEventCard(ev, opts) {
   const label = multi ? ((m.groupItemTitle || outLead) + (outLead && outLead !== (m.groupItemTitle || "") ? " · " + outLead : ""))
                       : outLead;
   const end = ev.endDate ? new Date(ev.endDate) : null;
+  /* The percentage above comes from gamma's cached outcomePrices, which lag Polymarket's own screen by
+     up to a minute — that is the ~1pp gap Bullot measured against the site. Carrying the leading
+     outcome's CLOB token id on the element lets pmLiveOdds() below re-read the live order-book midpoint
+     — the exact number Polymarket displays — every few seconds, so a card left open on screen keeps
+     ticking instead of freezing at whatever it was when the search ran. */
+  let tok = "";
+  try { tok = String((JSON.parse(m.clobTokenIds || "[]") || [])[li] || ""); } catch (e) {}
   pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || "", vol: parseFloat(ev.volume24hr) || 0};
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
     '<div class="pm-q">' + esc(ev.title) + "</div>" +
-    '<div class="pm-row"><span class="pm-odds">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
+    '<div class="pm-row"><span class="pm-odds"' + (tok ? ' data-pmtok="' + esc(tok) + '"' : "") + ">" + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
     '<span class="pm-outcome' + pmSideClass(label) + '">' + esc(label) + "</span>" +
-    '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
+    '<div class="pm-bar"><div class="pm-bar-fill"' + (tok ? ' data-pmbar="' + esc(tok) + '"' : "") + ' style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
     '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
     (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
     "</div></a>";
@@ -4110,13 +4333,64 @@ function renderPmRows() {
   const q = ($("pmSearch").value || "").trim();
   const Q = q.toUpperCase();
   const list = Q ? pmCards.filter(c => c.t.toUpperCase().includes(Q)) : pmCards.slice(0, 10);
+  /* Keep whatever the remote search already found. This function is also called by the 60-second
+     panel refresh, and it used to overwrite the search results with the "Searching…" placeholder
+     every single minute — so a query left open on screen went blank and then re-populated on a loop
+     instead of quietly updating. Results are only replaced by pmRemoteSearch itself, when it has new
+     ones in hand. */
+  const prev = document.getElementById("pmRemote");
+  const keep = prev && prev.dataset.q === Q ? prev.innerHTML : "";
   body.innerHTML = pmAlertsHTML + pmOddsAlertsHTML +
     (list.length ? list.map(c => c.h).join("") :
       (pmCards.length && !Q ? "" : "")) +
-    (Q.length >= 3 ? '<div id="pmRemote"><div class="empty">Searching all of Polymarket…</div></div>' :
+    (Q.length >= 3 ? '<div id="pmRemote" data-q="' + esc(Q) + '">' +
+        (keep || '<div class="empty">Searching all of Polymarket…</div>') + "</div>" :
       (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
   pmBlkPaint();
   $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
+  pmLiveOdds();
+}
+
+/* ---------------- live odds, straight from the order book -------------------------------------
+   Every percentage on this panel starts life as gamma's cached outcomePrices. Gamma is a snapshot
+   service: it is close, but it trails the market, which is why the dashboard read 72% No against
+   Polymarket's own 71%. The number Polymarket puts on its own site is the CLOB midpoint — the
+   midpoint of the live order book — and that endpoint takes a batch of token ids, so every card
+   currently on screen can be re-priced in a single request. This runs on its own 5-second timer,
+   independent of the panel refresh and independent of the search box, so a market left open while
+   Bullot reads it keeps moving. Nothing is interpolated between ticks: a cell only ever changes when
+   a new midpoint has actually been read. */
+let pmOddsBusy = false;
+async function pmLiveOdds() {
+  if (pmOddsBusy) return;
+  const els = [...document.querySelectorAll("#pmBody [data-pmtok]")];
+  if (!els.length) return;
+  const toks = [...new Set(els.map(e => e.dataset.pmtok).filter(Boolean))].slice(0, 60);
+  if (!toks.length) return;
+  pmOddsBusy = true;
+  try {
+    const r = await fetch("https://clob.polymarket.com/midpoints", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(toks.map(t => ({token_id: t})))
+    });
+    if (!r.ok) return;
+    const mid = await r.json();
+    els.forEach(el => {
+      const v = parseFloat(mid[el.dataset.pmtok]);
+      if (!isFinite(v) || v <= 0) return;                 /* no book, no update — never a guess */
+      const pct = v * 100;
+      const txt = pct.toFixed(pct < 10 ? 1 : 0) + "%";
+      if (el.textContent !== txt) {
+        el.textContent = txt;
+        el.classList.remove("pm-tick"); void el.offsetWidth; el.classList.add("pm-tick");
+      }
+      const bar = el.closest(".pm-row") && el.closest(".pm-row").querySelector('[data-pmbar="' + el.dataset.pmtok + '"]');
+      if (bar) bar.style.width = Math.min(100, pct).toFixed(1) + "%";
+    });
+    const sub = $("pmSub");
+    if (sub && !sub.dataset.live) sub.dataset.live = "1";
+  } catch (e) { /* the panel keeps the gamma number rather than showing nothing */ }
+  finally { pmOddsBusy = false; }
 }
 let kalshiCache = {t: 0, data: null};
 async function getKalshi() {
@@ -4165,6 +4439,7 @@ async function pmRemoteSearch(q) {
     if (token !== pmSearchToken) return;
     const box = document.getElementById("pmRemote");
     if (!box) return;
+    box.dataset.q = q.toUpperCase();
     const localSlugs = new Set(pmCards.map(c => c.slug));
     const cards = (j.events || []).filter(ev => !localSlugs.has(ev.slug))
       .map(ev => pmEventCard(ev)).filter(Boolean);
@@ -4181,9 +4456,13 @@ async function pmRemoteSearch(q) {
         ? '<div class="oi-note" style="padding:6px 14px">Kalshi mirror not built yet — the repo bot creates it on its next run.</div>'
         : '<div class="oi-note" style="padding:6px 14px 2px">🔎 Kalshi (mirrored ' + kalAge + " by the bot)</div>" +
           (kalCards.length ? kalCards.join("") : '<div class="empty">Nothing on Kalshi for “' + esc(q) + "”.</div>"));
+    pmLiveOdds();   /* re-price what just landed off the live book before it is even read */
   } catch (e) {
     const box = document.getElementById("pmRemote");
-    if (box && token === pmSearchToken) box.innerHTML = '<div class="empty">Market search unavailable right now.</div>';
+    /* only replace results with an error if there is nothing on screen — a transient failure must not
+       wipe a search the user is still reading */
+    if (box && token === pmSearchToken && !box.querySelector(".pm-item"))
+      box.innerHTML = '<div class="empty">Market search unavailable right now.</div>';
   }
 }
 $("pmSearch").addEventListener("input", () => {
@@ -4194,6 +4473,22 @@ $("pmSearch").addEventListener("input", () => {
      to skip the middle of a word, and renderPmRows above has already painted "Searching all of Polymarket…"
      so there is visible feedback from the very first character. */
   if (q.length >= 3) pmSearchTimer = setTimeout(() => pmRemoteSearch(q), 220);
+});
+/* A search is not a one-off. Typing "iran" and leaving it there for twenty minutes has to keep showing
+   what the odds are NOW, so the query itself re-runs on a timer — that catches new markets appearing
+   and volumes moving — while pmLiveOdds re-prices the visible cards every 5 seconds off the order book.
+   Both stop while the tab is hidden and resume on return, so a backgrounded tab costs nothing. */
+setInterval(() => {
+  if (document.hidden) return;
+  const q = (($("pmSearch") || {}).value || "").trim();
+  if (q.length >= 3) pmRemoteSearch(q);
+}, 20_000);
+setInterval(() => { if (!document.hidden) pmLiveOdds(); }, 5_000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  pmLiveOdds();
+  const q = (($("pmSearch") || {}).value || "").trim();
+  if (q.length >= 3) pmRemoteSearch(q);
 });
 async function loadPolymarket() {
   const body = $("pmBody");
@@ -5686,7 +5981,7 @@ setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without ne
    F (0-20): |funding| — extreme funding = crowded side paying to stay in.
    V (0-25): liquidation velocity last 15 min (market-wide 🌐 via Coinalyze minute mirror; live feed as fallback).
    OI (0-15): 24h open-interest momentum from our own oi-history samples. */
-let rdHl = null, rdBook = null, rdOiRef = null, rdOiNow = null;
+let rdHl = null, rdHlT = 0, rdBook = null, rdOiRef = null, rdOiNow = null;
 async function rdFetchHl() {
   try {
     const r = await fetch("https://api.hyperliquid.xyz/info", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({type: "metaAndAssetCtxs"})});
@@ -5696,7 +5991,7 @@ async function rdFetchHl() {
       const c = cxs[i]; if (!c || u.isDelisted) return;
       m[u.name] = {px: +c.markPx, fund: +c.funding, oi: +c.openInterest * +c.markPx};
     });
-    if (Object.keys(m).length) rdHl = m;
+    if (Object.keys(m).length) { rdHl = m; rdHlT = Date.now(); }
   } catch (e) {}
 }
 async function rdFetchBook() {
@@ -6059,36 +6354,119 @@ const fdCoins = () => {
   return ordered;
 };
 let fdData = null;
-async function loadFunding() {
+
+/* ---------------- per-symbol funding intervals ------------------------------------------------
+   The table shows one number per exchange and they have to be comparable, so every rate is
+   normalised to %/hour. Until now all three CEX columns divided by 8, on the assumption that a
+   funding period is always 8 hours. It is not, and it has not been for a long time:
+
+     Binance  /fapi/v1/fundingInfo   736 symbols → 442 fund every 4h, 291 every 8h, 3 every 1h
+     Bybit    instruments-info       757 symbols → 407 every 4h, 310 every 8h, 4 every 1h, 36 report 0
+     OKX      funding-rate?instId=ANY 411 USDT swaps → 196 every 4h, 215 every 8h
+
+   So more than half of every CEX column was out by a factor of two — a 4-hour rate divided by 8
+   reads as half the funding the exchange is actually charging, which is exactly the mismatch Bullot
+   saw against his own Bybit screen (ZAMA funds every 4h on all three venues). The interval is
+   published by each exchange, so it is read, not assumed. Bybit's 0 means "not published" and falls
+   back to 8h, which is the only honest default available.
+   Intervals change rarely (a listing parameter, not a market number), so they are cached for an hour
+   while the rates themselves stay on the panel's 2-minute refresh. */
+let fdIvBin = {t: 0, m: null}, fdIvByb = {t: 0, m: null};
+async function fdBinIv() {
+  if (fdIvBin.m && Date.now() - fdIvBin.t < 3_600_000) return fdIvBin.m;
   try {
-    const out = {t: Date.now(), rows: {}};
-    fdCoins().forEach(c => { out.rows[c] = {}; });
+    const j = await fetchJSONraw("https://fapi.binance.com/fapi/v1/fundingInfo", {timeout: 15000});
+    const m = {};
+    (Array.isArray(j) ? j : []).forEach(x => {
+      const h = Number(x.fundingIntervalHours);
+      if (x.symbol && h > 0) m[String(x.symbol).replace(/USDT$/, "")] = h;
+    });
+    if (Object.keys(m).length) fdIvBin = {t: Date.now(), m};
+  } catch (e) {}
+  return fdIvBin.m || {};
+}
+async function fdBybIv() {
+  if (fdIvByb.m && Date.now() - fdIvByb.t < 3_600_000) return fdIvByb.m;
+  try {
+    const j = await fetchJSONraw("https://api.bybit.com/v5/market/instruments-info?category=linear&limit=1000", {timeout: 15000});
+    const m = {};
+    (((j.result || {}).list) || []).forEach(x => {
+      const mins = Number(x.fundingInterval);   /* MINUTES, and 0 for the ~36 symbols that publish none */
+      if (x.symbol && mins > 0) m[String(x.symbol).replace(/USDT$/, "")] = mins / 60;
+    });
+    if (Object.keys(m).length) fdIvByb = {t: Date.now(), m};
+  } catch (e) {}
+  return fdIvByb.m || {};
+}
+
+/* One shared snapshot of all three CEX books. Previously OKX was fetched one instId at a time inside
+   a serial loop — up to 3 aliases × a 10s timeout plus a 120ms sleep for every coin on the table —
+   which is where the ~5 seconds after adding a token went. OKX turns out to accept instId=ANY and
+   answers with all 411 USDT swaps in a single request, so all three exchanges are now one call each,
+   fired in parallel. Adding a coin reuses this snapshot and paints immediately. */
+let fdMaps = {t: 0, v: null, inflight: null};
+async function fdFetchMaps() {
+  const [bin, byb, okx, ivB, ivY] = await Promise.all([
+    fetchJSONraw("https://fapi.binance.com/fapi/v1/premiumIndex", {timeout: 15000}).catch(() => null),
+    fetchJSONraw("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000}).catch(() => null),
+    fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=ANY", {timeout: 15000}).catch(() => null),
+    fdBinIv(), fdBybIv()
+  ]);
+  const v = {BIN: {}, BYB: {}, OKX: {}, iv: {BIN: {}, BYB: {}, OKX: {}}};
+  (Array.isArray(bin) ? bin : []).forEach(x => {
+    const s = String(x.symbol || "");
+    if (!s.endsWith("USDT")) return;
+    const k = s.replace(/USDT$/, ""), h = ivB[k] || 8;   /* symbols absent from fundingInfo are 8h */
+    v.BIN[k] = parseFloat(x.lastFundingRate) / h; v.iv.BIN[k] = h;
+  });
+  (((byb || {}).result || {}).list || []).forEach(x => {
+    const s = String(x.symbol || "");
+    if (!s.endsWith("USDT")) return;
+    const k = s.replace(/USDT$/, ""), h = ivY[k] || 8;   /* fundingInterval 0 → not published → 8h */
+    v.BYB[k] = parseFloat(x.fundingRate) / h; v.iv.BYB[k] = h;
+  });
+  ((okx || {}).data || []).forEach(x => {
+    const id = String(x.instId || "");
+    if (!/-USDT-SWAP$/.test(id)) return;
+    const k = id.replace(/-USDT-SWAP$/, "");
+    /* OKX does not publish the interval as a field, but it publishes both ends of the current period,
+       so the length of the period is a measurement rather than an assumption. */
+    let h = Math.round((Number(x.nextFundingTime) - Number(x.fundingTime)) / 3_600_000);
+    if (!(h > 0) || h > 24) h = 8;
+    v.OKX[k] = parseFloat(x.fundingRate) / h; v.iv.OKX[k] = h;
+  });
+  return v;
+}
+async function fdGetMaps(maxAge) {
+  if (fdMaps.v && Date.now() - fdMaps.t < (maxAge || 0)) return fdMaps.v;
+  if (fdMaps.inflight) return fdMaps.inflight;
+  fdMaps.inflight = fdFetchMaps()
+    .then(v => { fdMaps = {t: Date.now(), v, inflight: null}; return v; })
+    .catch(e => { fdMaps.inflight = null; return fdMaps.v || {BIN: {}, BYB: {}, OKX: {}, iv: {BIN: {}, BYB: {}, OKX: {}}}; });
+  return fdMaps.inflight;
+}
+
+async function loadFunding(quick) {
+  try {
+    const out = {t: Date.now(), rows: {}, iv: {}, noHl: {}};
+    fdCoins().forEach(c => { out.rows[c] = {}; out.iv[c] = {}; });
     if (rdHl) fdCoins().forEach(c => {
       const h = fdNames(c).map(nm => rdHl[nm]).find(Boolean); /* HL uses kPEPE-style names for 1000x contracts */
       if (h) { out.rows[c].HL = h.fund; out.rows[c].mark = h.px; }
+      /* Hyperliquid lists 232 perps and that list is not a superset of the CEXes — ZAMA, for one, is
+         simply not on it. A dash there is the truth, but a dash that looks like a failed fetch invites
+         the question "is this broken?", so the cell says which of the two it is. */
+      else if (rdHlT) out.noHl[c] = 1;
     });
-    try { /* Binance USD-M: 8h rate → ÷8 */
-      const bj = await fetchJSONraw("https://fapi.binance.com/fapi/v1/premiumIndex", {timeout: 15000});
-      const bMap = {};
-      (Array.isArray(bj) ? bj : []).forEach(x => { if ((x.symbol || "").endsWith("USDT")) bMap[x.symbol.replace(/USDT$/, "")] = parseFloat(x.lastFundingRate) / 8; });
-      fdCoins().forEach(c => { const hit = fdNames(c).find(nm => bMap[nm] != null); if (hit) out.rows[c].BIN = bMap[hit]; });
-    } catch (e) {}
-    try { /* Bybit linear: 8h → ÷8 */
-      const yj = await fetchJSONraw("https://api.bybit.com/v5/market/tickers?category=linear", {timeout: 15000});
-      const yMap = {};
-      ((yj.result && yj.result.list) || []).forEach(x => { if ((x.symbol || "").endsWith("USDT")) yMap[x.symbol.replace(/USDT$/, "")] = parseFloat(x.fundingRate) / 8; });
-      fdCoins().forEach(c => { const hit = fdNames(c).find(nm => yMap[nm] != null); if (hit) out.rows[c].BYB = yMap[hit]; }); /* Bybit lists PUMP as PUMPFUNUSDT */
-    } catch (e) {}
-    for (const c of fdCoins()) { /* OKX swap: 8h → ÷8; tries aliases only when the plain name misses */
-      for (const nm of fdNames(c)) {
-        try {
-          const oj = await fetchJSONraw("https://www.okx.com/api/v5/public/funding-rate?instId=" + nm + "-USDT-SWAP", {timeout: 10000});
-          const d = (oj.data || [])[0];
-          if (d) { out.rows[c].OKX = parseFloat(d.fundingRate) / 8; break; }
-        } catch (e) {}
-      }
-      await new Promise(r => setTimeout(r, 120));
-    }
+    /* quick = a coin was just added; reuse the snapshot already on screen so the new row paints at
+       once, and a full refresh follows a moment later on the normal path. */
+    const maps = await fdGetMaps(quick ? 300_000 : 0);
+    fdCoins().forEach(c => {
+      ["BIN", "BYB", "OKX"].forEach(ex => {
+        const hit = fdNames(c).find(nm => maps[ex][nm] != null);
+        if (hit) { out.rows[c][ex] = maps[ex][hit]; out.iv[c][ex] = maps.iv[ex][hit]; }
+      });
+    });
     try { /* basis: HL perp mark vs Binance SPOT (same book the kimchi premium uses) */
       const m = await getBinSpot();
       fdCoins().forEach(c => {
@@ -6139,12 +6517,17 @@ function fdCoinFor(c) {
   if (!(bp > 0) || !(coin.current_price > 0)) return null;
   return Math.abs(coin.current_price / bp - 1) < 0.1 ? coin : null;   /* same asset, or it is not this coin */
 }
-function fdCell(v) {
-  if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)">—</td>';
+/* iv = the funding period this exchange actually charges for this symbol, in hours, read from the
+   exchange's own API. It is shown in the tooltip alongside the period rate, so the number on the
+   exchange screen and the number here can be checked against each other without arithmetic. */
+function fdCell(v, iv, miss) {
+  if (v == null || !isFinite(v))
+    return '<td class="fd-c" style="color:var(--muted)"' + (miss ? ' title="' + esc(miss) + '"' : "") + ">—</td>";
   const pct = v * 100;
   const mag = Math.min(1, Math.abs(pct) / 0.005);
   const col = pct > 0 ? "208,59,59" : "18,163,58";
-  return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + '">' + pct.toFixed(4) + "</td>";
+  const per = iv > 0 ? " — the exchange charges " + (pct * iv).toFixed(4) + "% every " + iv + "h, which is what its own screen shows; this column divides by " + iv + " so every venue is comparable per hour" : "";
+  return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + esc(per) + '">' + pct.toFixed(4) + "</td>";
 }
 function kCell(k) {
   const v = k && typeof k === "object" ? k.v : k;
@@ -6154,9 +6537,14 @@ function kCell(k) {
 }
 function renderFunding() {
   const body = $("fdBody"); if (!body || !fdData) return;
-  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th><th title="Kimchi premium — Upbit KRW spot vs Binance spot, converted with Upbit&#39;s own USDT/KRW market. Only shown when the Upbit market is confirmed to be the same asset as this contract; otherwise a dash.">🇰🇷</th></tr>';
+  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate, no conversion">HL</th><th title="Binance USD-M. Funding periods are per-symbol (Binance publishes 442 symbols on 4h, 291 on 8h, 3 on 1h) — each rate is divided by that symbol&#39;s own period, never by a fixed 8. Hover a cell to see the period and the raw rate the exchange charges.">BIN</th><th title="Bybit linear. Funding periods are per-symbol (Bybit publishes 407 symbols on 4h, 310 on 8h, 4 on 1h) — each rate is divided by that symbol&#39;s own period. The 36 symbols Bybit publishes no period for fall back to 8h.">BYB</th><th title="OKX swap. The period is measured from the two ends of the current funding window OKX publishes (196 USDT swaps on 4h, 215 on 8h) and the rate divided by it.">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th><th title="Kimchi premium — Upbit KRW spot vs Binance spot, converted with Upbit&#39;s own USDT/KRW market. Only shown when the Upbit market is confirmed to be the same asset as this contract; otherwise a dash.">🇰🇷</th></tr>';
   const rows = fdCoins().map(c => {
     const r = fdData.rows[c] || {};
+    const iv = (fdData.iv || {})[c] || {};
+    const hlMiss = (fdData.noHl || {})[c]
+      ? "Hyperliquid does not list a " + c + " perp — this is not a failed fetch. HL runs 232 perpetuals and this contract is not among them."
+      : "";
+    const exMiss = ex => "This coin is not listed as a USDT perpetual on " + ex + " right now.";
     const vals = ["HL", "BIN", "BYB", "OKX"].map(k => r[k]).filter(v => v != null && isFinite(v));
     const spread = vals.length >= 2 ? (Math.max(...vals) - Math.min(...vals)) * 100 : null;
     const dCell = spread == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
@@ -6165,7 +6553,7 @@ function renderFunding() {
     const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
       : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
     return '<tr draggable="true" data-fdc="' + c + '" title="Drag to reorder the table — the order is saved">' +
-      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + ' <button class="bet-x fd-rm" data-fdrm="' + c + '" title="Remove this token from the table (add it back with the ➕ bar)" style="padding:0 4px;font-size:10px">✕</button></td>' + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + kCell(r.kim) + "</tr>";
+      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + ' <button class="bet-x fd-rm" data-fdrm="' + c + '" title="Remove this token from the table (add it back with the ➕ bar)" style="padding:0 4px;font-size:10px">✕</button></td>' + fdCell(r.HL, 1, hlMiss) + fdCell(r.BIN, iv.BIN, exMiss("Binance USD-M")) + fdCell(r.BYB, iv.BYB, exMiss("Bybit linear")) + fdCell(r.OKX, iv.OKX, exMiss("OKX swap")) + dCell + bCell + kCell(r.kim) + "</tr>";
   }).join("");
   body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
 }
@@ -6181,7 +6569,9 @@ setInterval(loadFunding, 120_000);
     const cur = fdCustom.load();
     if (!FD_COINS.includes(c) && !cur.includes(c)) { cur.push(c); fdCustom.save(cur); }
     inp.value = "";
-    loadFunding(); /* full refetch so the new coin gets all 4 exchanges + basis */
+    /* Paint the new row from the snapshot already in memory — that is all four exchanges, no waiting.
+       A real refresh follows immediately behind it so the row is never left on stale numbers. */
+    loadFunding(true).then(() => loadFunding());
   });
   const outer = $("fdOuter");
   if (outer) outer.addEventListener("click", e => {
@@ -6232,7 +6622,12 @@ every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates 
 every(loadMorphoLive, 120_000, 150_000); /* live Morpho positions every 2 min */
 every(loadGlobalOI, 300_000, 320_000); /* aggregate exchange OI every 5 min */
 every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000, 245_000); /* every 4 min unless viewing a scanned wallet */
-setTimeout(loadLongShort, 8_000); every(loadLongShort, 900_000, 908_000); /* 500-wallet positioning scan every 15 min */
+/* Positioning: the index paints it within a second of load and keeps it moving on a 60s tick; the
+   500-wallet live scan runs behind it every 5 minutes instead of every 15 and takes over when it lands.
+   No refresh key required — the panel was only ever static because both timers were too slow. */
+loadWhalesFast(); loadLongShortFast();
+every(loadLongShortFast, 60_000, 3_000);
+setTimeout(loadLongShort, 8_000); every(loadLongShort, 300_000, 308_000); /* 500-wallet positioning scan every 5 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
 every(loadTrending, 300_000, 305_000);  /* every 5 min */
@@ -6240,10 +6635,10 @@ every(loadFng,      900_000, 900_000);  /* every 15 min */
 every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big bets */
 every(loadKalshiPanel, 300_000, 305_000); /* every 5 min — the bot mirror itself only changes ~10-min */
 every(fetchBotAlLog, 300_000, 9_000); /* bot's 24/7 alert log for the Alert Center */
-setTimeout(loadUpbit, 2_000); every(loadUpbit, 90_000, 92_000); /* 🇰🇷 Upbit KRW spot + verified kimchi premium */
+loadUpbit(); every(loadUpbit, 90_000, 90_000); /* 🇰🇷 Upbit KRW spot + verified kimchi premium */
 /* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); loadUpbit(); }
+  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); loadUpbit(); loadLongShortFast(); }
 });
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */
