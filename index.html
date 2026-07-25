@@ -1399,6 +1399,31 @@ function upPremiumByCg(cgId) {
   const s = upSymByCg(cgId);
   return s ? upPrem(s) : null;
 }
+/* Trending coins are usually small caps sitting outside the 250-name list, so the identity check runs the
+   other way round: CoinGecko's own trending entry already carries the coin's full name AND its USD price,
+   so matching that name to an Upbit KRW market is the same real identity check, with a live reference
+   price attached. cachedAt is the age of that price — past 25 min it is no longer a price, so no badge. */
+function upPremForCoin(c, cachedAt) {
+  if (!c) return null;
+  const byId = upPremiumByCg(c.id);
+  if (byId) return byId;
+  if (!upMeta || !(upKrwUsdt > 0)) return null;
+  upIndex();
+  const want = upNorm(c.name);
+  const px = c.data && typeof c.data.price === "number" ? c.data.price : c.current_price;
+  if (!want || !(px > 0)) return null;
+  const age = cachedAt ? Date.now() - cachedAt : 0;
+  if (age > 1_500_000) return null;
+  for (const s in upName) {
+    if (upNorm(upName[s]) !== want) continue;
+    const t = upBySym[s];
+    if (!t || !(t.px > 0)) return null;
+    const v = (t.px / upKrwUsdt / px - 1) * 100;
+    if (!isFinite(v)) return null;
+    return {v: v, ref: age > 60_000 ? "the world average price of a few minutes ago" : "the world average price", live: age <= 60_000};
+  }
+  return null;
+}
 function upBadge(prem, extra) {
   if (prem == null) return "";
   const v = typeof prem === "number" ? prem : prem.v;
@@ -1438,6 +1463,7 @@ async function loadUpbit() {
     renderUpbit();
     upScanAlerts();
     if (priceCoins.length) renderPriceRows();     /* the 🇰🇷 badges appear as soon as the data lands */
+    if (typeof trendCoins !== "undefined" && trendCoins.length) renderTrending(trendCoins, trendCachedAt);
     if (typeof fdData !== "undefined" && fdData) renderFunding();
     renderListingRows();
   } catch (e) {
@@ -3063,7 +3089,7 @@ async function loadFng() {
 }
 
 /* ---------------- trending (CoinGecko) with reasons + hover chart ---------------- */
-let trendCoins = [];
+let trendCoins = [], trendCachedAt = 0;
 const parseMoney = s => { const n = parseFloat(String(s || "").replace(/[$,]/g, "")); return isFinite(n) ? n : null; };
 function trendReason(c, pos) {
   const d = c.data || {};
@@ -3099,6 +3125,7 @@ async function fetchCgMirror() {
 function renderTrending(items, cachedAt) {
   const body = $("trendBody");
   trendCoins = items;
+  trendCachedAt = cachedAt || 0;   /* kept so the 🇰🇷 badge knows how old its reference price is */
   body.innerHTML = trendCoins.map((c, i) => {
       const chg = c.data && c.data.price_change_percentage_24h && c.data.price_change_percentage_24h.usd;
       const price = c.data && c.data.price;
@@ -3108,7 +3135,7 @@ function renderTrending(items, cachedAt) {
           "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
         '<div class="coin-name"><div class="n">' + esc(c.name) +
           '<span class="dest-badge">TradingView</span></div><div class="s">' + esc(c.symbol) +
-          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + upBadge(upPremiumByCg(c.id)) + "</div>" +
+          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + upBadge(upPremForCoin(c, cachedAt)) + "</div>" +
           '<div class="trend-reason">' + trendReason(c, i + 1) + "</div></div>" +
         '<div class="price-val">' +
           (typeof price === "number" ? '<div class="p">' + fmtPrice(price) + "</div>" : "") +
