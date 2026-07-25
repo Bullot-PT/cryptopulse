@@ -522,7 +522,7 @@ try {
      in roughly twenty passes. What the rotation reads is carried forward between passes with the minute
      it was read stamped on it, and the dashboard shows that age — a carried position is presented as
      "seen N minutes ago", never as if it had just been checked. */
-  const CORE_N = 800, ROT_N = 600, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
+  const CORE_N = 800, ROT_N = 500, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
   let prevPos = null;
   try { prevPos = JSON.parse(fs.readFileSync('data/hl-pos.json', 'utf8')); } catch (e) {}
   const rotPool = wallets.slice(CORE_N);
@@ -636,6 +636,42 @@ try {
     wsPick.push(a);
   }
   wsPick.forEach(a => scanList.push({ ethAddress: a, __ws: true }));
+
+  /* Every wallet the site is currently showing a position for gets re-read, every single pass.
+     The rotation guarantees the whole population is covered eventually; this guarantees the rows actually
+     on screen are not "eventually" but now. Without it a position sits on the page — correctly labelled,
+     but hours old — until the rotation happens to come back round to its wallet, and a position that was
+     closed an hour ago is precisely the row a trader must never be shown. It costs little because it is
+     bounded by how many wallets really hold something: a few hundred, not fifteen thousand. */
+  const HELD_N = 900;
+  if (prevPos && Array.isArray(prevPos.addrs)) {
+    const held = new Set();
+    Object.values(prevPos.coins || {}).forEach(c => (c.rows || []).forEach(r => {
+      const a = prevPos.addrs[r[0]];
+      if (a) held.add(String(a).toLowerCase());
+    }));
+    let n = 0;
+    for (const a of held) {
+      if (n >= HELD_N) break;
+      scanList.push({ ethAddress: a, __held: true });
+      n++;
+    }
+  }
+
+  /* One address can arrive from three directions at once — the leaderboard slice, the trade-feed pool and
+     the re-read list above — and paying for the same wallet twice buys nothing. Dedupe keeps the first
+     occurrence, so the top-of-book wallets stay at the front where the builder-dex second call is spent. */
+  const dedup = new Set();
+  let keep = 0;
+  for (const r of scanList) {
+    const k = String(r.ethAddress || '').toLowerCase();
+    if (!k || dedup.has(k)) continue;
+    dedup.add(k);
+    scanList[keep++] = r;
+  }
+  const heldExtra = scanList.slice(0, keep).filter(r => r.__held).length;
+  scanList.length = keep;
+
   const wsHits = new Set();
   let seenPool = 0, seenHolders = 0;
   for (let i = 0; i < scanList.length; i += CHUNK) {
@@ -689,6 +725,8 @@ try {
     if (spent < want) await new Promise(r => setTimeout(r, want - spent));
   }
   if (rlDrop) console.log('wallet scan: ' + rlDrop + ' of ' + scanList.length + ' unreadable this pass');
+  console.log('wallet scan:', scanList.length, 'addresses —', CORE_N, 'core +', rotSlice.length, 'rotating +',
+    wsPick.length, 'from the trade feed +', heldExtra, 're-read because they are on screen');
 
   /* Fold this pass's listening into the pool and write it back. Each entry is
      [minute last seen trading, minute last read on-chain, times it held an indexed position].
@@ -791,6 +829,7 @@ try {
       ws: wsPick.length,         // addresses read this pass that came from the trade feed, not the leaderboard
       wsp: seenPool,             // how many such addresses are queued altogether
       wsh: seenHolders,          // of those, how many have been caught holding a large position
+      held: heldExtra,           // wallets re-read this pass purely because they are on screen right now
       carried,                   // rows kept from earlier passes, each with its own read time
       min: POS_MIN,
       cap: POS_PER_COIN,
