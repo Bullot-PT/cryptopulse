@@ -202,6 +202,115 @@ try {
   console.log('cg mirror:', (mir.trending || []).length, 'trending,', (mir.markets || []).length, 'markets,', mir.global ? 'global ok' : 'no global');
 } catch (e) { console.log('cg mirror failed', e.message); }
 
+// ---------------- Upbit (Korea) — SPOT ONLY: caution flags, listings, verified identity map ----------------
+// Browsers can read Upbit's ticker/market lists, but are CORS-blocked on isDetails=true, the announcements API
+// and the WebSocket — and CoinGecko refuses browser IPs entirely. So those three come from here.
+// The map matters: the same ticker is NOT the same coin across venues (Upbit DATA ≠ Binance DATA), so the
+// kimchi premium is only ever computed for pairs whose CoinGecko coin_id matches on both sides.
+let upbitAlerts = [];
+try {
+  const UH = { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' };
+  const nap = ms => new Promise(r => setTimeout(r, ms));
+  let prevU = {};
+  try { prevU = JSON.parse(fs.readFileSync('data/upbit.json', 'utf8')); } catch (e) {}
+  const up = { t: now };
+
+  /* 1) KRW markets + Upbit's own warning / caution flags (투자유의 종목) */
+  let umk = null;
+  for (let i = 0; i < 3 && !umk; i++) {
+    try {
+      const r = await fetch('https://api.upbit.com/v1/market/all?isDetails=true', { headers: UH });
+      if (r.ok) { const j = await r.json(); if (Array.isArray(j) && j.length) umk = j; }
+      else console.log('upbit market/all http', r.status);
+    } catch (e) { console.log('upbit market/all failed', e.message); }
+    if (!umk) await nap(2000);
+  }
+  if (umk) {
+    up.markets = umk.filter(m => (m.market || '').startsWith('KRW-')).map(m => {
+      const ev = m.market_event || {};
+      const ca = Object.entries(ev.caution || {}).filter(([, v]) => v).map(([k]) => k);
+      const o = { s: m.market.slice(4), n: m.english_name || '' };
+      if (ev.warning) o.w = 1;
+      if (ca.length) o.c = ca;
+      return o;
+    });
+  } else if (prevU.markets) { up.markets = prevU.markets; up.stale = 1; }
+
+  /* 2) listings / delistings — a real diff of the KRW market list, stamped when first seen */
+  up.recent = (prevU.recent || []).filter(r => now - r.t < 45 * 86400000);
+  const curS = (up.markets || []).map(m => m.s), oldS = (prevU.markets || []).map(m => m.s);
+  if (umk && curS.length && oldS.length) {
+    curS.filter(s => !oldS.includes(s)).forEach(s => {
+      up.recent.push({ s, t: now, k: 'list' });
+      upbitAlerts.push({ key: 'list-' + s, msg: '🇰🇷 *Upbit listing* — ' + s + '/KRW is now trading on Upbit' });
+    });
+    oldS.filter(s => !curS.includes(s)).forEach(s => {
+      up.recent.push({ s, t: now, k: 'del' });
+      upbitAlerts.push({ key: 'del-' + s, msg: '🇰🇷 *Upbit delisting* — ' + s + '/KRW was removed from Upbit' });
+    });
+  }
+  up.recent = up.recent.slice(-40);
+
+  /* new official warning/caution flags — Upbit flags a coin before most dumps */
+  if (umk) {
+    const oldF = {};
+    (prevU.markets || []).forEach(m => { oldF[m.s] = (m.w ? 'W' : '') + (m.c || []).join(','); });
+    (up.markets || []).forEach(m => {
+      const f = (m.w ? 'W' : '') + (m.c || []).join(',');
+      if (!f || !Object.keys(oldF).length || oldF[m.s] === f) return;
+      upbitAlerts.push({ key: 'flag-' + m.s + '-' + f, msg: '🇰🇷 *Upbit ' + (m.w ? 'WARNING' : 'caution') + '* — ' + m.s + ' (' + (m.c || []).join(', ').toLowerCase().replace(/_/g, ' ') + ')' });
+    });
+  }
+
+  /* 3) listing announcements (no CORS from a server) */
+  try {
+    const r = await fetch('https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade', { headers: UH });
+    if (r.ok) {
+      const j = await r.json();
+      const list = (j.data && (j.data.notices || j.data.list)) || (Array.isArray(j.data) ? j.data : []) || [];
+      const ns = (Array.isArray(list) ? list : []).map(n => ({ id: n.id, ti: n.title || '', t: Date.parse(n.listed_at || n.created_at || '') || 0 })).filter(n => n.ti);
+      if (ns.length) up.notices = ns.slice(0, 20);
+    } else console.log('upbit notices http', r.status);
+  } catch (e) { console.log('upbit notices failed', e.message); }
+  if (!up.notices && prevU.notices) up.notices = prevU.notices;
+
+  /* 4) verified identity map (rebuilt every 6h; the previous one is kept in between) */
+  if (now - (prevU.mapT || 0) > 6 * 3600000) {
+    try {
+      const pull = async (ex, quote, cap) => {
+        const m = {};
+        for (let p = 1; p <= cap; p++) {
+          const r = await fetch('https://api.coingecko.com/api/v3/exchanges/' + ex + '/tickers?page=' + p, { headers: { Accept: 'application/json' } });
+          if (!r.ok) { console.log('cg', ex, 'p' + p, 'http', r.status); break; }
+          const j = await r.json();
+          const ts = j.tickers || [];
+          ts.forEach(t => {
+            if (t.target !== quote || !t.coin_id || !t.base) return;
+            if (ex === 'upbit') m[t.base] = t.coin_id;
+            else if (!m[t.coin_id]) m[t.coin_id] = t.base;
+          });
+          if (ts.length < 100) break;
+          await nap(2600);
+        }
+        return m;
+      };
+      const uMap = await pull('upbit', 'KRW', 6);
+      await nap(2600);
+      const bMap = await pull('binance', 'USDT', 18);
+      const pair = {};
+      Object.entries(uMap).forEach(([sym, cid]) => { if (bMap[cid]) pair[sym] = bMap[cid]; });
+      if (Object.keys(pair).length >= 40) { up.map = pair; up.mapT = now; }
+      else { console.log('upbit map too small:', Object.keys(pair).length, '— keeping previous'); up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
+      console.log('upbit map:', Object.keys(uMap).length, 'KRW coin_ids,', Object.keys(bMap).length, 'binance coin_ids →', Object.keys(up.map || {}).length, 'verified pairs');
+    } catch (e) { console.log('upbit map failed', e.message); up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
+  } else { up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
+
+  if ((up.markets || []).length || Object.keys(up.map || {}).length) {
+    fs.writeFileSync('data/upbit.json', JSON.stringify(up));
+    console.log('upbit:', (up.markets || []).length, 'KRW markets,', (up.markets || []).filter(m => m.w || m.c).length, 'flagged,', Object.keys(up.map || {}).length, 'mapped,', (up.notices || []).length, 'notices,', up.recent.length, 'recent events');
+  } else console.log('upbit: nothing to write');
+} catch (e) { console.log('upbit section failed', e.message); }
+
 // ---------------- Kalshi mirror (group /markets by event_ticker; titles from /events) ----------------
 try {
   const KH = { 'Accept': 'application/json', 'User-Agent': 'cryptopulse-bot/1.0' };
@@ -532,13 +641,16 @@ async function tg(text) {
 let st = { whale: [], sec: [], liq: [] }, firstRun = false;
 try { st = JSON.parse(fs.readFileSync('data/alert-state.json', 'utf8')); }
 catch (e) { firstRun = true; }
-const seen = { whale: new Set(st.whale || []), sec: new Set(st.sec || []), liq: new Set(st.liq || []) };
+const seen = { whale: new Set(st.whale || []), sec: new Set(st.sec || []), liq: new Set(st.liq || []), upbit: new Set(st.upbit || []) };
 const queue = [];
 function consider(kind, key, msg) {
   if (seen[kind].has(key)) return;
   seen[kind].add(key);
   if (!firstRun) queue.push(msg); // seed silently on first run
 }
+
+// --- Upbit: listings, delistings and new official caution flags (collected above) ---
+upbitAlerts.forEach(a => consider('upbit', a.key, a.msg));
 
 // --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
 try {
@@ -697,7 +809,7 @@ try {
 try {
   let alog = [];
   try { alog = JSON.parse(fs.readFileSync('data/alert-log.json', 'utf8')).entries || []; } catch (e) {}
-  const kindOf = m => /🐋|whale|liquidation risk/i.test(m) ? 'whale' : 'radar';
+  const kindOf = m => /🇰🇷/.test(m) ? 'upbit' : (/🐋|whale|liquidation risk/i.test(m) ? 'whale' : 'radar');
   queue.forEach(m => alog.push({ t: Date.now(), k: kindOf(m), x: m.replace(/<[^>]+>/g, '') }));
   alog = alog.filter(e => e.t > Date.now() - 48 * 3600_000).slice(-400);
   fs.writeFileSync('data/alert-log.json', JSON.stringify({ t: Date.now(), entries: alog }));
@@ -707,6 +819,7 @@ for (const msg of queue.slice(0, 12)) { await tg(msg); await new Promise(r => se
 if (queue.length > 12) await tg('… and ' + (queue.length - 12) + ' more alerts this cycle.');
 fs.writeFileSync('data/alert-state.json', JSON.stringify({
   whale: [...seen.whale].slice(-600), sec: [...seen.sec].slice(-400), liq: [...seen.liq].slice(-600),
+  upbit: [...seen.upbit].slice(-300),
   radar: st.radar || {}
 }));
 console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
