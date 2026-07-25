@@ -1,0 +1,84 @@
+name: Nansen (nomes das carteiras)
+
+# 2000 créditos por mês, e o mês não se estica. Por isso este workflow NÃO corre a cada 5 minutos
+# como os outros coletores: o modo "daily" corre uma vez por dia e o "sweep" só à mão.
+#
+#   probe  ~5 créditos    valida a chave. É o primeiro a correr depois de pôr o secret.
+#   sweep  ~165 créditos  varrimento intensivo, uma vez. Semeia a cache de nomes de uma assentada.
+#   daily  ~45 créditos   manutenção. 45×30 = 1350/mês, sobra folga para um sweep extra.
+#
+# O contador vive em data/nansen-budget.json e é alimentado pelo que a própria resposta da Nansen
+# diz ter custado, não por uma estimativa nossa. O colector recusa-se a passar do tecto.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "probe (valida a chave), sweep (intensivo, uma vez) ou daily"
+        required: true
+        default: probe
+        type: choice
+        options: [probe, sweep, daily]
+  schedule:
+    # 04:10 UTC — fora das horas de maior movimento, e desencontrado dos outros coletores para
+    # não haver dois pushes para o main ao mesmo segundo.
+    - cron: "10 4 * * *"
+
+permissions:
+  contents: write
+
+# Dois runs em cima um do outro gastariam créditos a dobrar pela mesma informação.
+concurrency:
+  group: nansen
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      # sha fixo, não a tag: uma tag pode ser reescrita para apontar a outro código, um sha não pode.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Recolher
+        run: node nansen-collector.mjs ${{ github.event.inputs.mode || 'daily' }}
+        env:
+          NANSEN_KEY: ${{ secrets.NANSEN_KEY }}
+
+      - name: Commit
+        # Mesmo que a recolha rebente a meio, o contador de créditos tem de ser gravado: créditos
+        # gastos são gastos, e perder a conta é a única falha aqui que não se desfaz.
+        if: always()
+        run: |
+          set -u
+          FILES="data/nansen-labels.json data/nansen-budget.json data/nansen-perps.json data/nansen-sm.json"
+          EXIST=""
+          for f in $FILES; do [ -f "$f" ] && EXIST="$EXIST $f"; done
+          if [ -z "$EXIST" ]; then echo "nada gerado"; exit 0; fi
+          git config user.name "oi-collector-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add $EXIST
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "nansen: nomes de carteiras [skip ci]" >/dev/null
+          # Nunca "git pull --rebase" aqui: os coletores estão a fazer push para o mesmo main de 5 em
+          # 5 minutos, e um rebase que pare a meio deixa .git/rebase-merge no runner. Reconstruir o
+          # commit por cima do main mais recente não pode dar conflito, por construção.
+          MINE=$(git rev-parse HEAD)
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "push recusado — a reconstruir por cima do origin/main (tentativa $i)"
+            git fetch origin main || { sleep $((i * 5)); continue; }
+            git reset --hard FETCH_HEAD
+            git checkout "$MINE" -- $EXIST
+            git add $EXIST
+            if git diff --cached --quiet; then
+              echo "já lá estava — nada a fazer"
+              exit 0
+            fi
+            git commit -m "nansen: nomes de carteiras [skip ci]" >/dev/null
+            sleep $((i * 3))
+          done
+          echo "push falhou depois de 5 tentativas"
+          exit 1
