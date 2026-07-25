@@ -1,7 +1,9 @@
 name: Lighter book scanner
 on:
   schedule:
-    - cron: '2,12,22,32,42,52 * * * *' # offset from the main collector so both pipelines run in parallel
+    # Same story as the OI collector: GitHub drops most scheduled fires on the free queue, so instead of
+    # relying on six fires an hour, one delivered fire stays alive and scans on its own 5-minute timer.
+    - cron: '2,12,22,32,42,52 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
@@ -11,14 +13,30 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
-      - name: Scan Lighter book
-        run: node lighter-collector.mjs
-      - name: Commit
+      - name: Scan Lighter every 5 minutes for one hour
         run: |
+          set -u
           git config user.name "oi-collector-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/liq-book-lighter.json
-          git commit -m "Lighter book [skip ci]" || echo "nothing to commit"
-          for i in 1 2 3; do git pull --rebase origin main && git push && break || sleep 8; done
+
+          END=$(( $(date +%s) + 3300 ))
+          while : ; do
+            echo "--- lighter pass at $(date -u +%H:%M:%SZ) ---"
+            node lighter-collector.mjs || echo "scan exited non-zero — continuing"
+            git add data/liq-book-lighter.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Lighter book [skip ci]" >/dev/null || true
+              for i in 1 2 3 4 5; do
+                git pull --rebase origin main && git push && break
+                sleep $((i * 5))
+              done
+            fi
+            NOW=$(date +%s)
+            if [ "$NOW" -ge "$END" ]; then break; fi
+            # grid + 150s: deliberately half-way between the OI collector's passes, so the two jobs are
+            # not pushing to main at the same instant every five minutes
+            sleep $(( 300 - (NOW % 300) + 150 ))
+          done
