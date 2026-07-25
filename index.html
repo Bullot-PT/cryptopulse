@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-lI8jYBndJXvjWBuPzYqioJLY0sMaGiUbnYtnHS4VN/M=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-+uVpXSA1KP+xKIAluRS8NWActUIiXAnBINQxeuhaHH8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -239,6 +239,23 @@
     50%      { background: rgba(208,59,59,0.30); box-shadow: inset 0 0 0 1px rgba(208,59,59,0.8); }
   }
   .flash-red { animation: flashRed 1.1s ease-in-out infinite; border-radius: 6px; }
+  /* A caixa segue o número: mesmo nível, mesma cor, mesma cadência. Uma linha amarela com a caixa
+     vermelha por baixo dava dois sinais contraditórios ao mesmo tempo. */
+  @keyframes flashT1 {
+    0%, 100% { background: rgba(217, 164, 0, 0.09); box-shadow: inset 0 0 0 1px rgba(217, 164, 0, 0.35); }
+    50%      { background: rgba(217, 164, 0, 0.26); box-shadow: inset 0 0 0 1px rgba(255, 205, 0, 0.85); }
+  }
+  @keyframes flashT2 {
+    0%, 100% { background: rgba(208, 59, 59, 0.10); box-shadow: inset 0 0 0 1px rgba(208, 59, 59, 0.35); }
+    50%      { background: rgba(208, 59, 59, 0.30); box-shadow: inset 0 0 0 1px rgba(208, 59, 59, 0.85); }
+  }
+  @keyframes flashT3 {
+    0%, 100% { background: rgba(255, 31, 31, 0.16); box-shadow: inset 0 0 0 1px rgba(255, 31, 31, 0.55); }
+    50%      { background: rgba(255, 31, 31, 0.42); box-shadow: inset 0 0 0 2px rgba(255, 60, 60, 1); }
+  }
+  .flash-t1 { animation: flashT1 1.5s ease-in-out infinite; border-radius: 6px; }
+  .flash-t2 { animation: flashT2 1.0s ease-in-out infinite; border-radius: 6px; }
+  .flash-t3 { animation: flashT3 0.42s ease-in-out infinite; border-radius: 6px; }
   @keyframes flashBorder {
     0%, 100% { border-color: rgba(208,59,59,0.45); }
     50%      { border-color: rgba(208,59,59,1); }
@@ -267,8 +284,11 @@
   .liq-t3 { animation: liqT3 0.42s ease-in-out infinite; font-weight: 800; letter-spacing: 0.01em; }
   /* quem tem o sistema configurado para reduzir animações fica com a cor, sem o piscar */
   @media (prefers-reduced-motion: reduce) {
-    .liq-t1, .liq-t2, .liq-t3 { animation: none; }
+    .liq-t1, .liq-t2, .liq-t3, .flash-t1, .flash-t2, .flash-t3 { animation: none; }
     .liq-t1 { color: #d9a400; } .liq-t2 { color: #d03b3b; } .liq-t3 { color: #ff1f1f; }
+    .flash-t1 { background: rgba(217, 164, 0, 0.16); box-shadow: inset 0 0 0 1px rgba(217, 164, 0, 0.5); }
+    .flash-t2 { background: rgba(208, 59, 59, 0.18); box-shadow: inset 0 0 0 1px rgba(208, 59, 59, 0.55); }
+    .flash-t3 { background: rgba(255, 31, 31, 0.30); box-shadow: inset 0 0 0 2px rgba(255, 31, 31, 0.8); }
   }
 
   /* ---------- pm big-bet alerts ---------- */
@@ -2970,15 +2990,23 @@ function renderWatchlist() {
       "</div>";
     }).join("") + "</div>";
 }
-const whaleAlert = r => r.value >= 25_000_000 && r.dist != null && r.dist <= 10; /* flashing-red condition */
+/* Os três degraus da distância à liquidação, num sítio só. Estavam espalhados por quatro
+   funções e bastava mexer num para as cores deixarem de bater certo com a caixa e com a ordem. */
+const LIQ_T1 = 7, LIQ_T2 = 3.5, LIQ_T3 = 1;
+const whaleAlert = r => r.value >= 25_000_000 && r.dist != null && r.dist <= LIQ_T1;
 /* A que distância do preço de liquidação é que a linha começa a gritar. Sem distância real
    (posição sem preço de liquidação deste lado) não há classe nenhuma — nunca se inventa um número. */
 function distCls(d) {
   if (d == null) return "wrow-meta";
-  if (d <= 1)  return "liq-t3";   /* a um por cento: vermelho intenso, ao dobro da velocidade */
-  if (d <= 5)  return "liq-t2";   /* até cinco por cento: vermelho */
-  if (d <= 10) return "liq-t1";   /* de 10% a 5,1%: amarelo */
+  if (d <= LIQ_T3) return "liq-t3";   /* a um por cento: vermelho intenso, ao dobro da velocidade */
+  if (d <= LIQ_T2) return "liq-t2";   /* de 3,5% a 1,1%: vermelho */
+  if (d <= LIQ_T1) return "liq-t1";   /* de 7% a 3,6%: amarelo */
   return "wrow-meta";
+}
+/* a caixa da linha, no mesmo degrau do número lá dentro */
+function distBox(d, value) {
+  if (d == null || !(value >= 25_000_000) || d > LIQ_T1) return "";
+  return d <= LIQ_T3 ? " flash-t3" : d <= LIQ_T2 ? " flash-t2" : " flash-t1";
 }
 
 /* ---- registo das posições grandes: uma linha só sai quando fecha mesmo ----------------------
@@ -3068,7 +3096,7 @@ function renderWhaleRows(rows, note) {
     rows.map(r => {
       const distTxt = r.dist == null ? "" :
         '<span class="pos-liq ' + distCls(r.dist) + '">liq @ ' + fmtPrice(r.liq) + " · " + r.dist.toFixed(1) + "% away</span>";
-      return '<a class="wrow' + (whaleAlert(r) ? " flash-red" : "") + '" data-addr="' + esc(r.addr) +
+      return '<a class="wrow' + distBox(r.dist, r.value) + '" data-addr="' + esc(r.addr) +
         '" data-coin="' + esc(r.coin) + '" data-liq="' + (r.liq || 0) + '" data-szi="' + r.szi +
         '" data-mark0="' + r.mark + '" data-val0="' + r.value + '" data-upnl0="' + r.upnl +
         '" href="https://hypurrscan.io/address/' + esc(r.addr) + '" target="_blank" rel="noopener">' +
@@ -5396,9 +5424,65 @@ function updateWhaleLive() {
     }
     const valEl = row.querySelector(".wrow-val");
     if (valEl) valEl.textContent = fmtBig(value);
-    const alert = value >= 25e6 && dist != null && dist <= 10;
-    row.classList.toggle("flash-red", alert);
+    /* a caixa acompanha o número no mesmo instante */
+    const box = distBox(dist, value);
+    ["flash-red", "flash-t1", "flash-t2", "flash-t3"].forEach(c => {
+      if (c !== box.trim()) row.classList.remove(c);
+    });
+    if (box) row.classList.add(box.trim());
+    row.dataset.liveVal = value;
+    row.dataset.liveDist = dist == null ? "" : dist;
   });
+  whaleResortDom();
+}
+
+/* ---- a ordem tem de acompanhar o preço ------------------------------------------------------
+   O painel só era reordenado quando o CONJUNTO de linhas mudava. Enquanto fossem só os números a
+   mexer ficava tudo no sítio — e é aí que nasce o buraco que o Bullot apanhou: uma posição que
+   atravessa o limiar deixa de estar em alerta, perde a caixa ao segundo seguinte, mas continua
+   sentada no meio das que ainda estão em alerta. Aqui reordenam-se os próprios nós do DOM, sem
+   reconstruir HTML nenhum — os crachás 🆕/💰 ficam onde estão e as animações das linhas que já
+   estavam pela ordem certa não são reiniciadas.
+   Só corre de 4 em 4 segundos e nunca com o rato em cima de uma linha: uma linha a fugir debaixo
+   do cursor no momento do clique é pior do que a ordem estar um instante desactualizada. */
+let whaleResortAt = 0;
+function whaleResortDom() {
+  const now = Date.now();
+  if (now - whaleResortAt < 4000) return;
+  const body = document.getElementById("whalesBody");
+  if (!body || body.dataset.home === "0") return;
+  const rows = Array.prototype.slice.call(body.querySelectorAll(".wrow[data-coin]"));
+  if (rows.length < 2) return;
+  if (body.querySelector(".wrow:hover")) return;
+  whaleResortAt = now;
+  const info = rows.map(function (el, i) {
+    const value = parseFloat(el.dataset.liveVal) || parseFloat(el.dataset.val0) || 0;
+    const d = el.dataset.liveDist;
+    let dist;
+    if (d === undefined) {
+      /* moeda sem preço em direto (socket calado, par sem trades): usa-se o preço com que a linha
+         foi pintada, que é real, em vez de a atirar para o fundo como se não tivesse distância */
+      const liq = parseFloat(el.dataset.liq), szi = parseFloat(el.dataset.szi), m = parseFloat(el.dataset.mark0);
+      dist = null;
+      if (liq > 0 && m > 0) {
+        if (szi > 0 && liq < m) dist = (m - liq) / m * 100;
+        if (szi < 0 && liq > m) dist = (liq - m) / m * 100;
+      }
+    } else dist = d === "" ? null : parseFloat(d);
+    return {el: el, i: i, value: value, dist: dist,
+      a: value >= 25e6 && dist != null && dist <= LIQ_T1};
+  });
+  const sorted = info.slice().sort(function (x, y) {
+    if (x.a !== y.a) return (y.a ? 1 : 0) - (x.a ? 1 : 0);
+    if (x.a && y.a) return x.dist - y.dist;
+    return y.value - x.value;
+  });
+  let same = true;
+  for (let i = 0; i < sorted.length; i++) if (sorted[i].i !== i) { same = false; break; }
+  if (same) return;
+  const frag = document.createDocumentFragment();
+  sorted.forEach(function (r) { frag.appendChild(r.el); });
+  body.appendChild(frag);   /* o #watchBox é o primeiro filho e não é tocado */
 }
 function updateOiLive() {
   document.querySelectorAll("#hyperBody .perp-row[data-coin]").forEach(row => {
