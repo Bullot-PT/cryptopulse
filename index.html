@@ -3092,7 +3092,11 @@ async function loadGlobalOI() {
     if (!st.c.length || now - st.c[st.c.length - 1][0] > 55 * 60_000) st.c.push([now, Math.round(total)]);
     st.c = st.c.filter(x => x[0] > now - 7.2 * 86_400_000);
     goiStore.save(st);
-    try { localStorage.setItem("cryptopulse-goi-cache", JSON.stringify({t: Date.now(), rows: rows.slice(0, 12), total})); } catch (e) {}
+    /* the FULL exchange list is cached, not just the visible top 12. When CoinGecko rate-limits us the
+       fallback below re-totals from this cache — with only 12 rows saved, that total came out ~$113B
+       against a real ~$171B, so the headline looked like global OI had collapsed a third when in fact
+       we had simply stopped counting 88 exchanges. ~100 small rows is a few KB of localStorage. */
+    try { localStorage.setItem("cryptopulse-goi-cache", JSON.stringify({t: Date.now(), rows, total})); } catch (e) {}
     await renderGlobalOI(rows, total);
     markUpdated();
   } catch (e) {
@@ -3106,7 +3110,12 @@ async function loadGlobalOI() {
         rows.push(dx);
       });
       rows.sort((a, b) => b.oi - a.oi);
-      if (rows.length) await renderGlobalOI(rows, rows.reduce((s, r) => s + r.oi, 0), base ? base.t : null);
+      /* An older browser may still hold a 12-row cache from before the fix above. Re-totalling THAT would
+         under-report global OI by a third, so when the rows we have clearly do not add up to the total we
+         last measured, show the measured total instead of a sum of the fragment we happen to have kept. */
+      let ftotal = rows.reduce((s, r) => s + r.oi, 0);
+      if (base && base.total && ftotal < base.total * 0.9) ftotal = base.total;
+      if (rows.length) await renderGlobalOI(rows, ftotal, base ? base.t : null);
       else if (!body.querySelector(".goi-hero")) setError(body, "Global OI unavailable right now — retrying automatically.");
     } catch (e2) {
       if (!body.querySelector(".goi-hero")) setError(body, "Global OI unavailable right now — retrying automatically.");
