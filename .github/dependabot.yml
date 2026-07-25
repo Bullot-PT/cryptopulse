@@ -1,0 +1,19 @@
+# Mantém as GitHub Actions usadas pelos coletores atualizadas.
+#
+# Porquê isto existe: os workflows passaram a apontar para SHAs de commit fixos em vez da tag @v4,
+# para que ninguém possa trocar o código que corre por baixo de nós reescrevendo a tag. O preço de
+# fixar o SHA é deixar de receber correções de segurança automaticamente — este ficheiro paga esse
+# preço: o Dependabot percebe o padrão "<sha> # v4", vigia o upstream, e abre um PR quando houver
+# versão nova. O PR é revisto à mão; nada entra em main sozinho.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
