@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  # 'actions: write' é o que permite ao passo "Queue the next run" despachar a run seguinte.
+  # workflow_dispatch é uma das duas excepções à regra do GitHub de que eventos criados com o
+  # GITHUB_TOKEN não arrancam workflows — por isso a corrente funciona sem nenhum PAT pessoal.
+  actions: write
 concurrency:
   group: lighter-collect
   cancel-in-progress: false
@@ -15,6 +19,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      # ---- corrente de arranque ----------------------------------------------------------------
+      # O cron lá em cima é só um pedido, e o GitHub deita fora quase todos (medido a 25-jul-2026:
+      # mediana de 51 min entre fires entregues, pior caso 3h23m). Por isso esta run despacha já a
+      # sua sucessora: o grupo de concorrência segura-a em fila enquanto esta corre e ela arranca no
+      # instante em que esta acabar — quer acabe normalmente, por timeout, por crash ou cancelada.
+      # É isto que transforma o coletor de "esperar que o cron caia" numa corrente contínua.
+      - name: Queue the next run (chain)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          WF=lighter-collector.yml
+          # Disjuntor: se já arrancaram 4 ou mais runs deste workflow nos últimos 15 minutos, alguma
+          # coisa está a rebentar logo no arranque e a corrente virou um loop apertado. Nesse caso não
+          # despacha nada e deixa o cron voltar a pegar nisto — antes um buraco do que centenas de runs.
+          SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          RECENT=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?per_page=30" \
+            --jq "[.workflow_runs[] | select(.run_started_at > \"${SINCE}\")] | length" 2>/dev/null || echo 0)
+          echo "runs deste workflow desde ${SINCE}: ${RECENT}"
+          if [ "${RECENT:-0}" -ge 4 ]; then
+            echo "disjuntor disparado — não despacho sucessora"
+            exit 0
+          fi
+          if gh workflow run "$WF" --ref main; then
+            echo "sucessora em fila — arranca no instante em que esta run terminar"
+          else
+            echo "não consegui despachar a sucessora — o cron fica como rede"
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       - name: Scan Lighter every 5 minutes for one hour
         run: |

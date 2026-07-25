@@ -8,6 +8,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  # 'actions: write' é o que permite ao passo "Queue the next run" despachar a run seguinte.
+  # workflow_dispatch é uma das duas excepções à regra do GitHub de que eventos criados com o
+  # GITHUB_TOKEN não arrancam workflows — por isso a corrente funciona sem nenhum PAT pessoal.
+  actions: write
 concurrency:
   # A SEPARATE group from 'oi-collect' on purpose. If it shared the primary's group it would queue behind
   # the very run it is supposed to be checking on, and could only ever start once that run had already
@@ -19,6 +23,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      # ---- corrente de arranque ----------------------------------------------------------------
+      # O cron lá em cima é só um pedido, e o GitHub deita fora quase todos (medido a 25-jul-2026:
+      # mediana de 51 min entre fires entregues, pior caso 3h23m). Por isso esta run despacha já a
+      # sua sucessora: o grupo de concorrência segura-a em fila enquanto esta corre e ela arranca no
+      # instante em que esta acabar — quer acabe normalmente, por timeout, por crash ou cancelada.
+      # É isto que transforma o coletor de "esperar que o cron caia" numa corrente contínua.
+      - name: Queue the next run (chain)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          WF=oi-standby.yml
+          # Disjuntor: se já arrancaram 4 ou mais runs deste workflow nos últimos 15 minutos, alguma
+          # coisa está a rebentar logo no arranque e a corrente virou um loop apertado. Nesse caso não
+          # despacha nada e deixa o cron voltar a pegar nisto — antes um buraco do que centenas de runs.
+          SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          RECENT=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?per_page=30" \
+            --jq "[.workflow_runs[] | select(.run_started_at > \"${SINCE}\")] | length" 2>/dev/null || echo 0)
+          echo "runs deste workflow desde ${SINCE}: ${RECENT}"
+          if [ "${RECENT:-0}" -ge 4 ]; then
+            echo "disjuntor disparado — não despacho sucessora"
+            exit 0
+          fi
+          if gh workflow run "$WF" --ref main; then
+            echo "sucessora em fila — arranca no instante em que esta run terminar"
+          else
+            echo "não consegui despachar a sucessora — o cron fica como rede"
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       # Same pin as the primary — a takeover has to run the collector on the same runtime, or the
       # WebSocket-based wallet discovery would be missing for as long as the standby is in charge.
@@ -34,36 +66,12 @@ jobs:
         run: |
           set -u
 
-          # How old the data is allowed to get before this run decides the primary is gone. The primary
-          # samples on a 5-minute grid, so 18 minutes is three missed passes — long enough that a slow
-          # pass or a push retry does not trigger a takeover, short enough that a real outage is caught
-          # inside one sampling gap instead of the 51-minute median gap the bare cron gives.
+          # Quanto tempo os dados podem ficar parados antes desta run decidir que o principal morreu.
+          # O principal amostra numa grelha de 5 minutos, portanto 18 minutos são três passagens
+          # falhadas — tempo suficiente para não disparar por causa de uma passagem lenta ou de um
+          # retry de push, e curto o suficiente para apanhar uma avaria real dentro de um intervalo
+          # de amostragem, em vez dos 51 minutos de mediana que o cron sozinho dá.
           STALE=1080
-
-          NOW=$(date +%s)
-
-          # Two independent readings of "when did the data last move", because either one alone can lie:
-          # the commit time misses a pass that produced identical bytes, and the timestamp inside the file
-          # misses the case where the collector wrote but could not push.
-          COMMIT_T=$(git log -1 --format=%ct -- data/ 2>/dev/null || echo 0)
-          DATA_T=$(node -e "
-            try {
-              const j = JSON.parse(require('fs').readFileSync('data/hl-pos.json','utf8'));
-              console.log(Math.round((j.t||0)/1000));
-            } catch (e) { console.log(0); }
-          " 2>/dev/null || echo 0)
-
-          LAST=$COMMIT_T
-          if [ "$DATA_T" -gt "$LAST" ]; then LAST=$DATA_T; fi
-          AGE=$((NOW - LAST))
-          echo "last data movement ${AGE}s ago (commit $COMMIT_T, file $DATA_T)"
-
-          if [ "$AGE" -lt "$STALE" ]; then
-            echo "primary collector is alive — standing by, nothing to do"
-            exit 0
-          fi
-
-          echo "primary collector looks down (${AGE}s of silence) — taking over"
 
           git config user.name "oi-standby-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -112,24 +120,59 @@ jobs:
             return 0
           }
 
+          # Esta run fica viva uma hora a vigiar, em vez de decidir uma única vez e sair logo. Antes
+          # era uma decisão instantânea: olhava para a idade dos dados no segundo em que arrancava e,
+          # se o principal estivesse vivo, saía. Como o GitHub entrega quase nenhum fire agendado
+          # (a 25-jul-2026 este workflow tinha exactamente 1 fire entregue em toda a sua vida), a rede
+          # de segurança era teórica — nunca lá estava no minuto em que era precisa. Agora vigia de 5
+          # em 5 minutos durante a hora inteira, e a corrente no passo anterior garante que há sempre
+          # uma destas runs viva.
           END=$(( $(date +%s) + 3300 ))
           PASS=0
           while : ; do
+            NOW=$(date +%s)
+            if [ "$NOW" -ge "$END" ]; then break; fi
+
+            # Olhar para o main verdadeiro, não para o que este runner calhou de fazer checkout há
+            # meia hora. Sem isto a idade dos dados congelava no instante do arranque.
+            git fetch origin main >/dev/null 2>&1 || true
+            git reset --hard FETCH_HEAD >/dev/null 2>&1 || true
+
+            # Duas leituras independentes de "quando é que os dados mexeram pela última vez", porque
+            # cada uma sozinha mente: a data do commit falha uma passagem que produziu bytes iguais, e
+            # o timestamp dentro do ficheiro falha o caso em que o coletor escreveu mas não conseguiu
+            # fazer push.
+            COMMIT_T=$(git log -1 --format=%ct -- data/ 2>/dev/null || echo 0)
+            DATA_T=$(node -e "
+              try {
+                const j = JSON.parse(require('fs').readFileSync('data/hl-pos.json','utf8'));
+                console.log(Math.round((j.t||0)/1000));
+              } catch (e) { console.log(0); }
+            " 2>/dev/null || echo 0)
+            LAST=$COMMIT_T
+            if [ "$DATA_T" -gt "$LAST" ]; then LAST=$DATA_T; fi
+            NOW=$(date +%s)
+            AGE=$((NOW - LAST))
+            WHO=$(git log -1 --format=%an -- data/ 2>/dev/null || echo "")
+
+            # A idade sozinha não chega para decidir. Depois de uma passagem de takeover os dados
+            # ficam frescos — escritos por esta run — e olhar só para a idade mandava-me voltar a
+            # vigiar com o principal ainda morto, e os dados voltavam a parar 18 minutos. Enquanto o
+            # último commit de dados for meu, continuo eu. Quando aparecer um do oi-collector-bot,
+            # o principal está de volta e eu saio da frente: dois escritores só se atrapalhavam a
+            # disputar o cursor de rotação guardado no hl-pos.json.
+            if [ "$AGE" -lt "$STALE" ] && [ "$WHO" != "oi-standby-bot" ]; then
+              echo "$(date -u +%H:%M:%SZ) — principal vivo (dados com ${AGE}s, por $WHO), a vigiar"
+              sleep $(( 300 - (NOW % 300) ))
+              continue
+            fi
+
             PASS=$((PASS + 1))
-            echo "--- standby pass $PASS at $(date -u +%H:%M:%SZ) ---"
+            echo "--- dados com ${AGE}s (por $WHO) — passagem de takeover $PASS às $(date -u +%H:%M:%SZ) ---"
             node collect.mjs || echo "collector exited non-zero on this pass — continuing"
             push_data
 
-            # Hand back the moment the primary returns. Its own run pushes with a different author, so a
-            # data commit this run did not make means the real collector is alive again and two writers
-            # would only fight over the rotation cursor stored in hl-pos.json.
-            if [ "$(git log -1 --format=%an -- data/ 2>/dev/null || echo standby)" = "oi-collector-bot" ]; then
-              echo "primary is back — standing down"
-              break
-            fi
-
             NOW=$(date +%s)
-            if [ "$NOW" -ge "$END" ]; then break; fi
             sleep $(( 300 - (NOW % 300) ))
           done
-          echo "finished $PASS standby passes"
+          echo "fim: $PASS passagens de takeover nesta run"
