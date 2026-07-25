@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-RgU7VAu3UIMxTk47AeDG/kp/i4AqC3vkZe7kvGV+isA=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-UIR/TtTOYZrjIo0gS+YJE6/7FQpW2O301nHfUUC8QQI=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -208,7 +208,15 @@
   /* ---------- polymarket ---------- */
   .pm-item { padding: 12px 14px; border-bottom: 1px solid var(--grid); }
   .pm-item:last-child { border-bottom: none; }
-  .pm-q { font-size: 13px; font-weight: 550; line-height: 1.4; margin-bottom: 7px; }
+  .pm-q { font-size: 13px; font-weight: 550; line-height: 1.4; margin-bottom: 7px;
+    display: flex; align-items: flex-start; gap: 8px; }
+  .pm-q > span { flex: 1 1 auto; min-width: 0; }
+  .pm-fav {
+    background: none; border: none; cursor: pointer; padding: 0 2px; margin: -1px 0 0;
+    font-size: 14px; line-height: 1; color: var(--muted); flex: 0 0 auto;
+  }
+  .pm-fav:hover { color: var(--warn); }
+  .pm-fav.fav-on { color: var(--warn); }
   .pm-row { display: flex; align-items: center; gap: 10px; }
   .pm-odds { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
   /* a moved odd flashes once so a change that happens while you are looking elsewhere is not silent */
@@ -688,7 +696,7 @@
       <div class="grid-stack-item-content"><div class="panel">
         <div class="panel-head">💰 Prices <span class="sub" id="pricesSub"></span></div>
         <div class="panel-body" id="pricesOuter">
-          <div class="scan-bar"><input class="scan-input" id="priceSearch" placeholder="🔎 search top 100 coins…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="priceSearch" placeholder="🔎 search top 1000 coins…" spellcheck="false"></div>
           <div id="pricesBody"><div class="empty">Loading prices…</div></div>
         </div>
       </div></div>
@@ -719,6 +727,7 @@
         <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" data-hoe="1">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:4px 7px;color:var(--muted)"></button>
+          <button class="btn-ghost" id="pmFavBtn" title="Favourite markets — click to open/close the list" style="padding:2px 8px">⭐ 0</button>
           <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
         <div class="panel-body" id="pmOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
@@ -1709,6 +1718,48 @@ document.querySelectorAll(".up-f").forEach(b => {
 })();
 
 let priceCoins = [];
+/* sparklines guardados por id, para que a ordem de chegada das duas leituras não interesse:
+   quem chegar primeiro deixa aqui o que tem, quem chegar depois vai buscar. */
+const priceSpark = {};
+let priceUniverse = [], priceUniT = 0, priceUniBusy = null;
+/* Junta as duas leituras num único array ordenado por market cap. O índice do array = ranking − 1,
+   e é isso que o data-i das linhas aponta — por isso tudo o que já existia continua a funcionar. */
+function priceMerge() {
+  const top = priceCoins.filter(c => c && c.id);
+  top.forEach(c => { if (c.sparkline_in_7d && c.sparkline_in_7d.price) priceSpark[c.id] = c.sparkline_in_7d; });
+  if (!priceUniverse.length) return;
+  const byId = {};
+  top.forEach(c => { byId[c.id] = c; });
+  priceCoins = priceUniverse.map(u => {
+    const t = byId[u.id];
+    /* o objecto do top 100 é mais fresco (vem do ciclo de 60 s) — fica ele, só herda o sparkline */
+    const base = t || u;
+    if (!base.sparkline_in_7d && priceSpark[base.id]) base.sparkline_in_7d = priceSpark[base.id];
+    return base;
+  });
+}
+/* As 1000 só são pedidas quando fazem falta: à primeira tecla na caixa de pesquisa, e depois
+   revalidadas de 15 em 15 minutos. Quem nunca pesquisa nunca paga estes 4 pedidos. */
+async function loadPriceUniverse() {
+  if (priceUniBusy) return priceUniBusy;
+  if (priceUniverse.length && Date.now() - priceUniT < 900_000) return;
+  priceUniBusy = (async () => {
+    const all = [];
+    for (let p = 1; p <= 4; p++) {
+      const part = await fetchJSON(
+        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=" +
+        p + "&sparkline=false&price_change_percentage=24h"
+      );
+      if (!Array.isArray(part) || !part.length) break;
+      all.push(...part);
+      /* espaçado de propósito: a CoinGecko sem chave corta a torneira a rajadas seguidas, e um 429
+         aqui deixava o utilizador com meio universo carregado e sem perceber porquê */
+      if (p < 4) await new Promise(r => setTimeout(r, 900));
+    }
+    if (all.length > 250) { priceUniverse = all; priceUniT = Date.now(); priceMerge(); renderPriceRows(); }
+  })().catch(() => {}).finally(() => { priceUniBusy = null; });
+  return priceUniBusy;
+}
 async function loadPrices() {
   const body = $("pricesBody");
   try {
@@ -1717,6 +1768,7 @@ async function loadPrices() {
     );
     if (!Array.isArray(data) || !data.length) throw new Error("empty response");
     priceCoins = data;
+    priceMerge();
     renderPriceRows();
     markUpdated();
     /* keep a slim copy so a rate-limited startup can still show last-known prices */
@@ -1767,10 +1819,15 @@ function renderPriceRows() {
       spark +
       '<div class="price-val"><div class="p">' + fmtPrice(c.current_price) + "</div>" + chgSpan(chg) + "</div>" +
     "</a>";
-  }).join("") : '<div class="empty">No coin matching “' + esc(q) + "” in the top 100.</div>";
+  }).join("") : '<div class="empty">No coin matching “' + esc(q) + "” in the top " + priceCoins.length +
+      (priceUniBusy ? " — still loading the rest of the top 1000…" : "") + ".</div>";
   $("pricesSub").textContent = q ? list.length + " of " + priceCoins.length : "top 15 · 24h · click → TradingView";
 }
-$("priceSearch").addEventListener("input", onFrame(() => { if (priceCoins.length) renderPriceRows(); }));
+$("priceSearch").addEventListener("input", onFrame(() => {
+  /* a primeira tecla é que manda buscar as 1000; até chegarem, pesquisa-se no que já cá está */
+  if (($("priceSearch").value || "").trim()) loadPriceUniverse();
+  if (priceCoins.length) renderPriceRows();
+}));
 
 /* ---------------- price hover popup: 24h linear chart with session high/low ---------------- */
 const pricePop = document.createElement("div");
@@ -3021,8 +3078,12 @@ async function hlPosHealth() {
   const el = $("whalesSub");
   if (!el || !j || !j.t) return;
   const stale = Date.now() - j.t > 20 * 60_000;
-  el.innerHTML = esc(el.textContent) + ' · <span class="' + (stale ? "dn" : "") + '">index ' + timeAgo(j.t) +
-    (stale ? " — stale, the collector may be down" : "") + "</span>";
+  /* Limpa sempre o que uma passagem anterior deixou antes de escrever, senão empilham-se avisos
+     em cima uns dos outros de dois em dois minutos. */
+  const base = el.textContent.replace(/\s*·\s*index [^·]*$/, "");
+  el.innerHTML = esc(base) + (stale
+    ? ' · <span class="dn">index ' + timeAgo(j.t) + " — stale, the collector may be down</span>"
+    : "");
 }
 function hlPosRows(j, want) {
   const key = Object.keys(j.coins || {}).find(c => exCanon(c) === want);
@@ -3383,9 +3444,21 @@ $("scanClear").addEventListener("click", () => {
   clearTimeout(scanDebounce);
   scanToken.token = (scanToken.token || 0) + 1;      /* cancel any in-flight live refresh */
   $("scanClear").style.display = "none";
-  $("whalesBody").innerHTML = '<div class="empty">Rescanning top wallets…</div>';
-  loadWhales();
+  whaleHome();
 });
+/* Voltar ao painel de origem. Era isto que faltava: sair de uma pesquisa tem de DESLIGAR o sinal
+   "estou a ver outra coisa", senão nenhuma das rotinas que pintam o painel volta a tocar-lhe.
+   E não basta desligar — o varrimento ao vivo demora ~30 s e o índice do bot está em cache aqui ao
+   lado, portanto pinta-se já com o índice e o varrimento refina por cima. */
+function whaleHome() {
+  const body = $("whalesBody");
+  if (!body) return;
+  body.dataset.home = "1";
+  if (!body.querySelector(".wrow")) body.innerHTML = '<div class="empty">Rescanning top wallets…</div>';
+  whalesLiveAt = 0;                 /* deixa o loadWhalesFast pintar já, sem esperar os 150 s */
+  loadWhalesFast();
+  loadWhales();
+}
 
 /* ---------------- SEC filings (data.sec.gov) + user alerts ---------------- */
 const SEC_COMPANIES = [
@@ -4011,6 +4084,75 @@ const pmBlocked = {
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return {}; } },
   save(o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
+/* mercados marcados como favoritos (⭐) — guardados no browser, como os bloqueados */
+const pmFavs = {
+  key: "cryptopulse-pm-favs",
+  load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return {}; } },
+  save(o) { try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
+};
+let pmFavOpen = false, pmFavCards = {t: 0, html: ""};
+function pmFavPaint() {
+  const b = $("pmFavBtn");
+  if (b) b.textContent = "⭐ " + Object.keys(pmFavs.load()).length;
+}
+/* Os favoritos são mercados vivos, não uma lista de nomes: vai-se buscar cada um à gamma pelo
+   slug (num único pedido, o endpoint aceita slug repetido) e desenham-se os mesmos cartões do
+   painel. Se a rede falhar mostra-se na mesma a lista guardada com o link — nunca uma
+   percentagem inventada. */
+async function pmFavOverlay() {
+  let ov = $("pmFavOverlay");
+  if (!pmFavOpen) { if (ov) ov.remove(); return; }
+  const favs = pmFavs.load(), slugs = Object.keys(favs);
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "pmFavOverlay";
+    ov.style.cssText = "position:absolute;inset:0;background:rgba(10,12,16,0.97);z-index:30;overflow:auto;padding:6px 0";
+    $("pmOuter").appendChild(ov);
+  }
+  const head = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
+    '<b style="font-size:12px">⭐ Favourite markets (' + slugs.length + ')</b>' +
+    '<span style="color:var(--muted);font-size:10px">live odds, same as the panel</span>' +
+    '<button class="btn-ghost" id="pmFavClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>';
+  if (!slugs.length) {
+    ov.innerHTML = head + '<div class="pm-blk-row" style="color:var(--muted)">nothing saved yet — click the ☆ on any market to keep it here</div>';
+    return;
+  }
+  ov.innerHTML = head + (pmFavCards.html || '<div class="empty">Loading your markets…</div>');
+  try {
+    const evs = await fetchJSON("https://gamma-api.polymarket.com/events?" +
+      slugs.slice(0, 40).map(x => "slug=" + encodeURIComponent(x)).join("&"));
+    if (!pmFavOpen) return;
+    const html = (Array.isArray(evs) ? evs : []).map(ev => pmEventCard(ev, {})).filter(Boolean).join("");
+    /* um favorito cujo mercado já fechou deixa de vir da gamma — em vez de desaparecer sem
+       explicação, fica listado com o link e a nota */
+    const back = new Set((Array.isArray(evs) ? evs : []).map(e => e.slug));
+    const gone = slugs.filter(x => !back.has(x)).map(x =>
+      '<div class="pm-blk-row"><button class="pm-unblock" data-unfav="' + esc(x) + '">REMOVE</button>' +
+      '<a href="https://polymarket.com/event/' + esc(x) + '" target="_blank" rel="noopener" style="color:var(--ink-2)">' +
+      esc((favs[x] || {}).title || x) + "</a><span style=\"color:var(--muted)\">· closed or unavailable</span></div>").join("");
+    pmFavCards = {t: Date.now(), html: html + gone};
+    ov.innerHTML = head + (pmFavCards.html || '<div class="empty">These markets are no longer open.</div>');
+    pmLiveOdds();
+  } catch (e) {
+    if (!pmFavCards.html) ov.innerHTML = head + slugs.map(x =>
+      '<div class="pm-blk-row"><button class="pm-unblock" data-unfav="' + esc(x) + '">REMOVE</button>' +
+      '<a href="https://polymarket.com/event/' + esc(x) + '" target="_blank" rel="noopener" style="color:var(--ink-2)">' +
+      esc((favs[x] || {}).title || x) + "</a></div>").join("") +
+      '<div class="pm-blk-row" style="color:var(--muted)">could not reach Polymarket for the live odds — the links still work</div>';
+  }
+}
+(() => {
+  const b = $("pmFavBtn");
+  if (!b) return;
+  ["mousedown", "pointerdown"].forEach(ev => b.addEventListener(ev, e => e.stopPropagation()));
+  b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    pmFavOpen = !pmFavOpen;
+    if (pmFavOpen) { pmBlockedOpen = false; pmBlkOverlay(); }
+    pmFavCards = {t: 0, html: ""};
+    pmFavOverlay();
+  });
+})();
 let pmBlockedOpen = false;
 /* overlay list (opens over the panel via the 🚫 head button; closes on the same button or ✕) */
 function pmBlkPaint() {
@@ -4046,6 +4188,33 @@ function pmBlkOverlay() {
   });
 })();
 $("pmOuter").addEventListener("click", e => {
+  /* a estrela vive dentro de um <a> que abre o Polymarket — sem isto, marcar um favorito
+     abria o mercado numa aba nova ao mesmo tempo */
+  const fv = e.target.closest("[data-fav]");
+  if (fv) {
+    e.preventDefault(); e.stopPropagation();
+    const o = pmFavs.load(), slug = fv.dataset.fav;
+    if (o[slug]) delete o[slug];
+    else o[slug] = {title: fv.dataset.favtitle || slug, t: Date.now()};
+    pmFavs.save(o);
+    const on = !!o[slug];
+    fv.classList.toggle("fav-on", on);
+    fv.textContent = on ? "★" : "☆";
+    fv.title = on ? "Remove from favourites" : "Save as a favourite — reachable from the ⭐ in the corner";
+    pmFavPaint();
+    if (pmFavOpen) { pmFavCards = {t: 0, html: ""}; pmFavOverlay(); }
+    return;
+  }
+  const uf = e.target.closest("[data-unfav]");
+  if (uf) {
+    e.preventDefault(); e.stopPropagation();
+    const o = pmFavs.load(); delete o[uf.dataset.unfav]; pmFavs.save(o);
+    pmFavPaint(); pmFavCards = {t: 0, html: ""}; pmFavOverlay(); renderPmRows(); return;
+  }
+  if (e.target.closest("#pmFavClose")) {
+    e.preventDefault(); e.stopPropagation();
+    pmFavOpen = false; pmFavOverlay(); return;
+  }
   if (e.target.closest("#pmBlkClose")) {
     e.preventDefault(); e.stopPropagation();
     pmBlockedOpen = false; pmBlkOverlay(); return;
@@ -4132,8 +4301,12 @@ function pmEventCard(ev, opts) {
   let tok = "";
   try { tok = String((JSON.parse(m.clobTokenIds || "[]") || [])[li] || ""); } catch (e) {}
   pmEventCard.last = {slug: ev.slug, pct, label, title: ev.title || "", vol: parseFloat(ev.volume24hr) || 0};
+  const isFav = !!pmFavs.load()[ev.slug];
   return '<a class="pm-item" style="display:block" href="https://polymarket.com/event/' + esc(ev.slug) + '" target="_blank" rel="noopener">' +
-    '<div class="pm-q">' + esc(ev.title) + "</div>" +
+    '<div class="pm-q"><span>' + esc(ev.title) + "</span>" +
+      '<button class="pm-fav' + (isFav ? " fav-on" : "") + '" data-fav="' + esc(ev.slug) + '" data-favtitle="' + esc(ev.title || "") +
+        '" title="' + (isFav ? "Remove from favourites" : "Save as a favourite — reachable from the ⭐ in the corner") + '">' +
+        (isFav ? "★" : "☆") + "</button></div>" +
     '<div class="pm-row"><span class="pm-odds"' + (tok ? ' data-pmtok="' + esc(tok) + '"' : "") + ">" + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
     '<span class="pm-outcome' + pmSideClass(label) + '">' + esc(label) + "</span>" +
     '<div class="pm-bar"><div class="pm-bar-fill"' + (tok ? ' data-pmbar="' + esc(tok) + '"' : "") + ' style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' +
@@ -4442,6 +4615,7 @@ function renderPmRows() {
         (keep || '<div class="empty">Searching all of Polymarket…</div>') + "</div>" :
       (!list.length && Q ? '<div class="empty">Type 3+ characters to search all of Polymarket.</div>' : ""));
   pmBlkPaint();
+  pmFavPaint();
   $("pmSub").textContent = Q ? list.length + " here · searching all markets" : "politics · macro · crypto · no sports";
   pmLiveOdds();
 }
@@ -6758,6 +6932,14 @@ every(loadLiquidations, 1_800_000, 1_800_000); /* every 30 min (dataset updates 
 every(loadMorphoLive, 120_000, 150_000); /* live Morpho positions every 2 min */
 every(loadGlobalOI, 300_000, 320_000); /* aggregate exchange OI every 5 min */
 every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000, 245_000); /* every 4 min unless viewing a scanned wallet */
+every(() => {
+  const body = $("whalesBody"), inp = $("scanInput");
+  if (!body || !inp) return;
+  if ((inp.value || "").trim()) return;                 /* há uma pesquisa a sério em curso */
+  if (body.querySelector(".wrow")) return;              /* tem linhas — está bom */
+  if (body.querySelector(".error")) return;             /* já está a dizer o que se passa */
+  whaleHome();
+}, 45_000, 60_000);
 /* Positioning: the index paints it within a second of load and keeps it moving on a 60s tick; the
    500-wallet live scan runs behind it every 5 minutes instead of every 15 and takes over when it lands.
    No refresh key required — the panel was only ever static because both timers were too slow. */
