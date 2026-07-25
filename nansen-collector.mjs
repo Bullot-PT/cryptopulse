@@ -60,6 +60,7 @@ const BUDGET_FILE = path.join(DIR, "nansen-budget.json");
 const LABELS_FILE = path.join(DIR, "nansen-labels.json");
 const SM_FILE = path.join(DIR, "nansen-sm.json");
 const PERPS_FILE = path.join(DIR, "nansen-perps.json");
+const NAMES_FILE = path.join(DIR, "nansen-names.json");
 
 function readJson(f, fallback) {
   try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return fallback; }
@@ -221,6 +222,44 @@ function keepLabel(addr, label) {
   labels[a] = l;
 }
 
+/* ------------------------------------------------ o ficheiro que o site lê
+
+   O data/nansen-labels.json é o arquivo: cumulativo, com o nome completo tal como a Nansen o
+   devolve, e serve para nunca voltarmos a pagar por um endereço que já conhecemos. Depois do
+   sweep tem 15 mil endereços e 1,2 MB — não é coisa que se mande para o browser de quem abre
+   a página. O que o site lê é este outro, derivado, e é construído de três maneiras:
+
+     1. dicionário. Há 15 210 endereços mas só ~2000 nomes distintos: "Former Smart Trader"
+        repete-se centenas de vezes. Guarda-se o texto uma vez e o resto são índices.
+     2. chave curta. O endereço inteiro são 42 caracteres e é o grosso do ficheiro. Ficam os
+        primeiros 12 dígitos hexadecimais — 48 bits. Com 15 mil endereços a probabilidade de
+        dois colidirem é da ordem de 4 em 10 milhões, e mesmo assim a colisão é detectada aqui
+        e a segunda entrada é deitada fora em vez de escrever um nome errado numa carteira.
+     3. sem o sufixo. A Nansen devolve "Abraxas Capital [0xb83de0]" — o endereço já está na
+        linha do painel, não precisa de vir outra vez dentro do nome.
+
+   Isto não gasta créditos nenhuns: é só reescrever o que já está em disco. */
+function buildNames() {
+  const KEYLEN = 12;
+  const dict = [], idx = new Map(), out = {};
+  let dropped = 0, clashes = 0;
+  for (const [addr, raw] of Object.entries(labels)) {
+    const name = String(raw).replace(/\s*\[0x[0-9a-fA-F]+\]\s*$/, "").trim();
+    if (!name) { dropped++; continue; }
+    const k = addr.toLowerCase().replace(/^0x/, "").slice(0, KEYLEN);
+    if (out[k] !== undefined) { clashes++; continue; }
+    let i = idx.get(name);
+    if (i === undefined) { i = dict.length; dict.push(name); idx.set(name, i); }
+    out[k] = i;
+  }
+  const obj = { v: 1, t: Date.now(), k: KEYLEN, n: Object.keys(out).length, d: dict, a: out };
+  writeJson(NAMES_FILE, obj);
+  const kb = Math.round(JSON.stringify(obj).length / 1024);
+  console.log(`nomes para o site: ${obj.n} endereços, ${dict.length} nomes distintos, ${kb} KB` +
+    (clashes ? ` (${clashes} colisões de prefixo descartadas)` : "") +
+    (dropped ? ` (${dropped} vazios)` : ""));
+}
+
 /* --------------------------------------------------------------- as moedas */
 
 /* As moedas a consultar saem dos dados reais que já temos: o data/hl-pos.json traz as posições
@@ -325,6 +364,15 @@ async function smartMoney() {
 /* ------------------------------------------------------------------- modos */
 
 async function run() {
+  /* O rebuild não fala com a Nansen: reconstrói o ficheiro do site a partir do arquivo de nomes
+     que já está no repositório. Zero créditos, zero chave, e pode correr-se as vezes que forem
+     precisas enquanto se afina o formato que o browser lê. */
+  if (MODE === "rebuild") {
+    console.log(`modo rebuild | ${Object.keys(labels).length} nomes em arquivo | 0 créditos`);
+    buildNames();
+    return;
+  }
+
   if (!KEY) throw new Error("falta a NANSEN_KEY no ambiente");
   console.log(`modo ${MODE} | mês ${budget.month} | já gastos ${budget.spent}/${CAP} | disponíveis ${remaining()}`);
 
@@ -432,6 +480,7 @@ async function run() {
   labelsFile.t = Date.now();
   labelsFile.n = Object.keys(labels).length;
   writeJson(LABELS_FILE, labelsFile);
+  buildNames();   /* o ficheiro que o site lê acompanha sempre o arquivo */
 
   budget.runs.push({ t: Date.now(), mode: MODE, calls: stats.calls, spent: budget.spent, newLabels });
   if (budget.runs.length > 120) budget.runs = budget.runs.slice(-120);
