@@ -787,7 +787,7 @@
         <div class="panel-head">🐋 Whale Scanner <span class="sub" id="whalesSub">Hyperliquid wallets · live positions</span></div>
         <div class="panel-body" id="whalesOuter">
           <div class="scan-bar">
-            <input class="scan-input" id="scanInput" placeholder="scan any wallet — paste a 0x address and press Enter" spellcheck="false">
+            <input class="scan-input" id="scanInput" placeholder="search a token (BTC, PUMP…) or paste a 0x wallet — press Enter" spellcheck="false">
             <button class="btn-ghost" id="scanClear" style="display:none">✕ clear</button>
           </div>
           <div id="whalesBody"><div class="empty">Scanning top wallets…</div></div>
@@ -936,27 +936,30 @@ const LAYOUT_KEY = "cryptopulse-layout-v1";
    and "Reset layout" returns to this arrangement. */
 /* Bullot's arrangement (2026-07-23) — the preset every first-time visitor sees */
 const DEFAULT_LAYOUT = [
-  /* baked from Bullot's live arrangement (24-jul-2026) — this is what first-time visitors see */
-  {id: "fng",        x: 0, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
-  {id: "longshort",  x: 2, y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
-  {id: "whales",     x: 4, y: 0,  w: 3, h: 12, minW: 2, minH: 2},
-  {id: "radar",      x: 7, y: 0,  w: 2, h: 7,  minW: 2, minH: 2},
-  {id: "liqs",       x: 9, y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
-  {id: "hyper",      x: 0, y: 2,  w: 2, h: 5,  minW: 2, minH: 2},
-  {id: "lscrowd",    x: 2, y: 2,  w: 2, h: 10, minW: 2, minH: 2},
-  {id: "prices",     x: 0, y: 7,  w: 2, h: 5,  minW: 2, minH: 2},
-  {id: "sec",        x: 7, y: 7,  w: 2, h: 5,  minW: 2, minH: 2},
-  {id: "polymarket", x: 9, y: 7,  w: 3, h: 11, minW: 2, minH: 2},
-  {id: "listings",   x: 0, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
-  {id: "trending",   x: 2, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
-  {id: "globaloi",   x: 4, y: 12, w: 3, h: 6,  minW: 2, minH: 2},
-  {id: "alerts",     x: 7, y: 12, w: 2, h: 6,  minW: 2, minH: 2},
-  {id: "liqmap",     x: 0, y: 18, w: 6, h: 8,  minW: 2, minH: 2},
-  {id: "cexliq",     x: 6, y: 18, w: 6, h: 8,  minW: 2, minH: 2},
-  {id: "alertcenter", x: 0, y: 26, w: 6, h: 5, minW: 2, minH: 2},
-  {id: "funding",    x: 6, y: 26, w: 6, h: 5,  minW: 2, minH: 3},
-  {id: "kalshi",     x: 0, y: 31, w: 8, h: 11, minW: 2, minH: 2},
-  {id: "upbit",      x: 8, y: 31, w: 4, h: 11, minW: 2, minH: 2}
+  /* Baked from Bullot’s own live arrangement (25-jul-2026): what he had on screen at that moment IS
+     the preset a first-time visitor now opens on, and what “Reset layout” returns to. Anyone who has
+     already moved panels keeps their own saved layout — this only applies to browsers with none. */
+  {id: "fng",        x: 0,  y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
+  {id: "longshort",  x: 2,  y: 0,  w: 2, h: 2,  minW: 2, minH: 2},
+  {id: "whales",     x: 4,  y: 0,  w: 2, h: 12, minW: 2, minH: 2},
+  {id: "radar",      x: 6,  y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
+  {id: "liqs",       x: 9,  y: 0,  w: 3, h: 7,  minW: 2, minH: 2},
+  {id: "hyper",      x: 0,  y: 2,  w: 2, h: 5,  minW: 2, minH: 2},
+  {id: "lscrowd",    x: 2,  y: 2,  w: 2, h: 10, minW: 2, minH: 2},
+  {id: "prices",     x: 0,  y: 7,  w: 2, h: 5,  minW: 2, minH: 2},
+  {id: "upbit",      x: 6,  y: 7,  w: 3, h: 6,  minW: 2, minH: 2},
+  {id: "polymarket", x: 9,  y: 7,  w: 3, h: 11, minW: 2, minH: 2},
+  {id: "listings",   x: 0,  y: 12, w: 2, h: 6,  minW: 2, minH: 2},
+  {id: "trending",   x: 2,  y: 12, w: 2, h: 6,  minW: 2, minH: 2},
+  {id: "globaloi",   x: 4,  y: 12, w: 2, h: 6,  minW: 2, minH: 2},
+  {id: "sec",        x: 6,  y: 13, w: 3, h: 5,  minW: 2, minH: 2},
+  {id: "liqmap",     x: 0,  y: 18, w: 6, h: 8,  minW: 2, minH: 2},
+  {id: "cexliq",     x: 6,  y: 18, w: 3, h: 8,  minW: 2, minH: 2},
+  {id: "funding",    x: 9,  y: 18, w: 3, h: 8,  minW: 2, minH: 3},
+  {id: "alertcenter", x: 0, y: 26, w: 3, h: 5,  minW: 2, minH: 2},
+  {id: "alerts",     x: 3,  y: 26, w: 3, h: 5,  minW: 2, minH: 2},
+  /* hidden on a first visit (see hiddenStore) — this is only where it lands if the visitor turns it on */
+  {id: "kalshi",     x: 6,  y: 26, w: 6, h: 11, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -1025,13 +1028,25 @@ initGrid();
 
 /* ---------------- utilities ---------------- */
 const $ = id => document.getElementById(id);
+/* A search box can fire "input" several times inside one animation frame (fast typing, paste, IME,
+   autocomplete). Re-rendering a panel per keystroke means the screen can only show the LAST one anyway,
+   so the earlier renders are pure latency between the key press and the letter appearing. onFrame()
+   collapses a burst of calls into a single render on the next frame — same result, drawn once. */
+function onFrame(fn) {
+  let queued = 0;
+  return function () {
+    if (queued) return;
+    queued = requestAnimationFrame(() => { queued = 0; fn(); });
+  };
+}
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 /* ---------------- indicator manager: hover ✕ removes a panel; 🧩 menu re-adds it ---------------- */
 const hiddenStore = {
   key: "cryptopulse-hidden-panels",
-  /* first visit (nothing stored yet): Kalshi and Upbit start hidden — cleaner board; both live in 🧩 Indicators */
-  load() { try { const v = localStorage.getItem(this.key); if (v === null) return ["kalshi", "upbit"]; return JSON.parse(v) || []; } catch (e) { return ["kalshi", "upbit"]; } },
+  /* first visit (nothing stored yet): only Kalshi starts hidden — Upbit is now part of the default board,
+     matching the arrangement baked into DEFAULT_LAYOUT. Kalshi stays one click away in 🧩 Indicators. */
+  load() { try { const v = localStorage.getItem(this.key); if (v === null) return ["kalshi"]; return JSON.parse(v) || []; } catch (e) { return ["kalshi"]; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
 };
 function panelTitle(id) {
@@ -1360,6 +1375,39 @@ function binUnitPrice(sym) {
   const mult = /^1000000/.test(sym) ? 1e6 : /^1M(?![A-Z]?$)/.test(sym) ? 1e6 : /^1000/.test(sym) ? 1000 : 1;
   return p / mult;
 }
+/* ---------------- exchange ticker aliases (one map, used by every panel) ----------------
+   The same contract is listed under different tickers depending on the venue: Bybit calls PUMP
+   "PUMPFUN", Binance bundles micro-price coins into packets ("1000PEPE", "1MBABYDOGE"), Hyperliquid
+   uses a lowercase k prefix ("kPEPE"). A packet contract is the SAME market — only the quote size
+   differs — so account ratios, funding rates and long/short splits map 1:1 between them; only a
+   per-UNIT price needs the divisor, which binUnitPrice() does separately.
+   exCanon() folds any venue's spelling back to the plain ticker, exNames() expands a plain ticker
+   into every spelling to try. Anywhere a coin is looked up per-exchange should use these two. */
+const EX_ALIAS = {
+  PUMP: ["PUMPFUN"],          /* Bybit */
+  SHIB: ["SHIB1000"],         /* older Bybit/OKX spelling */
+  NEIRO: ["NEIROETH"],        /* Binance kept the ETH suffix after the ticker split */
+  LUNA: ["LUNA2"],            /* post-fork chain on some venues */
+  BABYDOGE: ["1MBABYDOGE"]
+};
+const EX_UNALIAS = {};
+Object.keys(EX_ALIAS).forEach(k => EX_ALIAS[k].forEach(a => { EX_UNALIAS[a] = k; }));
+function exCanon(c) {
+  let s = String(c || "").trim();
+  if (/^k[A-Z0-9]{2,}$/.test(s)) s = s.slice(1);   /* HL's k is lowercase, so KAVA/KSM/KAITO are left whole */
+  s = s.toUpperCase().replace(/^(1000000|1000|1M)(?=[A-Z]{2,})/, "");
+  return EX_UNALIAS[s] || s;
+}
+function exNames(c) {
+  const b = exCanon(c);
+  const out = [b, "1000" + b, "k" + b, "1M" + b, "1000000" + b].concat(EX_ALIAS[b] || []);
+  return out.filter((x, i) => out.indexOf(x) === i);
+}
+/* the spellings a centralised exchange might use (k-prefix is Hyperliquid-only, so it is dropped) */
+const exCexNames = c => exNames(c).filter(n => !/^k[A-Z0-9]/.test(n));
+/* first key of `obj` that matches this coin under any spelling */
+const exKey = (obj, c) => (obj ? exNames(c).find(n => obj[n] != null) : undefined);
+const exPick = (obj, c) => { const k = exKey(obj, c); return k === undefined ? null : obj[k]; };
 /* Premium for one Upbit ticker. Returns {v, ref} or null — never a guess.
    The dollar leg comes from Upbit's OWN KRW-USDT market, so no outside exchange rate is assumed.
    The reference leg is Binance spot when the coin_id map confirms the contract, otherwise the
@@ -1576,7 +1624,7 @@ document.querySelectorAll(".up-f").forEach(b => {
   const i = $("upSearch");
   if (!i) return;
   ["mousedown", "click", "pointerdown"].forEach(ev => i.addEventListener(ev, e => e.stopPropagation()));
-  i.addEventListener("input", renderUpbit);
+  i.addEventListener("input", onFrame(renderUpbit));
 })();
 
 let priceCoins = [];
@@ -1641,7 +1689,7 @@ function renderPriceRows() {
   }).join("") : '<div class="empty">No coin matching “' + esc(q) + "” in the top 100.</div>";
   $("pricesSub").textContent = q ? list.length + " of " + priceCoins.length : "top 15 · 24h · click → TradingView";
 }
-$("priceSearch").addEventListener("input", () => { if (priceCoins.length) renderPriceRows(); });
+$("priceSearch").addEventListener("input", onFrame(() => { if (priceCoins.length) renderPriceRows(); }));
 
 /* ---------------- price hover popup: 24h linear chart with session high/low ---------------- */
 const pricePop = document.createElement("div");
@@ -1827,7 +1875,7 @@ function renderListingRows() {
   body.innerHTML = list.length ? list.map(r => r.h).join("") :
     '<div class="empty">No listing matching “' + esc(q) + "”.</div>";
 }
-$("listingSearch").addEventListener("input", renderListingRows);
+$("listingSearch").addEventListener("input", onFrame(renderListingRows));
 
 /* ---------------- Hyperliquid perps (public info API) ---------------- */
 async function fetchHL(body) {
@@ -1883,7 +1931,7 @@ async function fetchSrcOI(topCoins, marks, hlSet) {
     const j = await fetchJSON("https://www.okx.com/api/v5/public/open-interest?instType=SWAP", {timeout: 15000});
     (j.data || []).forEach(d => {
       const b0 = (d.instId || "").split("-")[0];
-      const b = hlSet.has(b0) ? b0 : (hlSet.has("k" + b0) ? "k" + b0 : b0);
+      const b = exNames(b0).find(n => hlSet.has(n)) || b0;
       const v = parseFloat(d.oiUsd);
       if (v > 0) out.OK[b] = (out.OK[b] || 0) + v;
     });
@@ -2109,7 +2157,7 @@ function renderHyperRows() {
     : '<div class="empty">No market matching “' + esc(q) + "”.</div>";
   $("hyperSub").textContent = q ? list.length + " of " + hyperRows.length + " markets" : "HL + Binance + Bybit + OKX · search all";
 }
-$("hyperSearch").addEventListener("input", () => { if (hyperRows.length) renderHyperRows(); });
+$("hyperSearch").addEventListener("input", onFrame(() => { if (hyperRows.length) renderHyperRows(); }));
 
 /* ---------------- liquidation risk (DefiLlama: every tracked lender, chain, and collateral asset) ---------------- */
 /* ---- LIVE lending risk from Morpho's public API (real-time, all its chains) ----
@@ -2575,6 +2623,9 @@ async function loadWhales() {
     /* biggest position first, always — only the flashing-red near-liquidation alert outranks size.
        🆕/💰 badges still show on rows wherever they sit. */
     hlDetectLiqs(found);
+    /* kept so the token search can answer "who is in X" without re-scanning every wallet */
+    whaleFound = found;
+    whaleScanMeta = {wallets: candidates.length, t: Date.now()};
     found.sort((a, b) => {
       const fa = whaleAlert(a), fb = whaleAlert(b);
       if (fa !== fb) return fb - fa;
@@ -2738,6 +2789,42 @@ $("whalesBody").addEventListener("mouseout", e => {
     pricePop.style.display = "none";
 });
 
+/* Every position the last full scan found, kept in memory so a token search is instant and costs
+   no extra API calls. It holds EVERY position ≥ $5M across the scanned wallets — not just the 40
+   shown — so searching a token surfaces holdings the list itself had no room for. */
+let whaleFound = [], whaleScanMeta = {wallets: 0, t: 0};
+/* scan by token: which whales are positioned in this coin, and which way */
+function scanToken(sym) {
+  const body = $("whalesBody");
+  body.dataset.home = "0";
+  $("scanClear").style.display = "";
+  const want = exCanon(sym);
+  if (!whaleFound.length) {
+    body.innerHTML = '<div class="empty">Still scanning the top wallets — search again in a few seconds.</div>';
+    return;
+  }
+  const rows = whaleFound.filter(r => exCanon(r.coin) === want).sort((a, b) => b.value - a.value);
+  if (!rows.length) {
+    const coins = {};
+    whaleFound.forEach(r => { coins[r.coin] = (coins[r.coin] || 0) + r.value; });
+    const top = Object.keys(coins).sort((a, b) => coins[b] - coins[a]).slice(0, 14);
+    body.innerHTML = '<div class="empty" style="padding:8px 14px;text-align:left">No open position ≥ $5M in <b>' + esc(want) +
+      "</b> among the " + whaleScanMeta.wallets + " wallets scanned " + timeAgo(whaleScanMeta.t) +
+      ". That is not the same as “no whale holds it” — it means none of these wallets holds this much of it." +
+      (top.length ? '<div style="margin-top:6px;opacity:.75">Tokens they ARE in: ' + top.map(esc).join(" · ") + "</div>" : "") + "</div>";
+    return;
+  }
+  let L = 0, S = 0;
+  rows.forEach(r => { if (r.szi > 0) L += r.value; else S += r.value; });
+  const net = L - S;
+  const wallets = new Set(rows.map(r => r.addr)).size;
+  const note = "<b>" + esc(want) + "</b> — " + rows.length + " position" + (rows.length > 1 ? "s" : "") + " ≥ $5M held by " +
+    wallets + " wallet" + (wallets > 1 ? "s" : "") +
+    ' · <span class="up">' + fmtBig(L) + " long</span> vs <span class=\"dn\">" + fmtBig(S) + " short</span> · net " +
+    '<span class="' + (net >= 0 ? "up" : "dn") + '">' + (net >= 0 ? "▲ " : "▼ ") + fmtBig(Math.abs(net)) + "</span>" +
+    '<div style="margin-top:4px;opacity:.75">from the top-wallet scan of ' + timeAgo(whaleScanMeta.t) + " · " + whaleScanMeta.wallets + " wallets</div>";
+  body.innerHTML = renderWhaleRows(rows, note);
+}
 /* scan any wallet on demand */
 async function scanWallet(addr) {
   const body = $("whalesBody");
@@ -2761,7 +2848,8 @@ $("scanInput").addEventListener("keydown", e => {
   if (e.key !== "Enter") return;
   const v = e.target.value.trim();
   if (/^0x[0-9a-fA-F]{40}$/.test(v)) scanWallet(v);
-  else { $("whalesBody").innerHTML = '<div class="error">That doesn\'t look like a wallet address (expected 0x + 40 hex characters).</div>'; $("scanClear").style.display = ""; }
+  else if (/^(xyz:)?[A-Za-z0-9]{2,15}$/.test(v)) scanToken(v);   /* a ticker → who holds it */
+  else { $("whalesBody").innerHTML = '<div class="error">Type a token (BTC, PUMP, HYPE…) or paste a wallet address (0x + 40 hex characters).</div>'; $("scanClear").style.display = ""; }
 });
 $("scanClear").addEventListener("click", () => {
   $("scanInput").value = "";
@@ -3031,10 +3119,18 @@ async function renderGlobalOI(rows, total, cachedAt) {
   const windowMs = goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
   const bucket = goiView === "1d" ? 4 * 60_000 : 40 * 60_000;
   const now = Date.now();
-  const remote = (await getOiHistory()).filter(s => s.t > now - windowMs && s.agg).map(s => [s.t, s.agg]);
+  const hist = (await getOiHistory()).filter(s => s.t > now - windowMs && s.agg);
   const st = goiStore.load();
-  const local = (goiView === "1d" ? st.f : st.c).filter(x => x[0] > now - windowMs);
-  const merged = remote.concat(local).sort((a, b) => a[0] - b[0]);
+  /* Samples without .aggx were taken before the collector started measuring the perp DEXes directly, so they
+     carry CoinGecko's estimate for those venues instead of the exchanges' own numbers — about 3% apart.
+     Interleaving the two makes the line square-wave between two versions of the same number, so the old ones
+     only ever fill stretches of time where no same-method sample exists at all. */
+  const good = hist.filter(s => s.aggx).map(s => [s.t, s.agg])
+    .concat((goiView === "1d" ? st.f : st.c).filter(x => x[0] > now - windowMs))
+    .sort((a, b) => a[0] - b[0]);
+  const firstGood = good.length ? good[0][0] : Infinity;
+  const merged = hist.filter(s => !s.aggx && s.t < firstGood).map(s => [s.t, s.agg])
+    .concat(good).sort((a, b) => a[0] - b[0]);
   const series = [];
   let lastT = 0;
   merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
@@ -3741,7 +3837,7 @@ function renderKaRows() {
   const age = kaMirrorT ? timeAgo(kaMirrorT) : "…";
   $("kaSub").textContent = q ? list.length + " of " + kaCards.length + " mirrored markets" : "politics · macro · crypto · no sports · bot mirror " + age;
 }
-$("kaSearch").addEventListener("input", renderKaRows);
+$("kaSearch").addEventListener("input", onFrame(renderKaRows));
 async function loadKalshiPanel() {
   const j = await getKalshi();
   if (!j || !Array.isArray(j.events)) { renderKaRows(); return; }
@@ -3853,7 +3949,10 @@ $("pmSearch").addEventListener("input", () => {
   renderPmRows();
   clearTimeout(pmSearchTimer);
   const q = ($("pmSearch").value || "").trim();
-  if (q.length >= 3) pmSearchTimer = setTimeout(() => pmRemoteSearch(q), 550);
+  /* 550ms of silence after the last keystroke felt like the site had frozen. 220ms is still long enough
+     to skip the middle of a word, and renderPmRows above has already painted "Searching all of Polymarket…"
+     so there is visible feedback from the very first character. */
+  if (q.length >= 3) pmSearchTimer = setTimeout(() => pmRemoteSearch(q), 220);
 });
 async function loadPolymarket() {
   const body = $("pmBody");
@@ -4309,21 +4408,41 @@ let LSX_COINS = (() => {
   catch (e) { return LSX_DEFAULT.slice(); }
 })();
 function lsxSave() { try { localStorage.setItem("cryptopulse-lsx-coins", JSON.stringify(LSX_COINS)); } catch (e) {} }
-const lsxCex = {}; /* coin -> {bnG, bnT, by, t} */
+const lsxCex = {}; /* coin -> {bnG, bnT, by, t, sym:{bn, by}} */
+const lsxPending = {}; /* coins whose first fetch is still in flight — the row says "checking…" instead of "no data" */
 let lsxCexFetched = 0;
-async function fetchLsxCex() {
-  await Promise.all(LSX_COINS.slice().map(async coin => {
-    /* try SYMUSDT, then 1000SYMUSDT (micro-price coins like PEPE/BONK/SHIB on CEX futures) */
-    const syms = [coin + "USDT", "1000" + coin + "USDT"];
+async function fetchLsxCex(only) {
+  const list = only ? [only] : LSX_COINS.slice();
+  await Promise.all(list.map(async coin => {
     const o = lsxCex[coin] || (lsxCex[coin] = {});
-    for (const sym of syms) {
-      let hit = false;
-      try { const b = await fetchJSON("https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) { o.bnG = +b[0].longAccount; hit = true; } } catch (e) {}
-      try { const b = await fetchJSON("https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=" + sym + "&period=5m&limit=1", {timeout: 8000}); if (b && b[0]) { o.bnT = +b[0].longAccount; hit = true; } } catch (e) {}
-      try { const b = await fetchJSON("https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=" + sym + "&period=5min&limit=1", {timeout: 8000}); if (b && b.result && b.result.list && b.result.list[0]) { o.by = +b.result.list[0].buyRatio; hit = true; } } catch (e) {}
-      if (hit) break;
-    }
+    o.sym = o.sym || {};
+    /* Each venue resolves its OWN ticker. The old loop stopped at the first symbol ANY venue answered,
+       so on PUMP — Binance "PUMPUSDT", Bybit "PUMPFUNUSDT" — Bybit's spelling was never tried and its
+       row silently went missing. Now each venue walks the alias list itself, and the ticker that
+       answered is remembered, so the walk costs extra requests once and never again. */
+    const all = exCexNames(coin).map(n => n + "USDT");
+    const first = async (venue, url, pick) => {
+      const known = o.sym[venue];
+      for (const sym of (known ? [known] : all)) {
+        try {
+          const j = await fetchJSON(url(sym), {timeout: 8000});
+          const v = pick(j);
+          if (v != null && isFinite(v)) { o.sym[venue] = sym; return v; }
+        } catch (e) {}
+      }
+      if (known) delete o.sym[venue]; /* the remembered ticker stopped answering — re-walk next round */
+      return null;
+    };
+    const [bnG, bnT, by] = await Promise.all([
+      first("bn", s => "https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=" + s + "&period=5m&limit=1", j => j && j[0] ? +j[0].longAccount : null),
+      first("bn", s => "https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=" + s + "&period=5m&limit=1", j => j && j[0] ? +j[0].longAccount : null),
+      first("by", s => "https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=" + s + "&period=5min&limit=1", j => j && j.result && j.result.list && j.result.list[0] ? +j.result.list[0].buyRatio : null)
+    ]);
+    if (bnG != null) o.bnG = bnG;
+    if (bnT != null) o.bnT = bnT;
+    if (by != null) o.by = by;
     o.t = Date.now();
+    delete lsxPending[coin];
   }));
   lsxCexFetched = Date.now();
   renderLsCrowd();
@@ -4339,8 +4458,9 @@ function renderLsCrowd() {
   const rows = LSX_COINS.map(coin => {
     const cex = lsxCex[coin] || {};
     const crowd = lsxCrowdAvg(cex);
-    /* HL uses k-prefixed names for micro-price coins (kPEPE, kBONK) */
-    const hlName = lsSnapshot.coins[coin] ? coin : (lsSnapshot.coins["k" + coin] ? "k" + coin : coin);
+    /* HL uses k-prefixed names for micro-price coins (kPEPE, kBONK) — exNames covers those and the
+       venue-specific spellings (PUMPFUN…) in one place */
+    const hlName = exKey(lsSnapshot.coins, coin) || coin;
     const snap = lsSnapshot.coins[hlName];
     let whaleShare = null, whaleNet = null;
     if (snap && (snap.long + snap.short) > 0) {
@@ -4349,9 +4469,13 @@ function renderLsCrowd() {
       if (snap.markRef && liveMark[hlName]) whaleNet = snap.net * (liveMark[hlName] / snap.markRef); /* live-scaled $ */
     }
     if (crowd == null && whaleShare == null) {
-      if (!lsxCexFetched) return "";
-      return '<div class="lsx-coin"><div class="lsx-top"><span class="lsx-name">' + esc(coin) + "</span>" +
-        '<span class="lsx-note">no data — not on Binance/Bybit futures &amp; top-500 HL whales hold none</span>' +
+      if (!lsxCexFetched && !lsxPending[coin]) return "";
+      /* a coin just added is still on the wire — saying "no data" there is a lie that lasts a few
+         seconds and makes the panel feel broken. Say what is actually happening instead. */
+      const note = lsxPending[coin]
+        ? '<span class="lsx-note">checking Binance · Bybit · whale book…</span>'
+        : '<span class="lsx-note">no data — not on Binance/Bybit futures &amp; top-500 HL whales hold none</span>';
+      return '<div class="lsx-coin"><div class="lsx-top"><span class="lsx-name">' + esc(coin) + "</span>" + note +
         '<button class="lsx-del" data-del="' + esc(coin) + '" title="Remove">✕</button></div></div>';
     }
     const whaleLong = whaleShare != null ? whaleShare >= 0.5 : null;
@@ -4399,7 +4523,8 @@ function lsxAddCoin() {
   const el = document.getElementById("lsxAdd");
   const c = (el.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (!c) return;
-  if (!LSX_COINS.includes(c)) { LSX_COINS.push(c); lsxSave(); renderLsCrowd(); fetchLsxCex(); }
+  /* only the NEW coin is fetched — re-polling all of them made adding one token wait on every other */
+  if (!LSX_COINS.includes(c)) { LSX_COINS.push(c); lsxSave(); lsxPending[c] = 1; renderLsCrowd(); fetchLsxCex(c); }
   el.value = "";
 }
 document.getElementById("lsxAddBtn").addEventListener("click", lsxAddCoin);
@@ -4473,8 +4598,12 @@ async function lmForceReload() {
   lmReloading = false;
   renderLiqmap();
 }
+/* coins whose lending book is still downloading — the panel says so instead of showing an empty
+   map that reads like "nothing here" while the file is still on the wire */
+const lmPending = {};
 async function fetchLiqmapCoin(coin) {
-  if (coin.startsWith("xyz:")) return; /* RWA markets: walls come from the HL bot book, not DefiLlama */
+  if (coin.startsWith("xyz:")) { delete lmPending[coin]; return; } /* RWA markets: walls come from the HL bot book, not DefiLlama */
+  lmPending[coin] = 1;
   const key = LIQMAP_KEY[coin] || coin.toLowerCase();
   try {
     const d = await fetchJSONraw("https://defillama-datasets.llama.fi/liqs/" + encodeURIComponent(key) + "/latest.json", {timeout: 40000});
@@ -4492,6 +4621,7 @@ async function fetchLiqmapCoin(coin) {
     });
     lmData[coin] = {step, bins, snapPx: d.currentPrice, t: Date.now()};
   } catch (e) { lmData[coin] = {none: true, t: Date.now()}; }
+  delete lmPending[coin];
   renderLiqmap();
 }
 /* xyz builder-dex (RWA/stocks) live marks — no WebSocket for builder dexs, so we poll allMids
@@ -4521,8 +4651,8 @@ setInterval(() => {
 }, 10_000);
 function lmLivePx(coin) {
   if (coin.startsWith("xyz:") && xyzMidsCache.mids[coin] > 0) return xyzMidsCache.mids[coin];
-  if (liveMark[coin]) return liveMark[coin];
-  if (liveMark["k" + coin]) return liveMark["k" + coin];
+  const lmPx = exPick(liveMark, coin); /* liveMark is keyed by the venue spelling (kPEPE, 1000PEPE) */
+  if (lmPx) return lmPx;
   const pc = priceCoins.find(c => (c.symbol || "").toUpperCase() === coin);
   if (pc) return pc.current_price;
   const d = lmData[coin];
@@ -4586,7 +4716,7 @@ function renderLiqmap() {
   /* GMX: complete book from the bot (public indexer) */
   if (lmSrc === "AGG" || lmSrc === "GMX") {
     const gx = lmBotBook.gmx;
-    const gg = gx && gx.coins && (gx.coins[coin] || gx.coins["k" + coin]);
+    const gg = gx && exPick(gx.coins, coin);
     if (gg && Date.now() - (gx.t || 0) < 180 * 60_000) {
       gmxUsed = true;
       const scale = gg.px ? px / gg.px : 1;
@@ -4605,7 +4735,7 @@ function renderLiqmap() {
      The strict no-stale rule applies to LENDING (its snapshot is price-dependent). */
   if (lmSrc === "AGG" || lmSrc === "LGT") {
     const lx = lmBotBook.lighter;
-    const ll = lx && lx.coins && (lx.coins[coin] || lx.coins["k" + coin]);
+    const ll = lx && exPick(lx.coins, coin);
     if (ll && Date.now() - (lx.t || 0) < 180 * 60_000) {
       lgtUsed = true;
       const scale = ll.px ? px / ll.px : 1;
@@ -4620,7 +4750,7 @@ function renderLiqmap() {
   /* Jupiter Perps: full position book from the bot (when SOLANA_RPC secret exists) */
   if (lmSrc === "AGG" || lmSrc === "JUP") {
     const jx = lmBotBook.jup;
-    const jj = jx && jx.coins && (jx.coins[coin] || jx.coins["k" + coin]);
+    const jj = jx && exPick(jx.coins, coin);
     if (jj && Date.now() - (jx.t || 0) < 180 * 60_000) {
       jupUsed = true;
       const scale = jj.px ? px / jj.px : 1;
@@ -4635,7 +4765,7 @@ function renderLiqmap() {
   /* dYdX: complete chain book from the bot */
   if (lmSrc === "AGG" || lmSrc === "DYDX") {
     const dx = lmBotBook.dydx;
-    const dd = dx && dx.coins && (dx.coins[coin] || dx.coins["k" + coin]);
+    const dd = dx && exPick(dx.coins, coin);
     if (dd && Date.now() - (dx.t || 0) < 180 * 60_000) {
       dydxUsed = true;
       const scale = dd.px ? px / dd.px : 1;
@@ -4648,8 +4778,8 @@ function renderLiqmap() {
     }
   }
   if (lmSrc === "AGG" || lmSrc === "HL") {
-    const bot = lmBotBook.coins && (lmBotBook.coins[coin] || lmBotBook.coins["k" + coin]);
-    const bookArr = hlLiqBook.book[coin] || hlLiqBook.book["k" + coin];
+    const bot = exPick(lmBotBook.coins, coin);
+    const bookArr = exPick(hlLiqBook.book, coin);
     if (bot && Date.now() - lmBotBook.t < 180 * 60_000) {
       hlSrcUsed = "bot";
       const scale = bot.px ? px / bot.px : 1; /* live-scale $ values */
@@ -4661,7 +4791,7 @@ function renderLiqmap() {
       });
     } else if (bookArr && bookArr.length) {
       hlSrcUsed = "scan";
-      const snapC = lsSnapshot.coins[coin] || lsSnapshot.coins["k" + coin] || {};
+      const snapC = exPick(lsSnapshot.coins, coin) || {};
       const scale = snapC.markRef ? px / snapC.markRef : 1;
       bookArr.forEach(([lq, v0, s]) => {
         const i = bIdx((lq - px) / px * 100); if (i < 0) return;
@@ -4693,7 +4823,8 @@ function renderLiqmap() {
     '<span class="k"><span class="dot" style="background:var(--warn)"></span>magnet</span></div>';
   if (!rows.length) {
     body.innerHTML = legend + '<div class="empty">' +
-      (lendDrifted && lmSrc === "LEND" ? "Lending snapshot for " + esc(coin) + " is stale (taken at " + fmtPrice(d.snapPx) + ") — excluded by the no-old-data rule. It returns when DefiLlama publishes a fresh one."
+      (lmPending[coin] ? "Loading " + esc(coin) + "’s liquidation book… (the lending snapshot is a big file — it can take a few seconds)"
+        : lendDrifted && lmSrc === "LEND" ? "Lending snapshot for " + esc(coin) + " is stale (taken at " + fmtPrice(d.snapPx) + ") — excluded by the no-old-data rule. It returns when DefiLlama publishes a fresh one."
         : d && d.none ? "No on-chain lending book for " + esc(coin) + " and no mapped whale positions — the map fills in as whales appear."
                    : "Nothing liquidatable mapped in ±30% for " + esc(coin) + " right now.") + "</div>";
     return;
@@ -4802,7 +4933,7 @@ function lmAddCoin() {
   if (!c) return;
   c = lmResolveCoin(c);
   if (c.startsWith("xyz:")) fetchXyzMids(true).then(() => renderLiqmap());
-  if (!lmCoins.includes(c)) { lmCoins.push(c); lmCur = c; lmSave(); renderLiqmap(); fetchLiqmapCoin(c); }
+  if (!lmCoins.includes(c)) { lmCoins.push(c); lmCur = c; lmSave(); lmPending[c] = 1; renderLiqmap(); fetchLiqmapCoin(c); }
   else { lmCur = c; lmSave(); renderLiqmap(); }
   el.value = "";
 }
@@ -4872,13 +5003,22 @@ const cxEvStore = {
 }
 setInterval(() => { if (cxEvDirty) { cxEvDirty = false; cxEvStore.save(); } }, 10_000);
 window.addEventListener("pagehide", () => cxEvStore.save());
-const cxNorm = s => { let b = (s || "").replace(/(USDT|USDC|PERP)$/, ""); if (b.startsWith("1000")) b = "k" + b.slice(4); return b; };
+/* one venue's raw symbol -> the name this panel groups by. Packet contracts keep the k-form used by
+   Hyperliquid so the same coin lands in one row across exchanges, and venue-specific spellings
+   (Bybit's PUMPFUN, Binance's NEIROETH) are folded back to the plain ticker. */
+const cxNorm = s => {
+  let b = (s || "").replace(/(USDT|USDC|PERP)$/, "");
+  if (b.startsWith("1000000")) b = "k" + b.slice(7); else if (b.startsWith("1000")) b = "k" + b.slice(4);
+  else if (/^1M[A-Z]{2,}/.test(b)) b = "k" + b.slice(2);
+  return EX_UNALIAS[b] || b;
+};
 /* coin filter: ALL / BTC / ETH / SOL / HYPE / CUSTOM(typed token). kPEPE matches PEPE both ways. */
 let cxFilter = (() => { try { return localStorage.getItem("cryptopulse-cx-filter") || "ALL"; } catch (e) { return "ALL"; } })();
 let cxCustom = (() => { try { return localStorage.getItem("cryptopulse-cx-custom") || ""; } catch (e) { return ""; } })();
 function cxWant() { return cxFilter === "ALL" ? null : cxFilter === "CUSTOM" ? (cxCustom.trim().toUpperCase() || null) : cxFilter; }
 function cxCoinMatch(coin, want) {
   if (!want) return true;
+  if (exCanon(coin) === exCanon(want)) return true;   /* PEPE ↔ kPEPE ↔ 1000PEPE, PUMP ↔ PUMPFUN */
   const c = (coin || "").toUpperCase();
   return c === want || c === "K" + want || "K" + c === want;
 }
@@ -4938,7 +5078,8 @@ function connectBinanceLiqs() {
 }
 const CX_BYBIT = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "1000PEPEUSDT", "HYPEUSDT", "SUIUSDT", "ADAUSDT", "LINKUSDT", "AVAXUSDT", "LTCUSDT",
   "BNBUSDT", "WLDUSDT", "OPUSDT", "ARBUSDT", "NEARUSDT", "APTUSDT", "TIAUSDT", "FILUSDT", "INJUSDT", "TONUSDT", "TRXUSDT", "DOTUSDT",
-  "AAVEUSDT", "UNIUSDT", "ENAUSDT", "ONDOUSDT", "FARTCOINUSDT", "JUPUSDT"];
+  "AAVEUSDT", "UNIUSDT", "ENAUSDT", "ONDOUSDT", "FARTCOINUSDT", "JUPUSDT",
+  "PUMPFUNUSDT", "1000BONKUSDT"];  /* Bybit's own spelling — cxNorm folds them back to PUMP / kBONK */
 function connectBybitLiqs() {
   let ws;
   try { ws = new WebSocket("wss://stream.bybit.com/v5/public/linear"); } catch (e) { setTimeout(connectBybitLiqs, 5000); return; }
@@ -5131,7 +5272,7 @@ async function pollGmxLiqs() {
       if (!(usd > 0)) return;
       const base = (cxGmxMap && cxGmxMap[(a.marketAddress || "").toLowerCase()]) || "";
       if (!base) return;
-      const live = parseFloat(liveMark[base] || liveMark["k" + base]) || 0;
+      const live = parseFloat(exPick(liveMark, base)) || 0;
       let px = parseFloat(a.executionPrice) || 0;
       if (live > 0 && px > 0) { while (px > live * 3.163) px /= 10; while (px < live / 3.163) px *= 10; }
       else px = 0; /* unknown decimals without a live ref — hide the price, keep the real $ */
@@ -5163,7 +5304,7 @@ function cxSumsGlobal(rangeMs, want, minute) {
   const coinsMap = minute ? cxTotals.coinsMin : cxTotals.coins;
   if (want) {
     const c = coinsMap || {};
-    src = c[want] || c[want.replace(/^K/, "")] || null; /* kPEPE ↔ PEPE */
+    src = exPick(c, want); /* kPEPE ↔ PEPE ↔ 1000PEPE, PUMPFUN ↔ PUMP */
     if (!src) return null; /* coin not covered by the mirror → caller falls back to session data */
   } else src = minute ? cxTotals.aggMin : cxTotals.agg;
   if (!src) return null;
@@ -5551,7 +5692,7 @@ let rdQuery = "";
   const i = document.getElementById("rdSearch");
   if (!i) return;
   ["mousedown", "click", "pointerdown"].forEach(ev => i.addEventListener(ev, e => e.stopPropagation()));
-  i.addEventListener("input", () => { rdQuery = i.value; renderRadar(); });
+  i.addEventListener("input", onFrame(() => { rdQuery = i.value; renderRadar(); }));
 })();
 document.getElementById("rdBody").addEventListener("click", e => {
   if (e.target.closest("a")) return; /* TradingView link — don't treat as silence-click */
@@ -5658,11 +5799,9 @@ const fdRemoved = { /* default coins the user removed — every row is removable
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
 };
-/* same contract, different ticker per exchange — aliases tried when the plain name misses.
-   "1000X"-style multipliers keep the SAME funding %, so rates map 1:1. */
-const FD_ALIAS = {PUMP: ["PUMPFUN"], PEPE: ["1000PEPE"], BONK: ["1000BONK"], FLOKI: ["1000FLOKI"],
-  SHIB: ["1000SHIB", "SHIB1000"], SATS: ["1000SATS"], RATS: ["1000RATS"], LUNC: ["1000LUNC"], XEC: ["1000XEC"]};
-const fdNames = c => [c, "1000" + c, "k" + c].concat(FD_ALIAS[c] || []);
+/* same contract, different ticker per exchange — now the site-wide map (see exNames near the top),
+   so a name added there is understood by funding, positioning, liq map and CEX liqs at once. */
+const fdNames = exNames;
 const fdOrder = {
   key: "cryptopulse-fd-order",
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch (e) { return []; } },
@@ -5867,7 +6006,9 @@ document.addEventListener("visibilitychange", () => {
 });
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */
-every(fetchLsxCex, 12_000, 12_000);     /* refresh CEX long/short ratios (venues recompute every ~5m) */
+every(fetchLsxCex, 45_000, 45_000);     /* Binance and Bybit only recompute these ratios every 5 min — polling every 12s
+                                           was ~4 wasted request storms per venue update, and those storms were competing
+                                           with whatever the user had just searched for. 45s still beats the source. */
 </script>
 <script data-goatcounter="https://cryptopulse.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>

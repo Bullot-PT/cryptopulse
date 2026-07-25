@@ -52,7 +52,7 @@ try {
     if (v > 0) ok[b] = (ok[b] || 0) + Math.round(v);
   });
 } catch (e) { console.log('okx failed', e.message); }
-let agg = 0, ex = {};
+let agg = 0, ex = {}, aggExact = false;
 try {
   const [gxr, spr] = await Promise.all([
     jget('https://api.coingecko.com/api/v3/derivatives/exchanges?per_page=100&page=1'),
@@ -63,6 +63,55 @@ try {
     const oi = (parseFloat(e.open_interest_btc) || 0) * btcPx;
     if (oi > 0) { agg += oi; ex[(e.name || '').replace(' (Futures)', '')] = Math.round(oi); }
   });
+  /* The dashboard replaces CoinGecko's estimate for the perp DEXes with the exact number straight from each
+     API, so if this 24/7 series didn't do the same the chart would square-wave between two DIFFERENT
+     measurements of the same thing (~6B apart, seen live 25-jul). Same merge here, same rule: exact wins. */
+  const dex = [];
+  await Promise.allSettled([
+    (async () => { /* Hyperliquid — already fetched above, exact, every market */
+      if (total > 0) dex.push({ m: 'hyperliquid', name: 'Hyperliquid', oi: total });
+    })(),
+    (async () => { /* dYdX v4 — exact, every market, straight from the indexer */
+      const j = await jget('https://indexer.dydx.trade/v4/perpetualMarkets?limit=500');
+      const oi = Object.values(j.markets || {}).reduce((s, m) => s + (parseFloat(m.openInterest) || 0) * (parseFloat(m.oraclePrice) || 0), 0);
+      if (oi > 0) dex.push({ m: 'dydx', name: 'dYdX v4', oi });
+    })(),
+    (async () => { /* Lighter — exact, every market in one call */
+      const j = await jget('https://mainnet.zklighter.elliot.ai/api/v1/orderBookDetails');
+      const oi = (j.order_book_details || []).reduce((s, d) => s + (parseFloat(d.open_interest) || 0) * (parseFloat(d.mark_price) || 0), 0);
+      if (oi > 0) dex.push({ m: 'lighter', name: 'Lighter', oi });
+    })(),
+    (async () => { /* GMX v2 — exact OI in USD (1e30 precision), Arbitrum + Avalanche */
+      let oi = 0;
+      const rs = await Promise.allSettled(['https://arbitrum-api.gmxinfra.io', 'https://avalanche-api.gmxinfra.io']
+        .map(u => jget(u + '/markets/info')));
+      rs.forEach(r => {
+        if (r.status !== 'fulfilled') return;
+        (r.value.markets || []).forEach(m => { oi += ((parseFloat(m.openInterestLong) || 0) + (parseFloat(m.openInterestShort) || 0)) / 1e30; });
+      });
+      if (oi > 0) dex.push({ m: 'gmx', name: 'GMX', oi });
+    })(),
+    (async () => { /* Aster — their API only exposes OI one market at a time; top 30 by volume covers the bulk */
+      const tk = await jget('https://fapi.asterdex.com/fapi/v1/ticker/24hr');
+      const topM = (Array.isArray(tk) ? tk : []).filter(t => (t.symbol || '').endsWith('USDT'))
+        .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume)).slice(0, 30);
+      const pxOf = {}; topM.forEach(t => { pxOf[t.symbol] = parseFloat(t.lastPrice) || 0; });
+      let oi = 0;
+      for (let i = 0; i < topM.length; i += 10) {
+        const rs = await Promise.allSettled(topM.slice(i, i + 10).map(t =>
+          jget('https://fapi.asterdex.com/fapi/v1/openInterest?symbol=' + t.symbol)));
+        rs.forEach(r => { if (r.status === 'fulfilled' && r.value) oi += (parseFloat(r.value.openInterest) || 0) * (pxOf[r.value.symbol] || 0); });
+      }
+      if (oi > 0) dex.push({ m: 'aster', name: 'Aster', oi });
+    })()
+  ]);
+  dex.forEach(d => {
+    const k = Object.keys(ex).find(n => n.toLowerCase().includes(d.m));
+    if (k) { agg -= ex[k]; delete ex[k]; }
+    agg += d.oi; ex[d.name] = Math.round(d.oi);
+  });
+  aggExact = dex.length >= 4;   /* the chart only mixes samples measured the same way — see aggx on the client */
+  console.log('global OI:', fmtBig(agg), '—', dex.length, 'perp DEXes measured directly');
 } catch (e) { console.log('gx fetch failed', e.message); }
 
 let hist = { samples: [] };
@@ -70,7 +119,7 @@ try { hist = JSON.parse(fs.readFileSync('data/oi-history.json', 'utf8')); } catc
 const sample = { t: now, total: Math.round(total), coins: top };
 if (Object.keys(bb).length) sample.bb = topN(bb, 40);
 if (Object.keys(ok).length) sample.ok = topN(ok, 40);
-if (agg > 0) { sample.agg = Math.round(agg); sample.ex = topN(ex, 12); }
+if (agg > 0) { sample.agg = Math.round(agg); sample.ex = topN(ex, 12); if (aggExact) sample.aggx = 1; }
 hist.samples.push(sample);
 hist.samples = hist.samples.filter(s => s.t > now - 8 * 86400 * 1000);
 fs.mkdirSync('data', { recursive: true });
