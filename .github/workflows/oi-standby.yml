@@ -75,9 +75,38 @@ jobs:
               return 0
             fi
             git commit -m "OI sample (standby) [skip ci]" >/dev/null || return 0
+            # A push gets refused when main moves under us — the Lighter collector pushes to the same
+            # branch, and so does any commit made from the browser. The old code handled that with
+            # "git pull --rebase origin main". Never again: on 25-jul-2026 one of those rebases stopped
+            # mid-way and left a .git/rebase-merge behind on the runner, and from that second onward
+            # EVERY pass of that run died with "there is already a rebase-merge directory". The job kept
+            # reporting itself as running while the site went 40 minutes without a single new sample.
+            #
+            # The rebuild below cannot conflict, by construction: jump to the newest main and put back
+            # exactly the files this pass wrote, taken from our own commit. Only those files — copying
+            # the whole data/ folder would silently revert a file that only the Lighter collector
+            # writes back to whatever this runner happened to check out an hour ago.
+            MINE=$(git rev-parse HEAD)
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
             for i in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push; then return 0; fi
-              sleep $((i * 5))
+              if git push origin HEAD:main; then return 0; fi
+              echo "push refused — rebuilding on top of origin/main (attempt $i)"
+              # belt and braces: clear anything half-finished an older version could have left behind
+              git rebase --abort 2>/dev/null || true
+              git merge --abort 2>/dev/null || true
+              if ! git fetch origin main; then sleep $((i * 5)); continue; fi
+              git reset --hard FETCH_HEAD
+              for p in $CHANGED; do
+                # checkout restores a file we wrote or changed; the rm branch covers one we deleted
+                git checkout "$MINE" -- "$p" 2>/dev/null || git rm -q --ignore-unmatch -- "$p"
+              done
+              git add data/
+              if git diff --cached --quiet; then
+                echo "someone else already pushed identical data — nothing left to do"
+                return 0
+              fi
+              git commit -m "OI sample (standby) [skip ci]" >/dev/null || return 0
+              sleep $((i * 3))
             done
             echo "push failed after retries — the next pass will carry these files"
             return 0
