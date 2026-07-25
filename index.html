@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-zwdj5yVE2s/zal6rjhF8VJEwZku1wlokZQegi7SL2ts=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-RgU7VAu3UIMxTk47AeDG/kp/i4AqC3vkZe7kvGV+isA=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -1235,7 +1235,38 @@ function chgSpan(v, cls) {
 }
 
 /* fetch with timeout so panels degrade gracefully */
-async function fetchJSONraw(url, {timeout = 12000} = {}) {
+/* ---- data/ : servido por dois caminhos, fica o mais fresco -----------------------------------
+   O GitHub Pages reconstrói e volta a publicar o site INTEIRO a cada commit de dados. Com três
+   coletores a fazer push de 2 em 2 e de 5 em 5 minutos, essas builds entram em fila e cancelam-se
+   umas às outras, e o que o cryptomacho.io serve fica atrás do que já está no repositório.
+   Medido a 25-jul-2026 às 14h39 UTC, no mesmo instante: o data/hl-pos.json no git tinha 293 s de
+   idade, o mesmo ficheiro servido pelo site tinha 603 s. Cinco minutos inteiros de atraso que não
+   vinham do coletor — vinham da publicação.
+   O raw.githubusercontent.com não passa por build nenhuma: serve o ficheiro tal como está no
+   repositório. Por isso cada leitura de data/ pede os dois caminhos em paralelo e fica com o que
+   tiver o timestamp mais recente. Não há nada inventado aqui — é o mesmo ficheiro, escrito pelo
+   mesmo coletor, só que entregue por duas vias; e se uma falhar a outra serve. */
+const RAWBASE = "https://raw.githubusercontent.com/Bullot-PT/cryptopulse/main/";
+function dataStamp(j) {
+  if (!j || typeof j !== "object") return 0;
+  return j.t || j.ts || j.at || j.updated || 0;
+}
+async function fetchData(url, opts) {
+  const [a, b] = await Promise.allSettled([
+    fetchJSONraw(url, opts, true),
+    fetchJSONraw(RAWBASE + url, opts, true)
+  ]);
+  const av = a.status === "fulfilled" ? a.value : null;
+  const bv = b.status === "fulfilled" ? b.value : null;
+  if (!av && !bv) throw (a.reason || b.reason || new Error("data unavailable"));
+  if (!av) return bv;
+  if (!bv) return av;
+  return dataStamp(bv) > dataStamp(av) ? bv : av;
+}
+async function fetchJSONraw(url, {timeout = 12000} = {}, direct) {
+  /* qualquer pedido a data/ passa pelos dois caminhos, uma vez só e aqui — assim os 17 sítios que
+     lêem ficheiros do coletor ganham a entrega rápida sem nenhum deles ser tocado */
+  if (!direct && /^data\//.test(String(url))) return fetchData(url, {timeout});
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeout);
   try {
@@ -2731,6 +2762,35 @@ async function loadWhales() {
         }
       });
     }
+    /* ---- fundir o índice do bot, nunca substituí-lo -------------------------------------------
+       Este varrimento ao vivo percorre ~125 carteiras vindas do leaderboard. O índice do bot vê
+       ~1700, porque anda a rodar pela população toda desde ontem. Pintar só o que o varrimento ao
+       vivo encontrou APAGAVA as linhas que o índice já tinha mostrado: o Bullot viu três alertas de
+       proximidade de liquidação aparecerem e desaparecerem dez segundos depois, e era exactamente
+       isto — o varrimento ao vivo aterrava e escrevia por cima do painel inteiro.
+       Agora o painel mostra a união dos dois. Para a mesma carteira e a mesma moeda ganha sempre a
+       linha ao vivo (tem segundos, a do índice tem minutos); as linhas que o varrimento ao vivo
+       nunca chegou a olhar sobrevivem, com a idade de leitura que já traziam. */
+    try {
+      const idx = await getHlPos();
+      if (idx && idx.coins) {
+        const have = new Set(found.map(r => r.addr + "|" + exCanon(r.coin)));
+        const seenCoin = new Set();
+        Object.keys(idx.coins).forEach(c => {
+          const want = exCanon(c);
+          if (seenCoin.has(want)) return;      /* duas chaves podem canonicalizar para a mesma moeda */
+          seenCoin.add(want);
+          hlPosRows(idx, want).rows.forEach(r => {
+            if (r.value < WHALE_MIN) return;
+            const k = r.addr + "|" + exCanon(r.coin);
+            if (have.has(k)) return;
+            have.add(k);
+            found.push(r);
+          });
+        });
+        whaleIdxT = idx.t || 0;
+      }
+    } catch (e) { whaleIdxT = 0; }
     /* kept so the token search can answer "who is in X" without re-scanning every wallet */
     whaleFound = found;
     whaleScanMeta = {wallets: candidates.length, t: Date.now()};
@@ -2748,7 +2808,9 @@ async function loadWhales() {
         if (fa && fb) return a.dist - b.dist;
         return b.value - a.value;
       });
-      $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
+      $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length +
+        " wallets live-scanned" + (whaleIdxT ? " + collector index " + timeAgo(whaleIdxT) : "") +
+        (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
       hlPosHealth();
       if (!found.length) {
         body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
@@ -2757,6 +2819,7 @@ async function loadWhales() {
       body.innerHTML = '<div id="watchBox"></div>' + renderWhaleRows(found.slice(0, 40));
       renderWatchlist();
       body.dataset.home = "1";
+      whalesLiveAt = Date.now();
       markUpdated();
     };
     if (body.dataset.home !== "0") whalePaint();
@@ -2927,6 +2990,8 @@ $("whalesBody").addEventListener("mouseout", e => {
    no extra API calls. It holds EVERY position ≥ $5M across the scanned wallets — not just the 40
    shown — so searching a token surfaces holdings the list itself had no room for. */
 let whaleFound = [], whaleScanMeta = {wallets: 0, t: 0};
+/* quando o varrimento ao vivo pintou pela última vez, e a que horas era o índice que ele fundiu */
+let whalesLiveAt = 0, whaleIdxT = 0;
 /* last marks the whale scan pulled — reused so a token search can compute liquidation distance
    without a second allMids round-trip */
 let hlMids = {};
@@ -2992,7 +3057,12 @@ function hlPosRows(j, want) {
    carries the minute it was read. */
 async function loadWhalesFast() {
   const body = $("whalesBody");
-  if (!body || body.dataset.home === "0" || body.querySelector(".wrow")) return;
+  if (!body || body.dataset.home === "0") return;
+  /* Isto era um tiro único: bastava existir uma linha no painel para nunca mais correr. Numa página
+     deixada aberta, o índice do bot deixava de ser lido e o painel passava a depender só do
+     varrimento ao vivo de 4 em 4 minutos. Agora repete-se, e a única coisa que o trava é o
+     varrimento ao vivo ter pintado há pouco — esse é mais fresco e tem prioridade. */
+  if (Date.now() - whalesLiveAt < 150_000) return;
   try {
     const [j, mids] = await Promise.all([
       getHlPos(),
@@ -3001,7 +3071,7 @@ async function loadWhalesFast() {
     ]);
     if (mids && !Object.keys(hlMids || {}).length) hlMids = mids;
     if (!j || !j.coins) return;
-    if (body.dataset.home === "0" || body.querySelector(".wrow")) return;   /* live scan won the race */
+    if (body.dataset.home === "0" || Date.now() - whalesLiveAt < 150_000) return;  /* live scan won the race */
     const found = [], done = new Set();
     Object.keys(j.coins).forEach(c => {
       const want = exCanon(c);
@@ -3009,6 +3079,21 @@ async function loadWhalesFast() {
       done.add(want);
       hlPosRows(j, want).rows.forEach(r => { if (r.value >= WHALE_MIN) found.push(r); });
     });
+    /* simétrico ao merge do varrimento ao vivo: as carteiras que só o varrimento ao vivo viu (não
+       estão no índice do bot) têm de sobreviver a esta repintura, senão o painel voltava a oscilar
+       entre dois conjuntos diferentes de linhas de dois em dois minutos — e o detector de
+       liquidações, que trabalha por comparação com a passagem anterior, ficava a olhar para
+       aparecimentos e desaparecimentos que eram só a alternância entre as duas fontes. */
+    const inIdx = new Set(found.map(r => r.addr + "|" + exCanon(r.coin)));
+    if (Date.now() - whaleScanMeta.t < 600_000) {
+      (whaleFound || []).forEach(r => {
+        if (r.fromBot || r.value < WHALE_MIN) return;
+        const k = r.addr + "|" + exCanon(r.coin);
+        if (inIdx.has(k)) return;
+        inIdx.add(k);
+        found.push(r);
+      });
+    }
     if (!found.length) return;
     hlDetectLiqs(found);
     found.sort((a, b) => {
@@ -3022,7 +3107,7 @@ async function loadWhalesFast() {
     renderWatchlist();
     body.dataset.home = "1";
     $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · collector index " +
-      timeAgo(j.t) + " · live scan running";
+      timeAgo(j.t) + (whalesLiveAt ? " + live scan " + timeAgo(whalesLiveAt) : " · live scan running");
     hlPosHealth();
     markUpdated();
   } catch (e) { /* the live scan is already on its way — no message, no fake data */ }
@@ -6622,8 +6707,49 @@ setInterval(loadFunding, 120_000);
   }
 })();
 
-/* ---------------- schedule ---------------- */
-function every(fn, ms, offset) { setTimeout(() => { fn(); setInterval(fn, ms); }, offset || 0); }
+/* ---------------- schedule ----------------
+   O agendador antigo era um setInterval por painel. Parece igual a isto e não é, por uma razão que só
+   se vê numa página deixada aberta: o Chrome estrangula os temporizadores de um separador que não
+   está à frente — passam a correr no máximo uma vez por minuto — e, ao fim de alguns minutos
+   escondido, pode congelar a página por completo. Quando descongela, um setInterval NÃO repõe o tique
+   que perdeu: simplesmente continua a contar a partir dali. A página fica exactamente como estava,
+   sem nenhum sinal de que parou. Foi isto que o Bullot viu — quarenta minutos aberta, long vs short
+   preso nos 46%, e um F5 à mão a pô-lo nos 50%.
+   Aqui não há um temporizador por tarefa: há uma lista com a hora a que cada tarefa é devida, e um
+   relógio que a verifica. Se o relógio esteve estrangulado ou congelado, na primeira batida a seguir
+   toda a tarefa em atraso está em atraso e corre nesse instante. A recuperação é automática porque a
+   decisão é sempre "já passou da hora?", nunca "faltam quantos milissegundos?".
+   O 'busy' é a outra metade: o varrimento de 500 carteiras chega a demorar mais do que o seu próprio
+   intervalo, e sem isto acumulavam-se varrimentos sobrepostos a disputar a mesma API. */
+const SCHED = [];
+function every(fn, ms, offset) {
+  const job = {fn, ms, due: Date.now() + (offset || 0), busy: false};
+  SCHED.push(job);
+  return job;
+}
+setInterval(() => {
+  const now = Date.now();
+  SCHED.forEach(j => {
+    if (j.busy || now < j.due) return;
+    j.busy = true;
+    j.due = now + j.ms;
+    let r;
+    try { r = j.fn(); } catch (e) { j.busy = false; return; }
+    Promise.resolve(r).then(() => { j.busy = false; }, () => { j.busy = false; });
+  });
+}, 5_000);
+/* Ao voltar ao separador, tudo o que estiver em atraso corre — mas espaçado 300 ms, senão vinte
+   painéis disparavam pedidos no mesmo milissegundo e as APIs devolviam 429 em bloco. */
+function catchUpAll() {
+  const now = Date.now();
+  let k = 0;
+  SCHED.forEach(j => { if (j.due > now) return; j.due = now + (k++) * 300; });
+  SCHED.forEach(j => { if (j.due > now + 120_000) j.due = now + (k++) * 300; });
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) catchUpAll(); });
+window.addEventListener("focus", catchUpAll);
+window.addEventListener("online", catchUpAll);
+window.addEventListener("pageshow", e => { if (e.persisted) catchUpAll(); });
 
 loadPrices(); loadFng(); loadTrending(); loadPolymarket(); loadKalshiPanel(); loadGlobal(); loadSEC(); loadListings(); loadHyperliquid(); loadLiquidations(); loadWhales(); loadGlobalOI();
 every(loadListings, 300_000, 310_000);  /* every 5 min */
@@ -6637,6 +6763,7 @@ every(() => { if ($("whalesBody").dataset.home !== "0") loadWhales(); }, 240_000
    No refresh key required — the panel was only ever static because both timers were too slow. */
 loadWhalesFast(); loadLongShortFast();
 every(loadLongShortFast, 60_000, 3_000);
+every(loadWhalesFast, 90_000, 45_000);  /* o índice do bot, relido sozinho entre varrimentos ao vivo */
 setTimeout(loadLongShort, 8_000); every(loadLongShort, 300_000, 308_000); /* 500-wallet positioning scan every 5 min */
 every(loadPrices,    60_000, 60_000);   /* every 60s */
 every(loadGlobal,   300_000, 300_000);  /* every 5 min */
@@ -6646,10 +6773,9 @@ every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big be
 every(loadKalshiPanel, 300_000, 305_000); /* every 5 min — the bot mirror itself only changes ~10-min */
 every(fetchBotAlLog, 300_000, 9_000); /* bot's 24/7 alert log for the Alert Center */
 loadUpbit(); every(loadUpbit, 90_000, 90_000); /* 🇰🇷 Upbit KRW spot + verified kimchi premium */
-/* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); loadUpbit(); loadLongShortFast(); }
-});
+/* O antigo tratador de visibilitychange vivia aqui e recarregava seis painéis à mão. Foi substituído
+   pelo catchUpAll do agendador, que trata dos vinte — incluindo o scanner de baleias, o long vs short
+   ao vivo e o livro de liquidações, que eram precisamente os que ficavam para trás. */
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */
 every(fetchLsxCex, 45_000, 45_000);     /* Binance and Bybit only recompute these ratios every 5 min — polling every 12s
