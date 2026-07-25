@@ -9,6 +9,9 @@ name: Nansen (nomes das carteiras)
 #   sweep         ~750 créditos  varrimento intensivo, uma vez. 620 são as quatro chamadas com
 #                                labels premium — é o que traz nomes próprios em vez de categorias.
 #   daily         ~45 créditos   manutenção. 45×30 = 1350/mês, sobra folga para um sweep extra.
+#   rebuild       0 créditos     não fala com a Nansen. Reconstrói o data/nansen-names.json (o
+#                                ficheiro compacto que o site lê) a partir do arquivo de nomes
+#                                que já está no repositório. Correr à vontade.
 #
 # O contador vive em data/nansen-budget.json e é alimentado pelo que a própria resposta da Nansen
 # diz ter custado, não por uma estimativa nossa. O colector recusa-se a passar do tecto.
@@ -17,11 +20,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "probe (valida a chave), premium-test (mede o custo dos nomes proprios), sweep (intensivo, uma vez) ou daily"
+        description: "probe (valida a chave), premium-test (ja foi, nao repetir), sweep (intensivo, uma vez), daily, rebuild (0 creditos)"
         required: true
         default: probe
         type: choice
-        options: [probe, premium-test, sweep, daily]
+        options: [probe, premium-test, sweep, daily, rebuild]
   schedule:
     # 04:10 UTC — fora das horas de maior movimento, e desencontrado dos outros coletores para
     # não haver dois pushes para o main ao mesmo segundo.
@@ -53,7 +56,7 @@ jobs:
         if: always()
         run: |
           set -u
-          FILES="data/nansen-labels.json data/nansen-budget.json data/nansen-perps.json data/nansen-sm.json"
+          FILES="data/nansen-labels.json data/nansen-names.json data/nansen-budget.json data/nansen-perps.json data/nansen-sm.json"
           EXIST=""
           for f in $FILES; do [ -f "$f" ] && EXIST="$EXIST $f"; done
           if [ -z "$EXIST" ]; then echo "nada gerado"; exit 0; fi
