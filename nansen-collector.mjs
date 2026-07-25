@@ -10,7 +10,7 @@
  * Daí três modos:
  *
  *   probe   ~5 créditos   valida a chave e mostra o que a Nansen devolve. Corre à mão.
- *   sweep   ~165 créditos varrimento intensivo, uma vez. Semeia a cache de nomes com milhares
+ *   sweep   ~180 créditos varrimento intensivo, uma vez. Semeia a cache de nomes com milhares
  *                         de endereços de uma assentada. É o que ele pediu para fazer antes do
  *                         fim do mês, enquanto os créditos de Julho ainda estão quase intactos.
  *   daily   ~45 créditos  manutenção, uma vez por dia. 45×30 = 1350/mês, sobra folga.
@@ -92,7 +92,18 @@ const COST = {
 };
 
 let creditHeaderName = null;   // descoberto no primeiro pedido
-const stats = { calls: 0, rows: 0, errors: [] };
+const stats = { calls: 0, rows: 0, errors: [], unbilled: 0 };
+
+/* O /perp-leaderboard exige uma janela de datas — sem ela devolve 422 antes sequer de olhar
+   para a chave. Dias em UTC, que é o relógio do runner e o da Nansen.
+   A janela curta não é só economia: a tabela de créditos cobra 25 (em vez de 5) às variantes
+   "historical", e não vale a pena descobrir da maneira cara onde é que fica essa fronteira. */
+const DAY_MS = 86400000;
+function dateRange(days) {
+  const to = new Date();
+  const from = new Date(to.getTime() - days * DAY_MS);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
 
 async function call(endpoint, body) {
   const est = COST[endpoint] || 5;
@@ -147,8 +158,14 @@ async function call(endpoint, body) {
       }
     }
   }
-  const charged = used == null ? est : used;
+  /* Um 4xx é rejeitado na validação, antes de a Nansen ir buscar dados — não é cobrado. Se
+     mesmo assim vier um header de créditos, é o header que manda; o que não se faz é somar
+     uma estimativa por um pedido mal formado nosso e ficar a dever créditos que ninguém gastou.
+     O 429 fica de fora desta regra: esse chegou a bater na porta. */
+  const rejected = used == null && !res.ok && res.status >= 400 && res.status < 500 && res.status !== 429;
+  const charged = rejected ? 0 : (used == null ? est : used);
   budget.spent += charged;
+  if (rejected) stats.unbilled++;
   stats.calls++;
 
   if (charged > MAX_CALL_COST) {
@@ -246,12 +263,17 @@ async function perpPositions(symbol, perPage) {
   }));
 }
 
-async function leaderboard(pages, perPage) {
+async function leaderboard(pages, perPage, days, dir) {
   const seen = [];
+  const date = dateRange(days || 7);
   for (let p = 1; p <= pages; p++) {
     const j = await call("/perp-leaderboard", {
+      date,
+      /* Vem a true por omissão no esquema deles, e as labels premium são exactamente o que
+         dispara a sobretaxa de 150 créditos. Escrito à mão para não depender do padrão. */
+      premium_labels: false,
       pagination: { page: p, per_page: perPage },
-      order_by: [{ field: "total_pnl", direction: "DESC" }],
+      order_by: [{ field: "total_pnl", direction: dir || "DESC" }],
     });
     const rows = Array.isArray(j?.data) ? j.data : [];
     for (const r of rows) {
@@ -292,7 +314,12 @@ async function run() {
   if (MODE === "probe") {
     /* O mais barato que valida tudo ao mesmo tempo: autenticação, formato do corpo, forma da
        resposta e o nome do header dos créditos. 10 linhas chegam. */
-    const j = await call("/perp-leaderboard", { pagination: { page: 1, per_page: 10 } });
+    const j = await call("/perp-leaderboard", {
+      date: dateRange(1),
+      premium_labels: false,
+      pagination: { page: 1, per_page: 10 },
+      order_by: [{ field: "total_pnl", direction: "DESC" }],
+    });
     const rows = j?.data || [];
     console.log(`chave válida. ${rows.length} linhas de volta.`);
     console.log("header de créditos:", creditHeaderName || "(nenhum — uso a tabela de custos)");
@@ -305,8 +332,16 @@ async function run() {
   else if (MODE === "sweep") {
     /* O varrimento intensivo de uma vez só. Isto é o que semeia a cache de nomes: 5 páginas de
        1000 do leaderboard e as 25 maiores moedas com o livro inteiro. Cada chamada 5 créditos. */
-    console.log("-- leaderboard (5 páginas × 1000)");
-    await leaderboard(5, 1000);
+    /* Três varreduras com janelas e sentidos diferentes porque devolvem gente diferente, e o
+       que nos interessa aqui são NOMES, não o PnL: os campeões do mês, os do dia (outra malta
+       — quem faz scalping não aparece no top de 30 dias) e, ao contrário, os que mais perderam.
+       Estes últimos são precisamente os que aparecem no painel perto da liquidação. */
+    console.log("-- leaderboard 30d, os que mais ganharam (5 × 1000)");
+    await leaderboard(5, 1000, 30, "DESC");
+    console.log("-- leaderboard 30d, os que mais perderam (2 × 1000)");
+    await leaderboard(2, 1000, 30, "ASC");
+    console.log("-- leaderboard 1d, o movimento de hoje (3 × 1000)");
+    await leaderboard(3, 1000, 1, "DESC");
 
     const coins = topCoins(25);
     console.log(`-- posições por moeda (${coins.length}): ${coins.join(" ")}`);
@@ -324,7 +359,8 @@ async function run() {
 
   else if (MODE === "daily") {
     /* Manutenção. Poucas chamadas, todas úteis, uma vez por dia. */
-    await leaderboard(2, 1000);
+    await leaderboard(1, 1000, 7, "DESC");
+    await leaderboard(1, 1000, 1, "ASC");
     const coins = topCoins(5);
     for (const c of coins) {
       if (remaining() < 100) { console.log("paro: reserva de créditos atingida"); break; }
