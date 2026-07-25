@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-UIR/TtTOYZrjIo0gS+YJE6/7FQpW2O301nHfUUC8QQI=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-ypUXLHR+X7qsl0ewaPvHqQF8rN944i8lyYi/suv1BHE=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -1722,6 +1722,10 @@ let priceCoins = [];
    quem chegar primeiro deixa aqui o que tem, quem chegar depois vai buscar. */
 const priceSpark = {};
 let priceUniverse = [], priceUniT = 0, priceUniBusy = null;
+/* páginas guardadas à parte: só o prefixo contíguo (1,2,3,4) é que entra no universo, senão
+   um buraco a meio empurrava os rankings todos para cima e o número da linha ficava errado. */
+const PRICE_UNI_PAGES = 4, PRICE_UNI_KEY = "cryptopulse-coin-universe";
+let priceUniPage = {}, priceUniTries = 0;
 /* Junta as duas leituras num único array ordenado por market cap. O índice do array = ranking − 1,
    e é isso que o data-i das linhas aponta — por isso tudo o que já existia continua a funcionar. */
 function priceMerge() {
@@ -1740,26 +1744,77 @@ function priceMerge() {
 }
 /* As 1000 só são pedidas quando fazem falta: à primeira tecla na caixa de pesquisa, e depois
    revalidadas de 15 em 15 minutos. Quem nunca pesquisa nunca paga estes 4 pedidos. */
-async function loadPriceUniverse() {
+/* guarda só o que a tabela precisa — o objecto inteiro da CoinGecko são ~4 MB para 1000 moedas
+   e não cabe no localStorage; assim ficam ~200 KB. Os sparklines vêm do top 100, à parte. */
+function priceSlim(c) {
+  return { id: c.id, symbol: c.symbol, name: c.name, image: c.image,
+    current_price: c.current_price, price_change_percentage_24h: c.price_change_percentage_24h,
+    market_cap_rank: c.market_cap_rank };
+}
+function priceUniPrefix() {
+  const out = [];
+  for (let p = 1; p <= PRICE_UNI_PAGES; p++) {
+    if (!priceUniPage[p]) break;          /* falta esta página: pára aqui e mantém os rankings certos */
+    out.push(...priceUniPage[p]);
+  }
+  return out;
+}
+function priceUniApply(save) {
+  const pref = priceUniPrefix();
+  if (pref.length < 250) return;
+  priceUniverse = pref;
+  priceUniT = Date.now();
+  priceMerge();
+  renderPriceRows();
+  if (save) { try { localStorage.setItem(PRICE_UNI_KEY, JSON.stringify({ t: priceUniT, p: priceUniPage })); } catch (e) {} }
+}
+function priceUniRestore() {
+  try {
+    const j = JSON.parse(localStorage.getItem(PRICE_UNI_KEY) || "null");
+    if (!j || !j.p || Date.now() - j.t > 43_200_000) return;   /* 12 h */
+    priceUniPage = j.p;
+    priceUniApply(false);
+    priceUniT = j.t;
+  } catch (e) {}
+}
+/* As 1000 só são pedidas quando fazem falta: à primeira tecla na caixa de pesquisa, e depois
+   revalidadas de 15 em 15 minutos. Quem nunca pesquisa nunca paga estes 4 pedidos. */
+async function loadPriceUniverse(force) {
   if (priceUniBusy) return priceUniBusy;
-  if (priceUniverse.length && Date.now() - priceUniT < 900_000) return;
+  const complete = !!priceUniPage[PRICE_UNI_PAGES];
+  if (!force && complete && Date.now() - priceUniT < 900_000) return;
   priceUniBusy = (async () => {
-    const all = [];
-    for (let p = 1; p <= 4; p++) {
-      const part = await fetchJSON(
-        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=" +
-        p + "&sparkline=false&price_change_percentage=24h"
-      );
-      if (!Array.isArray(part) || !part.length) break;
-      all.push(...part);
-      /* espaçado de propósito: a CoinGecko sem chave corta a torneira a rajadas seguidas, e um 429
-         aqui deixava o utilizador com meio universo carregado e sem perceber porquê */
-      if (p < 4) await new Promise(r => setTimeout(r, 900));
+    let got = 0, failed = false;
+    for (let p = 1; p <= PRICE_UNI_PAGES; p++) {
+      if (!force && priceUniPage[p] && Date.now() - priceUniT < 900_000) continue;
+      let part = null;
+      for (let attempt = 0; attempt < 3 && !part; attempt++) {
+        if (attempt) await new Promise(r => setTimeout(r, attempt === 1 ? 4000 : 9000));
+        try {
+          const j = await fetchJSON(
+            "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=" +
+            p + "&sparkline=false&price_change_percentage=24h"
+          );
+          if (Array.isArray(j) && j.length) part = j.map(priceSlim);
+        } catch (e) {}
+      }
+      if (!part) { failed = true; break; }   /* sem esta página não dá para continuar sem estragar os rankings */
+      priceUniPage[p] = part;
+      got++;
+      priceUniApply(true);                   /* pinta já o que há — 250 é melhor do que 100 */
+      if (p < PRICE_UNI_PAGES) await new Promise(r => setTimeout(r, 1300));
     }
-    if (all.length > 250) { priceUniverse = all; priceUniT = Date.now(); priceMerge(); renderPriceRows(); }
+    /* ficou a meio por causa do 429: volta a tentar sozinho, com espera a dobrar */
+    if (failed && priceUniTries < 6) {
+      const wait = 60_000 * Math.pow(2, Math.min(priceUniTries, 3));
+      priceUniTries++;
+      setTimeout(() => loadPriceUniverse(), wait);
+    } else if (!failed) priceUniTries = 0;
+    return got;
   })().catch(() => {}).finally(() => { priceUniBusy = null; });
   return priceUniBusy;
 }
+priceUniRestore();
 async function loadPrices() {
   const body = $("pricesBody");
   try {
@@ -1821,7 +1876,9 @@ function renderPriceRows() {
     "</a>";
   }).join("") : '<div class="empty">No coin matching “' + esc(q) + "” in the top " + priceCoins.length +
       (priceUniBusy ? " — still loading the rest of the top 1000…" : "") + ".</div>";
-  $("pricesSub").textContent = q ? list.length + " of " + priceCoins.length : "top 15 · 24h · click → TradingView";
+  $("pricesSub").textContent = q
+    ? list.length + " of " + priceCoins.length + (priceUniBusy ? " (loading…)" : "")
+    : "top 15 · 24h · click → TradingView";
 }
 $("priceSearch").addEventListener("input", onFrame(() => {
   /* a primeira tecla é que manda buscar as 1000; até chegarem, pesquisa-se no que já cá está */
