@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-zwdj5yVE2s/zal6rjhF8VJEwZku1wlokZQegi7SL2ts=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -716,7 +716,7 @@
     </div>
     <div class="grid-stack-item" gs-id="polymarket">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" onerror="this.style.display='none'">Polymarket</span> <span class="sub" id="pmSub"></span>
+        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" data-hoe="1">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:4px 7px;color:var(--muted)"></button>
           <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
@@ -728,7 +728,7 @@
     </div>
     <div class="grid-stack-item" gs-id="kalshi">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=kalshi.com&amp;sz=64" alt="" onerror="this.style.display='none'">Kalshi</span> <span class="sub" id="kaSub"></span>
+        <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=kalshi.com&amp;sz=64" alt="" data-hoe="1">Kalshi</span> <span class="sub" id="kaSub"></span>
           <input type="range" id="kaVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="kaSound" title="Sound on new odds-move alerts" style="padding:4px 7px;color:var(--muted)"></button>
           <button class="btn-ghost" id="kaBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
@@ -944,6 +944,16 @@
 </script>
 <script>
 "use strict";
+
+/* The two brand favicons (Polymarket, Kalshi) used to carry onerror="this.style.display='none'".
+   An inline handler IS script as far as the CSP is concerned, and allowing inline script is exactly
+   the hole the CSP exists to close — one injected <img onerror> would be enough. So the behaviour
+   moves here: the tags are marked data-hoe="1" and a single capture-phase listener hides them if the
+   remote favicon fails to load. Error events from <img> do not bubble, hence capture. */
+window.addEventListener("error", function (e) {
+  const t = e.target;
+  if (t && t.tagName === "IMG" && t.dataset && t.dataset.hoe === "1") t.style.display = "none";
+}, true);
 
 /* ---------------- customizable layout (drag + resize, saved locally) ---------------- */
 const LAYOUT_KEY = "cryptopulse-layout-v1";
