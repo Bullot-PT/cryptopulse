@@ -1273,7 +1273,7 @@ function tvSymbol(sym) {
 let upMeta = null, upMetaT = 0;                 /* data/upbit.json — official flags, listings, verified maps */
 let upTick = [], upBySym = {}, upTickT = 0, upKrwUsdt = 0;
 let upSort = "vol";
-let upByCg = null, upByBin = null, upIdxT = -1;
+let upByCg = null, upByBin = null, upName = null, upIdxT = -1;
 
 async function fetchUpMeta() {
   try {
@@ -1284,12 +1284,60 @@ async function fetchUpMeta() {
 }
 function upIndex() {
   if (upIdxT === upMetaT) return;
-  upByCg = {}; upByBin = {};
+  upByCg = {}; upByBin = {}; upName = {};
   if (upMeta) {
     Object.entries(upMeta.cgid || {}).forEach(([s, cid]) => { if (!upByCg[cid]) upByCg[cid] = s; });
     Object.entries(upMeta.map || {}).forEach(([s, b]) => { if (!upByBin[b]) upByBin[b] = s; });
+    (upMeta.markets || []).forEach(m => { if (m.s && m.n) upName[m.s] = m.n; });
   }
   upIdxT = upMetaT;
+}
+
+/* ---- second identity check: the full asset name --------------------------------------------
+   The gold path is the bot's coin_id map (Upbit KRW market <-> Binance contract, both confirmed
+   by CoinGecko's exchange listings). CoinGecko rate-limits that walk hard from a datacenter IP,
+   so it fills in slowly. Meanwhile there is a second check that is just as factual and costs one
+   request: Upbit publishes the full English asset name of every KRW market, CoinGecko publishes
+   the full name of every coin. An exact name match IS an identity match, and it is precisely what
+   the ticker alone cannot do — Upbit's DATA is "Data", Binance's DATA is "Streamr".
+   Nothing below is estimated. The premium is still one measured price against another; only the
+   reference book changes (Binance's own order book vs CoinGecko's cross-exchange average), and
+   every tooltip says which of the two produced the number.
+   The wide name list comes from the bot's own CoinGecko snapshot on this domain, not from the
+   browser — CoinGecko rate-limits browsers hard and the Prices panel needs that quota more. */
+let cgWide = [], cgWideT = 0, cgNameIdx = null, cgNameKey = "";
+const upNorm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+async function getCgWide() {
+  if (cgWide.length && Date.now() - cgWideT < 300_000) return cgWide;
+  try {
+    const mir = await fetchCgMirror();
+    /* a snapshot older than 15 min is not a price any more — drop it rather than compare against it */
+    if (mir && Array.isArray(mir.markets) && mir.markets.length && Date.now() - (mir.t || 0) < 900_000) {
+      cgWide = mir.markets; cgWideT = Date.now(); cgNameKey = "";
+    } else if (Date.now() - (mir && mir.t || 0) >= 900_000) { cgWide = []; cgNameKey = ""; }
+  } catch (e) {}
+  return cgWide;
+}
+/* full asset name -> {c: coin, live}. "live" marks the prices the Prices panel just fetched itself;
+   the rest come from the bot snapshot and are up to 10 minutes old, which is fine to display but
+   not fresh enough to fire an alert on. */
+function cgNames() {
+  const key = cgWideT + "/" + (typeof priceCoins !== "undefined" && priceCoins ? priceCoins.length : 0);
+  if (cgNameIdx && cgNameKey === key) return cgNameIdx;
+  const m = {};
+  const add = (list, live) => (list || []).forEach(c => {
+    const k = upNorm(c.name);
+    if (k && !m[k] && c.current_price > 0) m[k] = {c: c, live: live};
+  });
+  add(typeof priceCoins !== "undefined" ? priceCoins : [], true);
+  add(cgWide, false);
+  cgNameIdx = m; cgNameKey = key;
+  return m;
+}
+function upNameCoin(sym) {
+  upIndex();
+  const n = upName && upName[sym];
+  return n ? (cgNames()[upNorm(n)] || null) : null;
 }
 /* Binance spot book — one fetch shared by the kimchi premium and by Funding & Basis (60s TTL) */
 let binSpot = null, binSpotT = 0;
@@ -1311,30 +1359,53 @@ function binUnitPrice(sym) {
   const mult = /^1000000/.test(sym) ? 1e6 : /^1M(?![A-Z]?$)/.test(sym) ? 1e6 : /^1000/.test(sym) ? 1000 : 1;
   return p / mult;
 }
-/* premium for an Upbit ticker — null unless the pair is coin_id-verified AND both legs are live */
-function upPremiumBySym(sym, krwPx) {
-  if (!upMeta || !upMeta.map || !(upKrwUsdt > 0) || !(krwPx > 0)) return null;
-  const b = upMeta.map[sym];
-  if (!b) return null;
-  const bp = binUnitPrice(b);
-  if (!(bp > 0)) return null;
-  const v = ((krwPx / upKrwUsdt) / bp - 1) * 100;
-  return isFinite(v) ? v : null;
+/* Premium for one Upbit ticker. Returns {v, ref} or null — never a guess.
+   The dollar leg comes from Upbit's OWN KRW-USDT market, so no outside exchange rate is assumed.
+   The reference leg is Binance spot when the coin_id map confirms the contract, otherwise the
+   CoinGecko average price of the coin whose full name matches. If neither identifies the asset,
+   this returns null and the dashboard prints "—". */
+function upPrem(sym) {
+  const t = upBySym[sym];
+  if (!t || !(t.px > 0) || !(upKrwUsdt > 0)) return null;
+  const usd = t.px / upKrwUsdt;
+  if (upMeta && upMeta.map) {
+    const b = upMeta.map[sym];
+    const bp = b ? binUnitPrice(b) : null;
+    if (bp > 0) { const v = (usd / bp - 1) * 100; if (isFinite(v)) return {v: v, ref: "Binance spot", live: true}; }
+  }
+  const hit = upNameCoin(sym);
+  if (hit && hit.c.current_price > 0) {
+    const v = (usd / hit.c.current_price - 1) * 100;
+    if (isFinite(v)) return {v: v, ref: "the world average price", live: !!hit.live};
+  }
+  return null;
 }
+function upPremiumBySym(sym) { const p = upPrem(sym); return p ? p.v : null; }
 /* the Prices and Trending panels are CoinGecko-native, so they match by coin_id — exact, never by ticker */
-function upPremiumByCg(cgId) {
+function upSymByCg(cgId) {
   if (!upMeta || !cgId) return null;
   upIndex();
-  const s = upByCg[cgId];
-  if (!s) return null;
-  const t = upBySym[s];
-  return t ? upPremiumBySym(s, t.px) : null;
+  if (upByCg[cgId]) return upByCg[cgId];
+  /* not in the bot's map yet — try the name route, walking the Upbit side once and caching it */
+  const idx = cgNames();
+  for (const s in upName) {
+    const hit = idx[upNorm(upName[s])];
+    if (hit && hit.c.id === cgId) return s;
+  }
+  return null;
+}
+function upPremiumByCg(cgId) {
+  const s = upSymByCg(cgId);
+  return s ? upPrem(s) : null;
 }
 function upBadge(prem, extra) {
   if (prem == null) return "";
-  return ' <span class="up-badge" title="Kimchi premium: this coin is ' + (prem >= 0 ? "more expensive" : "cheaper") +
-    ' on Upbit (Korea) than on Binance spot. Computed live from the KRW price and Upbit&#39;s own USDT/KRW market — same CoinGecko asset on both sides.' +
-    (extra || "") + '">🇰🇷 ' + (prem > 0 ? "+" : "") + prem.toFixed(2) + "%</span>";
+  const v = typeof prem === "number" ? prem : prem.v;
+  const ref = typeof prem === "number" ? "Binance spot" : prem.ref;
+  if (v == null || !isFinite(v)) return "";
+  return ' <span class="up-badge" title="Kimchi premium: this coin is ' + (v >= 0 ? "more expensive" : "cheaper") +
+    ' on Upbit (Korea) than on ' + ref + '. Measured live from the KRW price and Upbit&#39;s own USDT/KRW market — no exchange rate is assumed, and the asset is confirmed to be the same on both sides.' +
+    (extra || "") + '">🇰🇷 ' + (v > 0 ? "+" : "") + v.toFixed(2) + "%</span>";
 }
 function upPremColor(p) {
   if (p == null) return "var(--muted)";
@@ -1347,6 +1418,7 @@ async function loadUpbit() {
   const body = $("upBody");
   if (!upMeta || Date.now() - upMetaT > 300_000) await fetchUpMeta();
   await getBinSpot();
+  await getCgWide();   /* full asset names + world average prices — the second identity check */
   try {
     const j = await fetchJSONraw("https://api.upbit.com/v1/ticker/all?quoteCurrencies=KRW", {timeout: 20000});
     if (!Array.isArray(j) || !j.length) throw new Error("empty");
@@ -1382,10 +1454,12 @@ function renderUpbit() {
   ((upMeta && upMeta.markets) || []).forEach(m => { meta[m.s] = m; });
   let list = upTick.map(r => {
     const m = meta[r.s] || {};
+    const p = upPrem(r.s);
     return {s: r.s, px: r.px, chg: r.chg, volKrw: r.volKrw, name: m.n || "", w: !!m.w, c: m.c || [],
-      prem: upPremiumBySym(r.s, r.px), usd: upKrwUsdt > 0 ? r.px / upKrwUsdt : null,
+      prem: p ? p.v : null, ref: p ? p.ref : "", usd: upKrwUsdt > 0 ? r.px / upKrwUsdt : null,
       volUsd: upKrwUsdt > 0 ? r.volKrw / upKrwUsdt : null};
   });
+  const verified = list.filter(r => r.prem != null).length;   /* counted across every KRW market, not just the visible ones */
   if (q) list = list.filter(r => (r.s + " " + r.name).toUpperCase().includes(q));
   if (upSort === "flag") list = list.filter(r => r.w || r.c.length);
   const abs = v => (v == null ? -1 : Math.abs(v));
@@ -1393,7 +1467,6 @@ function renderUpbit() {
           : upSort === "chg"  ? (a, b) => b.chg - a.chg
           : (a, b) => b.volKrw - a.volKrw);
   const shown = list.slice(0, q ? 50 : 30);
-  const verified = upTick.filter(r => upPremiumBySym(r.s, r.px) != null).length;
   const flagged = Object.values(meta).filter(m => m.w || (m.c || []).length).length;
   const sub = $("upSub");
   if (sub) sub.textContent = upTick.length + " KRW markets" +
@@ -1410,13 +1483,15 @@ function renderUpbit() {
     '<th title="Upbit KRW price converted to USD with Upbit&#39;s own USDT/KRW market — no external FX rate">price</th>' +
     '<th title="Upbit&#39;s own 24h change on the KRW market">24h</th>' +
     '<th title="24h traded value on the KRW market, converted to USD">vol</th>' +
-    '<th title="Kimchi premium vs Binance spot. Only shown when CoinGecko confirms both venues list the SAME asset — identical tickers are often different coins, so unverified pairs show a dash instead of a guess.">🇰🇷 prem</th></tr>';
+    '<th title="Kimchi premium: how much more (or less) Korea is paying for the same coin right now. Reference is Binance spot when the two listings are confirmed to be the same asset, otherwise the world average price of the coin with the same full name. If neither check identifies the asset the cell shows a dash — never a guess.">🇰🇷 prem</th></tr>';
   const rows = shown.map(r => {
     const flags = (r.w ? '<span class="up-flag up-warn" title="Upbit has issued an official INVESTMENT WARNING on this market (투자유의). Upbit flags a coin before most delistings and dumps.">WARN</span>' : "") +
       (r.c.length ? '<span class="up-flag up-caut" title="Upbit caution notice: ' + esc(r.c.join(", ").toLowerCase().replace(/_/g, " ")) + '">CAUTION</span>' : "");
     const pTxt = r.prem == null
-      ? '<td class="fd-c" style="color:var(--muted)" title="No CoinGecko-verified Binance pair for this market — a premium here would be a guess, so it is not shown.">—</td>'
-      : '<td class="fd-c" style="color:' + upPremColor(r.prem) + ';font-weight:800" title="' + (r.prem > 0 ? "Korea is paying " + r.prem.toFixed(2) + "% MORE than Binance spot" : "Korea is paying " + Math.abs(r.prem).toFixed(2) + "% LESS than Binance spot") + ' — verified same asset (' + esc(upMeta && upMeta.map ? upMeta.map[r.s] : "") + ' on Binance)">' + (r.prem > 0 ? "+" : "") + r.prem.toFixed(2) + "</td>";
+      ? '<td class="fd-c" style="color:var(--muted)" title="This market could not be matched to the same asset anywhere else — neither by exchange listing nor by full asset name. A premium here would be a guess, so it is not shown.">—</td>'
+      : '<td class="fd-c" style="color:' + upPremColor(r.prem) + ';font-weight:800" title="Korea is paying ' +
+        (r.prem > 0 ? r.prem.toFixed(2) + "% MORE" : Math.abs(r.prem).toFixed(2) + "% LESS") + ' than ' + esc(r.ref) +
+        ' for ' + esc(r.name || r.s) + ' right now — measured price against measured price.">' + (r.prem > 0 ? "+" : "") + r.prem.toFixed(2) + "</td>";
     return '<tr>' +
       '<td class="fd-coin"><a class="up-sym" href="https://upbit.com/exchange?code=CRIX.UPBIT.KRW-' + encodeURIComponent(r.s) + '" target="_blank" rel="noopener" title="' + esc(r.name || r.s) + ' — open on Upbit">' + esc(r.s) + "</a>" + flags + "</td>" +
       '<td class="fd-c" title="₩' + Math.round(r.px).toLocaleString("en-US") + '">' + (r.usd == null ? "—" : fmtPrice(r.usd)) + "</td>" +
@@ -1433,15 +1508,16 @@ function upScanAlerts() {
   if (!panelActive("upbit")) return;
   const now = Date.now();
   upTick.forEach(r => {
-    const p = upPremiumBySym(r.s, r.px);
-    if (p == null) return;
+    const pr = upPrem(r.s);
+    if (!pr || !pr.live) return;   /* only alert on two prices that are both live right now */
+    const p = pr.v;
     const volUsd = upKrwUsdt > 0 ? r.volKrw / upKrwUsdt : 0;
     if (volUsd < 3e6 || Math.abs(p) < 3) return;
     const key = r.s + (p > 0 ? "+" : "-");
     if (now - (upAlSeen[key] || 0) < 6 * 3600_000) return;
     upAlSeen[key] = now;
-    alLog("upbit", "🇰🇷 " + r.s + " " + (p > 0 ? "+" : "") + p.toFixed(2) + "% vs Binance spot — " +
-      (p > 0 ? "Korea bidding above global" : "Korea selling below global") + " (24h vol " + fmtBig(volUsd) + ")");
+    alLog("upbit", "🇰🇷 " + r.s + " " + (p > 0 ? "+" : "") + p.toFixed(2) + "% vs " + pr.ref + " — " +
+      (p > 0 ? "Korea bidding above the rest of the world" : "Korea selling below the rest of the world") + " (24h vol " + fmtBig(volUsd) + ")");
   });
 }
 /* Upbit listings / delistings, diffed by the bot from the live KRW market list — shown in Coin Listings */
@@ -5612,10 +5688,10 @@ async function loadFunding() {
         if (s > 0 && out.rows[c].mark > 0) out.rows[c].basis = (out.rows[c].mark - s) / s * 100;
       });
     } catch (e) {}
-    /* 🇰🇷 kimchi: only when CoinGecko confirms Upbit's KRW market and this Binance contract are the same asset */
+    /* 🇰🇷 kimchi: only when the Upbit market and this contract are confirmed to be the same asset */
     fdCoins().forEach(c => {
       const k = fdKimchi(c);
-      if (k != null) out.rows[c].kim = k;
+      if (k) out.rows[c].kim = k;
     });
     fdData = out;
     renderFunding();
@@ -5624,16 +5700,36 @@ async function loadFunding() {
 /* the funding table is keyed by perp ticker; Upbit is keyed by its own. Bridge them through the
    coin_id-verified map so a row only ever shows a premium when both venues list the SAME asset. */
 function fdKimchi(c) {
-  if (!upMeta || !upMeta.map) return null;
+  if (!upMeta) return null;
   upIndex();
   const names = fdNames(c).concat(c);
+  /* 1) gold path — the bot's coin_id map already ties this Binance contract to an Upbit market */
   for (const n of names) {
     const uSym = upByBin[n];
     if (!uSym) continue;
-    const t = upBySym[uSym];
-    if (t) { const p = upPremiumBySym(uSym, t.px); if (p != null) return p; }
+    const p = upPrem(uSym);
+    if (p) return p;
+  }
+  /* 2) name path — resolve the perp ticker to a coin, then that coin to an Upbit market by full name.
+        The ticker alone is never trusted: the candidate coin's own market price has to agree with the
+        Binance spot price of this contract, which is what rules out same-ticker-different-coin. */
+  const coin = fdCoinFor(c);
+  if (coin) {
+    const s = upSymByCg(coin.id);
+    if (s) { const p = upPrem(s); if (p) return p; }
   }
   return null;
+}
+/* perp ticker -> the CoinGecko coin it actually is, confirmed against Binance's own spot price */
+function fdCoinFor(c) {
+  const want = String(c || "").toLowerCase();
+  const pool = (cgWide && cgWide.length ? cgWide : (typeof priceCoins !== "undefined" ? priceCoins : [])) || [];
+  const hits = pool.filter(x => String(x.symbol || "").toLowerCase() === want);
+  if (hits.length !== 1) return null;            /* ambiguous ticker → refuse rather than pick */
+  const coin = hits[0];
+  const bp = binUnitPrice(c);
+  if (!(bp > 0) || !(coin.current_price > 0)) return null;
+  return Math.abs(coin.current_price / bp - 1) < 0.1 ? coin : null;   /* same asset, or it is not this coin */
 }
 function fdCell(v) {
   if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)">—</td>';
@@ -5642,13 +5738,15 @@ function fdCell(v) {
   const col = pct > 0 ? "208,59,59" : "18,163,58";
   return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + '">' + pct.toFixed(4) + "</td>";
 }
-function kCell(v) {
-  if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)" title="No CoinGecko-verified Upbit KRW market for this contract — a premium here would be a guess, so it is not shown.">—</td>';
-  return '<td class="fd-c" style="color:' + upPremColor(v) + ';font-weight:800" title="Korea is paying ' + (v > 0 ? v.toFixed(2) + "% MORE" : Math.abs(v).toFixed(2) + "% LESS") + ' than Binance spot for this coin right now — measured, not modelled.">' + (v > 0 ? "+" : "") + v.toFixed(2) + "</td>";
+function kCell(k) {
+  const v = k && typeof k === "object" ? k.v : k;
+  if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)" title="This contract could not be tied to an Upbit KRW market of the same asset — a premium here would be a guess, so it is not shown.">—</td>';
+  const ref = k && k.ref ? k.ref : "Binance spot";
+  return '<td class="fd-c" style="color:' + upPremColor(v) + ';font-weight:800" title="Korea is paying ' + (v > 0 ? v.toFixed(2) + "% MORE" : Math.abs(v).toFixed(2) + "% LESS") + ' than ' + esc(ref) + ' for this coin right now — measured, not modelled.">' + (v > 0 ? "+" : "") + v.toFixed(2) + "</td>";
 }
 function renderFunding() {
   const body = $("fdBody"); if (!body || !fdData) return;
-  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th><th title="Kimchi premium — Upbit KRW spot vs Binance spot, converted with Upbit&#39;s own USDT/KRW market. Only shown when CoinGecko confirms both venues list the same asset; otherwise a dash.">🇰🇷</th></tr>';
+  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th><th title="Kimchi premium — Upbit KRW spot vs Binance spot, converted with Upbit&#39;s own USDT/KRW market. Only shown when the Upbit market is confirmed to be the same asset as this contract; otherwise a dash.">🇰🇷</th></tr>';
   const rows = fdCoins().map(c => {
     const r = fdData.rows[c] || {};
     const vals = ["HL", "BIN", "BYB", "OKX"].map(k => r[k]).filter(v => v != null && isFinite(v));

@@ -191,7 +191,9 @@ try {
   try { mir.global = (await jget('https://api.coingecko.com/api/v3/global')).data || null; } catch (e) { console.log('cg mirror global failed', e.message); }
   await new Promise(r => setTimeout(r, 1500));
   try {
-    const mk = await jget('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h');
+    /* 250 instead of 100 — same single request, and the extra 150 names are what lets the dashboard
+       identify mid-cap Upbit markets by full asset name without spending a browser's CoinGecko quota. */
+    const mk = await jget('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&price_change_percentage=24h');
     mir.markets = (Array.isArray(mk) ? mk : []).map(c => ({
       id: c.id, symbol: c.symbol, name: c.name, image: c.image,
       current_price: c.current_price, market_cap: c.market_cap, market_cap_rank: c.market_cap_rank,
@@ -290,18 +292,22 @@ try {
         CoinGecko's free tier 429s after ~2 quick calls from a datacenter IP, so the walk is INCREMENTAL:
         a few pages per run, parked in data/upbit.json, resumed next run. A full rebuild lands in ~1-2h and
         then refreshes daily. Until it lands the previous map stays in force, and coins outside it show "—". */
-  const CG_PER_RUN = 3, CG_GAP = 14000, U_PAGES = 10, B_PAGES = 28;
+  const CG_PER_RUN = 3, CG_GAP = 20000, CG_TRIES = 3, U_PAGES = 10, B_PAGES = 28;
   up.map = prevU.map || {}; up.cgid = prevU.cgid || {}; up.mapT = prevU.mapT || 0;
   let wip = prevU.wip || null;
   if (!wip && (now - up.mapT > 24 * 3600000 || !Object.keys(up.map).length)) wip = { ex: 'upbit', page: 1, u: {}, b: {}, t: now };
   if (wip) {
-    await nap(4000); /* let the CoinGecko mirror above clear the rate-limit window first */
+    await nap(45000); /* the CoinGecko mirror above just spent this IP's quota — wait it out properly */
     for (let done = 0; done < CG_PER_RUN && wip; done++) {
       let r = null;
-      try { r = await fetch('https://api.coingecko.com/api/v3/exchanges/' + wip.ex + '/tickers?page=' + wip.page, { headers: { Accept: 'application/json' } }); }
-      catch (e) { console.log('cg fetch failed', e.message); break; }
-      if (r.status === 429) { console.log('cg 429 — parking the map walk until the next run'); break; }
-      if (!r.ok) { console.log('cg', wip.ex, 'p' + wip.page, 'http', r.status); break; }
+      for (let t = 0; t < CG_TRIES; t++) {   /* a 429 is a "come back later", not a failure — so come back later */
+        try { r = await fetch('https://api.coingecko.com/api/v3/exchanges/' + wip.ex + '/tickers?page=' + wip.page, { headers: { Accept: 'application/json' } }); }
+        catch (e) { console.log('cg fetch failed', e.message); r = null; break; }
+        if (r.status !== 429) break;
+        console.log('cg 429 on', wip.ex, 'p' + wip.page, '— waiting', (CG_GAP * (t + 1) / 1000) + 's');
+        if (t + 1 < CG_TRIES) await nap(CG_GAP * (t + 1));
+      }
+      if (!r || !r.ok) { if (r) console.log('cg', wip.ex, 'p' + wip.page, 'http', r.status, '— parking the walk until the next run'); break; }
       const ts = ((await r.json()) || {}).tickers || [];
       ts.forEach(t => {
         if (!t.coin_id || !t.base) return;
