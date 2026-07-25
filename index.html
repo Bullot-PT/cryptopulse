@@ -586,7 +586,16 @@
   .ac-pm { background: rgba(57,135,229,0.15); color: var(--accent); }
   .ac-whale { background: rgba(250,178,25,0.15); color: var(--warn); }
   .ac-kalshi { background: rgba(18,163,58,0.15); color: var(--up); }
+  .ac-upbit { background: rgba(93,116,255,0.16); color: #8fa2ff; }
   .ac-x { color: var(--ink-2); }
+  /* Upbit (Korea) */
+  .up-badge { font-size: 9px; font-weight: 800; border-radius: 4px; padding: 1px 5px; margin-left: 5px;
+    background: rgba(93,116,255,0.16); color: #8fa2ff; cursor: help; }
+  .up-flag { font-size: 8.5px; font-weight: 800; border-radius: 4px; padding: 1px 5px; margin-left: 5px; cursor: help; }
+  .up-warn { background: rgba(229,72,77,0.18); color: var(--down); }
+  .up-caut { background: rgba(250,178,25,0.16); color: var(--warn); }
+  .up-sym { color: inherit; text-decoration: none; }
+  .up-sym:hover { text-decoration: underline; }
   /* Funding & Basis */
   .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
   .fd-grip { cursor: grab; color: var(--muted); margin-right: 5px; user-select: none; font-size: 10px; }
@@ -630,7 +639,7 @@
     .updated { margin-left: auto; }
     .panel-head { flex-wrap: wrap; row-gap: 4px; }
     .fd-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .fd-table { min-width: 560px; }
+    .fd-table { min-width: 620px; }
   }
   /* ---------- touch polish (any coarse pointer) ---------- */
   @media (pointer: coarse) {
@@ -671,7 +680,7 @@
     </div>
     <div class="grid-stack-item" gs-id="listings">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🪙 Coin Listings <span class="sub">DexScreener · newest tokens</span></div>
+        <div class="panel-head">🪙 Coin Listings <span class="sub">🇰🇷 Upbit KRW + DexScreener newest tokens</span></div>
         <div class="panel-body" id="listingsOuter">
           <div class="scan-bar"><input class="scan-input" id="listingSearch" placeholder="🔎 search new listings…" spellcheck="false"></div>
           <div id="listingsBody"><div class="empty">Loading listings…</div></div>
@@ -711,6 +720,21 @@
         <div class="panel-body" id="kaOuter" style="position:relative">
           <div class="scan-bar"><input class="scan-input" id="kaSearch" placeholder="🔎 search Kalshi markets…" spellcheck="false"></div>
           <div id="kaBody"><div class="empty">Loading Kalshi…</div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="grid-stack-item" gs-id="upbit">
+      <div class="grid-stack-item-content"><div class="panel">
+        <div class="panel-head">🇰🇷 Upbit · Korea <span class="sub" id="upSub">loading…</span>
+          <span style="margin-left:auto;display:inline-flex;gap:4px">
+            <button class="src-btn up-f src-on" data-upf="vol" title="Sort by 24h traded value">volume</button>
+            <button class="src-btn up-f" data-upf="prem" title="Sort by the size of the kimchi premium (biggest gap first)">premium</button>
+            <button class="src-btn up-f" data-upf="chg" title="Sort by 24h price change">24h</button>
+            <button class="src-btn up-f" data-upf="flag" title="Only coins Upbit itself has flagged with a warning or caution notice">⚠ flagged</button>
+          </span></div>
+        <div class="panel-body" id="upOuter">
+          <div class="scan-bar"><input class="scan-input" id="upSearch" placeholder="🔎 search Upbit KRW markets…" spellcheck="false"></div>
+          <div id="upBody"><div class="empty">Loading Upbit…</div></div>
         </div>
       </div></div>
     </div>
@@ -857,6 +881,7 @@
             <button class="src-btn ac-f" data-acf="PM">Polymarket</button>
             <button class="src-btn ac-f" data-acf="KALSHI">Kalshi</button>
             <button class="src-btn ac-f" data-acf="WHALE">Whales</button>
+            <button class="src-btn ac-f" data-acf="UPBIT">🇰🇷 Upbit</button>
           </span></div>
         <div class="panel-body" id="acBody"><div class="empty">No alerts fired yet — everything that fires while the dashboard is open collects here for 24h.</div></div>
       </div></div>
@@ -930,7 +955,8 @@ const DEFAULT_LAYOUT = [
   {id: "cexliq",     x: 6, y: 18, w: 6, h: 8,  minW: 2, minH: 2},
   {id: "alertcenter", x: 0, y: 26, w: 6, h: 5, minW: 2, minH: 2},
   {id: "funding",    x: 6, y: 26, w: 6, h: 5,  minW: 2, minH: 3},
-  {id: "kalshi",     x: 0, y: 31, w: 8, h: 11, minW: 2, minH: 2}
+  {id: "kalshi",     x: 0, y: 31, w: 8, h: 11, minW: 2, minH: 2},
+  {id: "upbit",      x: 8, y: 31, w: 4, h: 11, minW: 2, minH: 2}
 ];
 const layoutStore = {
   _mem: null,
@@ -1004,8 +1030,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 /* ---------------- indicator manager: hover ✕ removes a panel; 🧩 menu re-adds it ---------------- */
 const hiddenStore = {
   key: "cryptopulse-hidden-panels",
-  /* first visit (nothing stored yet): Kalshi starts hidden — cleaner board; it lives in 🧩 Indicators */
-  load() { try { const v = localStorage.getItem(this.key); if (v === null) return ["kalshi"]; return JSON.parse(v) || []; } catch (e) { return ["kalshi"]; } },
+  /* first visit (nothing stored yet): Kalshi and Upbit start hidden — cleaner board; both live in 🧩 Indicators */
+  load() { try { const v = localStorage.getItem(this.key); if (v === null) return ["kalshi", "upbit"]; return JSON.parse(v) || []; } catch (e) { return ["kalshi", "upbit"]; } },
   save(a) { try { localStorage.setItem(this.key, JSON.stringify(a)); } catch (e) {} }
 };
 function panelTitle(id) {
@@ -1232,6 +1258,224 @@ function tvSymbol(sym) {
   const s = String(sym || "").toUpperCase();
   return s === "USDT" ? "USDTUSD" : s + "USDT";
 }
+/* ================= 🇰🇷 Upbit (Korea) — real spot data + identity-verified kimchi premium =================
+   Upbit is a SPOT-ONLY exchange: it has no perpetuals, so there is no funding, no open interest and no
+   liquidation feed to borrow from it. Nothing below is modelled or estimated — every number is either read
+   straight off Upbit's public ticker or computed from two live prices.
+
+   Kimchi premium = (Upbit KRW price ÷ Upbit's own KRW-USDT price) ÷ Binance spot USDT price − 1.
+   The FX leg is Upbit's OWN USDT market, so no external exchange rate is assumed anywhere.
+
+   It is only ever shown for coins whose CoinGecko coin_id is identical on both venues — the map is rebuilt
+   by the repo bot every 6h. This matters: the same ticker is routinely a DIFFERENT asset across exchanges
+   (Upbit's DATA is not Binance's DATA), and naive symbol matching produces premiums in the thousands of
+   percent. Unverified coins show "—" rather than a number nobody can trust. */
+let upMeta = null, upMetaT = 0;                 /* data/upbit.json — official flags, listings, verified maps */
+let upTick = [], upBySym = {}, upTickT = 0, upKrwUsdt = 0;
+let upSort = "vol";
+let upByCg = null, upByBin = null, upIdxT = -1;
+
+async function fetchUpMeta() {
+  try {
+    const j = await fetchJSONraw("data/upbit.json?b=" + Math.floor(Date.now() / 300000), {timeout: 12000});
+    if (j && (j.markets || j.map)) { upMeta = j; upMetaT = Date.now(); upIdxT = -1; }
+  } catch (e) { /* the file appears after the bot's next run */ }
+  return upMeta;
+}
+function upIndex() {
+  if (upIdxT === upMetaT) return;
+  upByCg = {}; upByBin = {};
+  if (upMeta) {
+    Object.entries(upMeta.cgid || {}).forEach(([s, cid]) => { if (!upByCg[cid]) upByCg[cid] = s; });
+    Object.entries(upMeta.map || {}).forEach(([s, b]) => { if (!upByBin[b]) upByBin[b] = s; });
+  }
+  upIdxT = upMetaT;
+}
+/* Binance spot book — one fetch shared by the kimchi premium and by Funding & Basis (60s TTL) */
+let binSpot = null, binSpotT = 0;
+async function getBinSpot() {
+  if (binSpot && Date.now() - binSpotT < 60_000) return binSpot;
+  try {
+    const sp = await fetchJSONraw("https://api.binance.com/api/v3/ticker/price", {timeout: 15000});
+    const m = {};
+    (Array.isArray(sp) ? sp : []).forEach(x => { m[x.symbol] = parseFloat(x.price); });
+    if (Object.keys(m).length) { binSpot = m; binSpotT = Date.now(); }
+  } catch (e) {}
+  return binSpot;
+}
+/* Binance lists some memecoins in packets ("1000CAT", "1MBABYDOGE"); Upbit lists 1 coin.
+   Undo the packet size so the two prices describe the same unit before they are compared. */
+function binUnitPrice(sym) {
+  const p = binSpot && binSpot[sym + "USDT"];
+  if (!(p > 0)) return null;
+  const mult = /^1000000/.test(sym) ? 1e6 : /^1M(?![A-Z]?$)/.test(sym) ? 1e6 : /^1000/.test(sym) ? 1000 : 1;
+  return p / mult;
+}
+/* premium for an Upbit ticker — null unless the pair is coin_id-verified AND both legs are live */
+function upPremiumBySym(sym, krwPx) {
+  if (!upMeta || !upMeta.map || !(upKrwUsdt > 0) || !(krwPx > 0)) return null;
+  const b = upMeta.map[sym];
+  if (!b) return null;
+  const bp = binUnitPrice(b);
+  if (!(bp > 0)) return null;
+  const v = ((krwPx / upKrwUsdt) / bp - 1) * 100;
+  return isFinite(v) ? v : null;
+}
+/* the Prices and Trending panels are CoinGecko-native, so they match by coin_id — exact, never by ticker */
+function upPremiumByCg(cgId) {
+  if (!upMeta || !cgId) return null;
+  upIndex();
+  const s = upByCg[cgId];
+  if (!s) return null;
+  const t = upBySym[s];
+  return t ? upPremiumBySym(s, t.px) : null;
+}
+function upBadge(prem, extra) {
+  if (prem == null) return "";
+  return ' <span class="up-badge" title="Kimchi premium: this coin is ' + (prem >= 0 ? "more expensive" : "cheaper") +
+    ' on Upbit (Korea) than on Binance spot. Computed live from the KRW price and Upbit&#39;s own USDT/KRW market — same CoinGecko asset on both sides.' +
+    (extra || "") + '">🇰🇷 ' + (prem > 0 ? "+" : "") + prem.toFixed(2) + "%</span>";
+}
+function upPremColor(p) {
+  if (p == null) return "var(--muted)";
+  if (p >= 2) return "var(--up)";
+  if (p <= -2) return "var(--down)";
+  if (Math.abs(p) >= 0.7) return "var(--warn)";
+  return "var(--ink-2)";
+}
+async function loadUpbit() {
+  const body = $("upBody");
+  if (!upMeta || Date.now() - upMetaT > 300_000) await fetchUpMeta();
+  await getBinSpot();
+  try {
+    const j = await fetchJSONraw("https://api.upbit.com/v1/ticker/all?quoteCurrencies=KRW", {timeout: 20000});
+    if (!Array.isArray(j) || !j.length) throw new Error("empty");
+    const rows = [];
+    j.forEach(x => {
+      const mk = x.market || "";
+      if (!mk.startsWith("KRW-") || !(x.trade_price > 0)) return;
+      rows.push({s: mk.slice(4), px: x.trade_price, chg: (x.signed_change_rate || 0) * 100,
+        volKrw: x.acc_trade_price_24h || 0, hi52: x.highest_52_week_price, lo52: x.lowest_52_week_price});
+    });
+    if (!rows.length) throw new Error("no KRW markets");
+    upTick = rows;
+    upBySym = {}; rows.forEach(r => { upBySym[r.s] = r; });
+    if (upBySym.USDT && upBySym.USDT.px > 0) upKrwUsdt = upBySym.USDT.px; /* the FX leg — Upbit's own market */
+    upTickT = Date.now();
+    renderUpbit();
+    upScanAlerts();
+    if (priceCoins.length) renderPriceRows();     /* the 🇰🇷 badges appear as soon as the data lands */
+    if (typeof fdData !== "undefined" && fdData) renderFunding();
+    renderListingRows();
+  } catch (e) {
+    if (body && !body.querySelector("tr")) {
+      if (upTick.length) renderUpbit();
+      else setError(body, "Upbit's public API isn't answering right now — retrying automatically.");
+    }
+  }
+}
+function renderUpbit() {
+  const body = $("upBody"); if (!body) return;
+  if (!upTick.length) return;
+  const q = (($("upSearch") || {}).value || "").trim().toUpperCase();
+  const meta = {};
+  ((upMeta && upMeta.markets) || []).forEach(m => { meta[m.s] = m; });
+  let list = upTick.map(r => {
+    const m = meta[r.s] || {};
+    return {s: r.s, px: r.px, chg: r.chg, volKrw: r.volKrw, name: m.n || "", w: !!m.w, c: m.c || [],
+      prem: upPremiumBySym(r.s, r.px), usd: upKrwUsdt > 0 ? r.px / upKrwUsdt : null,
+      volUsd: upKrwUsdt > 0 ? r.volKrw / upKrwUsdt : null};
+  });
+  if (q) list = list.filter(r => (r.s + " " + r.name).toUpperCase().includes(q));
+  if (upSort === "flag") list = list.filter(r => r.w || r.c.length);
+  const abs = v => (v == null ? -1 : Math.abs(v));
+  list.sort(upSort === "prem" ? (a, b) => abs(b.prem) - abs(a.prem)
+          : upSort === "chg"  ? (a, b) => b.chg - a.chg
+          : (a, b) => b.volKrw - a.volKrw);
+  const shown = list.slice(0, q ? 50 : 30);
+  const verified = upTick.filter(r => upPremiumBySym(r.s, r.px) != null).length;
+  const flagged = Object.values(meta).filter(m => m.w || (m.c || []).length).length;
+  const sub = $("upSub");
+  if (sub) sub.textContent = upTick.length + " KRW markets" +
+    (upKrwUsdt > 0 ? " · USDT ₩" + Math.round(upKrwUsdt).toLocaleString("en-US") : "") +
+    " · " + verified + " premium-verified" + (flagged ? " · " + flagged + " flagged" : "") +
+    " · " + timeAgo(upTickT);
+  if (!shown.length) {
+    body.innerHTML = '<div class="empty">' + (upSort === "flag"
+      ? "Upbit has no warning or caution flags on any KRW market right now."
+      : "No Upbit KRW market matching “" + esc(q) + "”.") + "</div>";
+    return;
+  }
+  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th>' +
+    '<th title="Upbit KRW price converted to USD with Upbit&#39;s own USDT/KRW market — no external FX rate">price</th>' +
+    '<th title="Upbit&#39;s own 24h change on the KRW market">24h</th>' +
+    '<th title="24h traded value on the KRW market, converted to USD">vol</th>' +
+    '<th title="Kimchi premium vs Binance spot. Only shown when CoinGecko confirms both venues list the SAME asset — identical tickers are often different coins, so unverified pairs show a dash instead of a guess.">🇰🇷 prem</th></tr>';
+  const rows = shown.map(r => {
+    const flags = (r.w ? '<span class="up-flag up-warn" title="Upbit has issued an official INVESTMENT WARNING on this market (투자유의). Upbit flags a coin before most delistings and dumps.">WARN</span>' : "") +
+      (r.c.length ? '<span class="up-flag up-caut" title="Upbit caution notice: ' + esc(r.c.join(", ").toLowerCase().replace(/_/g, " ")) + '">CAUTION</span>' : "");
+    const pTxt = r.prem == null
+      ? '<td class="fd-c" style="color:var(--muted)" title="No CoinGecko-verified Binance pair for this market — a premium here would be a guess, so it is not shown.">—</td>'
+      : '<td class="fd-c" style="color:' + upPremColor(r.prem) + ';font-weight:800" title="' + (r.prem > 0 ? "Korea is paying " + r.prem.toFixed(2) + "% MORE than Binance spot" : "Korea is paying " + Math.abs(r.prem).toFixed(2) + "% LESS than Binance spot") + ' — verified same asset (' + esc(upMeta && upMeta.map ? upMeta.map[r.s] : "") + ' on Binance)">' + (r.prem > 0 ? "+" : "") + r.prem.toFixed(2) + "</td>";
+    return '<tr>' +
+      '<td class="fd-coin"><a class="up-sym" href="https://upbit.com/exchange?code=CRIX.UPBIT.KRW-' + encodeURIComponent(r.s) + '" target="_blank" rel="noopener" title="' + esc(r.name || r.s) + ' — open on Upbit">' + esc(r.s) + "</a>" + flags + "</td>" +
+      '<td class="fd-c" title="₩' + Math.round(r.px).toLocaleString("en-US") + '">' + (r.usd == null ? "—" : fmtPrice(r.usd)) + "</td>" +
+      '<td class="fd-c" style="color:' + (r.chg >= 0 ? "var(--up)" : "var(--down)") + '">' + (r.chg > 0 ? "+" : "") + r.chg.toFixed(2) + "%</td>" +
+      '<td class="fd-c">' + (r.volUsd == null ? "—" : fmtBig(r.volUsd)) + "</td>" +
+      pTxt + "</tr>";
+  }).join("");
+  body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
+}
+/* browser-side alerts: a big, VERIFIED price gap between Korea and Binance on a liquid market.
+   Thresholds apply to measured prices only — nothing here is projected. */
+const upAlSeen = {};
+function upScanAlerts() {
+  if (!panelActive("upbit")) return;
+  const now = Date.now();
+  upTick.forEach(r => {
+    const p = upPremiumBySym(r.s, r.px);
+    if (p == null) return;
+    const volUsd = upKrwUsdt > 0 ? r.volKrw / upKrwUsdt : 0;
+    if (volUsd < 3e6 || Math.abs(p) < 3) return;
+    const key = r.s + (p > 0 ? "+" : "-");
+    if (now - (upAlSeen[key] || 0) < 6 * 3600_000) return;
+    upAlSeen[key] = now;
+    alLog("upbit", "🇰🇷 " + r.s + " " + (p > 0 ? "+" : "") + p.toFixed(2) + "% vs Binance spot — " +
+      (p > 0 ? "Korea bidding above global" : "Korea selling below global") + " (24h vol " + fmtBig(volUsd) + ")");
+  });
+}
+/* Upbit listings / delistings, diffed by the bot from the live KRW market list — shown in Coin Listings */
+function upListingRows() {
+  if (!upMeta || !Array.isArray(upMeta.recent) || !upMeta.recent.length) return [];
+  return upMeta.recent.slice().sort((a, b) => b.t - a.t).slice(0, 10).map(r => {
+    const t = upBySym[r.s];
+    const usd = t && upKrwUsdt > 0 ? t.px / upKrwUsdt : null;
+    const del = r.k === "del";
+    return {t: r.s + " upbit korea krw " + (del ? "delisting removed" : "listing new"),
+      h: '<a class="listing-row" href="https://upbit.com/exchange?code=CRIX.UPBIT.KRW-' + encodeURIComponent(r.s) +
+        '" target="_blank" rel="noopener" title="Detected by comparing Upbit&#39;s live KRW market list against the previous run — not an announcement scrape.">' +
+        '<div class="coin-icon fallback">🇰🇷</div>' +
+        '<div class="coin-name"><div class="n">' + esc(r.s) + ' <span class="chain-badge">' + (del ? "Upbit delisted" : "Upbit listing") + "</span></div>" +
+        '<div class="s" style="text-transform:none">Upbit KRW market · ' + timeAgo(r.t) + "</div></div>" +
+        '<div class="price-val">' + (usd ? '<div class="p">' + fmtPrice(usd) + "</div>" : "") + (t ? chgSpan(t.chg) : "") + "</div></a>"};
+  });
+}
+document.querySelectorAll(".up-f").forEach(b => {
+  b.addEventListener("mousedown", e => e.stopPropagation());
+  b.addEventListener("click", e => {
+    e.preventDefault(); e.stopPropagation();
+    upSort = b.dataset.upf;
+    document.querySelectorAll(".up-f").forEach(x => x.classList.toggle("src-on", x.dataset.upf === upSort));
+    renderUpbit();
+  });
+});
+(() => {
+  const i = $("upSearch");
+  if (!i) return;
+  ["mousedown", "click", "pointerdown"].forEach(ev => i.addEventListener(ev, e => e.stopPropagation()));
+  i.addEventListener("input", renderUpbit);
+})();
+
 let priceCoins = [];
 async function loadPrices() {
   const body = $("pricesBody");
@@ -1286,7 +1530,8 @@ function renderPriceRows() {
       '<span class="rank">' + (i + 1) + "</span>" +
       '<img class="coin-icon" src="' + esc(c.image) + '" alt="" loading="lazy" ' +
         "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
-      '<div class="coin-name"><div class="n">' + esc(c.name) + '</div><div class="s">' + esc(c.symbol) + "</div></div>" +
+      '<div class="coin-name"><div class="n">' + esc(c.name) + '</div><div class="s">' + esc(c.symbol) +
+        upBadge(upPremiumByCg(c.id)) + "</div></div>" +
       spark +
       '<div class="price-val"><div class="p">' + fmtPrice(c.current_price) + "</div>" + chgSpan(chg) + "</div>" +
     "</a>";
@@ -1474,7 +1719,8 @@ let listingRows = [];
 function renderListingRows() {
   const body = $("listingsBody");
   const q = ($("listingSearch").value || "").trim().toUpperCase();
-  const list = q ? listingRows.filter(r => r.t.toUpperCase().includes(q)) : listingRows;
+  const all = upListingRows().concat(listingRows); /* 🇰🇷 Upbit KRW listings/delistings first — they move price hardest */
+  const list = q ? all.filter(r => r.t.toUpperCase().includes(q)) : all;
   body.innerHTML = list.length ? list.map(r => r.h).join("") :
     '<div class="empty">No listing matching “' + esc(q) + "”.</div>";
 }
@@ -2785,7 +3031,7 @@ function renderTrending(items, cachedAt) {
           "onerror=\"this.outerHTML='<div class=&quot;coin-icon fallback&quot;>" + esc((c.symbol||"?")[0].toUpperCase()) + "</div>'\">" +
         '<div class="coin-name"><div class="n">' + esc(c.name) +
           '<span class="dest-badge">TradingView</span></div><div class="s">' + esc(c.symbol) +
-          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + "</div>" +
+          (c.market_cap_rank ? " · #" + c.market_cap_rank : "") + upBadge(upPremiumByCg(c.id)) + "</div>" +
           '<div class="trend-reason">' + trendReason(c, i + 1) + "</div></div>" +
         '<div class="price-val">' +
           (typeof price === "number" ? '<div class="p">' + fmtPrice(price) + "</div>" : "") +
@@ -5248,7 +5494,8 @@ const alStore = {
 };
 let acFilter = "ALL";
 /* alerts follow the layout: a hidden indicator does not log, chime or fill the Alert Center */
-const AC_SRC_PANEL = {radar: "radar", pm: "polymarket", kalshi: "kalshi", whale: "cexliq"};
+const AC_SRC_PANEL = {radar: "radar", pm: "polymarket", kalshi: "kalshi", whale: "cexliq", upbit: "upbit"};
+const AC_LABEL = {radar: "RADAR", pm: "POLYMARKET", kalshi: "KALSHI", whale: "WHALE", upbit: "🇰🇷 UPBIT"};
 function panelActive(id) { return !hiddenStore.load().includes(id); }
 function alLog(kind, txt) {
   if (AC_SRC_PANEL[kind] && !panelActive(AC_SRC_PANEL[kind])) return; /* source panel is hidden */
@@ -5266,7 +5513,7 @@ async function fetchBotAlLog() {
 }
 function renderAC() {
   const body = $("acBody"); if (!body) return;
-  const map = {RADAR: "radar", PM: "pm", KALSHI: "kalshi", WHALE: "whale"};
+  const map = {RADAR: "radar", PM: "pm", KALSHI: "kalshi", WHALE: "whale", UPBIT: "upbit"};
   const bots = (botAlLog.entries || []).map(e => ({t: e.t, k: e.k, x: e.x, bot: true}));
   const hidden = new Set(hiddenStore.load());
   const a = alStore.load().concat(bots)
@@ -5280,7 +5527,7 @@ function renderAC() {
   }
   body.innerHTML = a.slice(0, 120).map(e =>
     '<div class="ac-row"><span class="when">' + new Date(e.t).toLocaleTimeString("en-GB") + "</span>" +
-    '<span class="ac-k ac-' + e.k + '" title="' + (e.bot ? "caught by the 24/7 bot (works with your PC off)" : "caught by this browser") + '">' + (e.bot ? "🤖 " : "") + (e.k === "radar" ? "RADAR" : e.k === "pm" ? "POLYMARKET" : e.k === "kalshi" ? "KALSHI" : "WHALE") + "</span>" +
+    '<span class="ac-k ac-' + e.k + '" title="' + (e.bot ? "caught by the 24/7 bot (works with your PC off)" : "caught by this browser") + '">' + (e.bot ? "🤖 " : "") + (AC_LABEL[e.k] || String(e.k || "").toUpperCase()) + "</span>" +
     '<span class="ac-x">' + esc(e.x) + "</span></div>").join("");
 }
 document.querySelectorAll(".ac-f").forEach(b => {
@@ -5358,18 +5605,35 @@ async function loadFunding() {
       }
       await new Promise(r => setTimeout(r, 120));
     }
-    try { /* basis: HL perp mark vs Binance SPOT */
-      const sp = await fetchJSONraw("https://api.binance.com/api/v3/ticker/price", {timeout: 15000});
-      const m = {};
-      (Array.isArray(sp) ? sp : []).forEach(x => { m[x.symbol] = parseFloat(x.price); });
+    try { /* basis: HL perp mark vs Binance SPOT (same book the kimchi premium uses) */
+      const m = await getBinSpot();
       fdCoins().forEach(c => {
-        const s = m[c + "USDT"];
+        const s = m && m[c + "USDT"];
         if (s > 0 && out.rows[c].mark > 0) out.rows[c].basis = (out.rows[c].mark - s) / s * 100;
       });
     } catch (e) {}
+    /* 🇰🇷 kimchi: only when CoinGecko confirms Upbit's KRW market and this Binance contract are the same asset */
+    fdCoins().forEach(c => {
+      const k = fdKimchi(c);
+      if (k != null) out.rows[c].kim = k;
+    });
     fdData = out;
     renderFunding();
   } catch (e) {}
+}
+/* the funding table is keyed by perp ticker; Upbit is keyed by its own. Bridge them through the
+   coin_id-verified map so a row only ever shows a premium when both venues list the SAME asset. */
+function fdKimchi(c) {
+  if (!upMeta || !upMeta.map) return null;
+  upIndex();
+  const names = fdNames(c).concat(c);
+  for (const n of names) {
+    const uSym = upByBin[n];
+    if (!uSym) continue;
+    const t = upBySym[uSym];
+    if (t) { const p = upPremiumBySym(uSym, t.px); if (p != null) return p; }
+  }
+  return null;
 }
 function fdCell(v) {
   if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)">—</td>';
@@ -5378,9 +5642,13 @@ function fdCell(v) {
   const col = pct > 0 ? "208,59,59" : "18,163,58";
   return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + '">' + pct.toFixed(4) + "</td>";
 }
+function kCell(v) {
+  if (v == null || !isFinite(v)) return '<td class="fd-c" style="color:var(--muted)" title="No CoinGecko-verified Upbit KRW market for this contract — a premium here would be a guess, so it is not shown.">—</td>';
+  return '<td class="fd-c" style="color:' + upPremColor(v) + ';font-weight:800" title="Korea is paying ' + (v > 0 ? v.toFixed(2) + "% MORE" : Math.abs(v).toFixed(2) + "% LESS") + ' than Binance spot for this coin right now — measured, not modelled.">' + (v > 0 ? "+" : "") + v.toFixed(2) + "</td>";
+}
 function renderFunding() {
   const body = $("fdBody"); if (!body || !fdData) return;
-  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th></tr>';
+  const head = '<tr><th style="text-align:left;padding-left:14px">coin</th><th title="Hyperliquid — native hourly rate">HL</th><th title="Binance USD-M — 8h rate ÷ 8">BIN</th><th title="Bybit linear — 8h ÷ 8">BYB</th><th title="OKX swap — 8h ÷ 8">OKX</th><th title="Biggest divergence across exchanges — amber ≥0.002%/h = cross-exchange squeeze fuel">Δ</th><th title="HL perp mark vs Binance spot — premium (red) = longs crowded, discount (green) = shorts crowded">basis</th><th title="Kimchi premium — Upbit KRW spot vs Binance spot, converted with Upbit&#39;s own USDT/KRW market. Only shown when CoinGecko confirms both venues list the same asset; otherwise a dash.">🇰🇷</th></tr>';
   const rows = fdCoins().map(c => {
     const r = fdData.rows[c] || {};
     const vals = ["HL", "BIN", "BYB", "OKX"].map(k => r[k]).filter(v => v != null && isFinite(v));
@@ -5391,7 +5659,7 @@ function renderFunding() {
     const bCell = b == null ? '<td class="fd-c" style="color:var(--muted)">—</td>'
       : '<td class="fd-c" style="color:' + (b > 0.05 ? "var(--down)" : b < -0.05 ? "var(--up)" : "var(--ink-2)") + ';font-weight:700">' + (b > 0 ? "+" : "") + b.toFixed(3) + "%</td>";
     return '<tr draggable="true" data-fdc="' + c + '" title="Drag to reorder the table — the order is saved">' +
-      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + ' <button class="bet-x fd-rm" data-fdrm="' + c + '" title="Remove this token from the table (add it back with the ➕ bar)" style="padding:0 4px;font-size:10px">✕</button></td>' + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + "</tr>";
+      '<td class="fd-coin"><span class="fd-grip">⠿</span>' + c + ' <button class="bet-x fd-rm" data-fdrm="' + c + '" title="Remove this token from the table (add it back with the ➕ bar)" style="padding:0 4px;font-size:10px">✕</button></td>' + fdCell(r.HL) + fdCell(r.BIN) + fdCell(r.BYB) + fdCell(r.OKX) + dCell + bCell + kCell(r.kim) + "</tr>";
   }).join("");
   body.innerHTML = '<div class="fd-scroll"><table class="fd-table">' + head + rows + "</table></div>";
 }
@@ -5466,9 +5734,10 @@ every(loadFng,      900_000, 900_000);  /* every 15 min */
 every(loadPolymarket, 60_000, 62_000); /* every 60s — keep watching for big bets */
 every(loadKalshiPanel, 300_000, 305_000); /* every 5 min — the bot mirror itself only changes ~10-min */
 every(fetchBotAlLog, 300_000, 9_000); /* bot's 24/7 alert log for the Alert Center */
+setTimeout(loadUpbit, 2_000); every(loadUpbit, 90_000, 92_000); /* 🇰🇷 Upbit KRW spot + verified kimchi premium */
 /* when the tab regains focus, re-check immediately (browsers throttle timers in background tabs) */
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); }
+  if (!document.hidden) { loadPolymarket(); loadKalshiPanel(); loadPrices(); loadHyperliquid(); loadUpbit(); }
 });
 every(loadSEC,      600_000, 610_000);  /* every 10 min */
 every(evalCustomRules, 5_000, 9_000);   /* check custom alert rules every 5s */

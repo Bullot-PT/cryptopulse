@@ -262,9 +262,18 @@ try {
     });
   }
 
-  /* 3) listing announcements (no CORS from a server) */
+  /* 3) listing announcements. Upbit's api-manager answered 403 to the plain bot UA, so this asks the way a
+        Korean browser would; if it still refuses, the listing DIFF above is the real source anyway. */
   try {
-    const r = await fetch('https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade', { headers: UH });
+    const r = await fetch('https://api-manager.upbit.com/api/v1/announcements?os=web&page=1&per_page=20&category=trade', {
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+        'Referer': 'https://upbit.com/service_center/notice',
+        'Origin': 'https://upbit.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+      }
+    });
     if (r.ok) {
       const j = await r.json();
       const list = (j.data && (j.data.notices || j.data.list)) || (Array.isArray(j.data) ? j.data : []) || [];
@@ -274,36 +283,47 @@ try {
   } catch (e) { console.log('upbit notices failed', e.message); }
   if (!up.notices && prevU.notices) up.notices = prevU.notices;
 
-  /* 4) verified identity map (rebuilt every 6h; the previous one is kept in between) */
-  if (now - (prevU.mapT || 0) > 6 * 3600000) {
-    try {
-      const pull = async (ex, quote, cap) => {
-        const m = {};
-        for (let p = 1; p <= cap; p++) {
-          const r = await fetch('https://api.coingecko.com/api/v3/exchanges/' + ex + '/tickers?page=' + p, { headers: { Accept: 'application/json' } });
-          if (!r.ok) { console.log('cg', ex, 'p' + p, 'http', r.status); break; }
-          const j = await r.json();
-          const ts = j.tickers || [];
-          ts.forEach(t => {
-            if (t.target !== quote || !t.coin_id || !t.base) return;
-            if (ex === 'upbit') m[t.base] = t.coin_id;
-            else if (!m[t.coin_id]) m[t.coin_id] = t.base;
-          });
-          if (ts.length < 100) break;
-          await nap(2600);
-        }
-        return m;
-      };
-      const uMap = await pull('upbit', 'KRW', 6);
-      await nap(2600);
-      const bMap = await pull('binance', 'USDT', 18);
-      const pair = {};
-      Object.entries(uMap).forEach(([sym, cid]) => { if (bMap[cid]) pair[sym] = bMap[cid]; });
-      if (Object.keys(pair).length >= 40) { up.map = pair; up.mapT = now; }
-      else { console.log('upbit map too small:', Object.keys(pair).length, '— keeping previous'); up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
-      console.log('upbit map:', Object.keys(uMap).length, 'KRW coin_ids,', Object.keys(bMap).length, 'binance coin_ids →', Object.keys(up.map || {}).length, 'verified pairs');
-    } catch (e) { console.log('upbit map failed', e.message); up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
-  } else { up.map = prevU.map || {}; up.mapT = prevU.mapT || 0; }
+  /* 4) the verified identity map — the whole reason the kimchi premium can be trusted.
+        Upbit ticker -> CoinGecko coin_id -> Binance ticker. Only pairs that survive that round trip are the
+        SAME asset; matching on the ticker alone gives nonsense (Upbit DATA vs Binance DATA differ by 30000%).
+
+        CoinGecko's free tier 429s after ~2 quick calls from a datacenter IP, so the walk is INCREMENTAL:
+        a few pages per run, parked in data/upbit.json, resumed next run. A full rebuild lands in ~1-2h and
+        then refreshes daily. Until it lands the previous map stays in force, and coins outside it show "—". */
+  const CG_PER_RUN = 3, CG_GAP = 14000, U_PAGES = 10, B_PAGES = 28;
+  up.map = prevU.map || {}; up.cgid = prevU.cgid || {}; up.mapT = prevU.mapT || 0;
+  let wip = prevU.wip || null;
+  if (!wip && (now - up.mapT > 24 * 3600000 || !Object.keys(up.map).length)) wip = { ex: 'upbit', page: 1, u: {}, b: {}, t: now };
+  if (wip) {
+    await nap(4000); /* let the CoinGecko mirror above clear the rate-limit window first */
+    for (let done = 0; done < CG_PER_RUN && wip; done++) {
+      let r = null;
+      try { r = await fetch('https://api.coingecko.com/api/v3/exchanges/' + wip.ex + '/tickers?page=' + wip.page, { headers: { Accept: 'application/json' } }); }
+      catch (e) { console.log('cg fetch failed', e.message); break; }
+      if (r.status === 429) { console.log('cg 429 — parking the map walk until the next run'); break; }
+      if (!r.ok) { console.log('cg', wip.ex, 'p' + wip.page, 'http', r.status); break; }
+      const ts = ((await r.json()) || {}).tickers || [];
+      ts.forEach(t => {
+        if (!t.coin_id || !t.base) return;
+        if (wip.ex === 'upbit') { if (t.target === 'KRW') wip.u[t.base] = t.coin_id; }
+        else if (t.target === 'USDT' && !wip.b[t.coin_id]) wip.b[t.coin_id] = t.base;
+      });
+      const last = ts.length < 100 || wip.page >= (wip.ex === 'upbit' ? U_PAGES : B_PAGES);
+      if (!last) wip.page++;
+      else if (wip.ex === 'upbit') { wip.ex = 'binance'; wip.page = 1; }
+      else {
+        const pair = {};
+        Object.entries(wip.u).forEach(([sym, cid]) => { if (wip.b[cid]) pair[sym] = wip.b[cid]; });
+        if (Object.keys(pair).length >= 40) {
+          up.map = pair; up.cgid = wip.u; up.mapT = now;
+          console.log('upbit map REBUILT:', Object.keys(wip.u).length, 'KRW coin_ids,', Object.keys(wip.b).length, 'binance coin_ids →', Object.keys(pair).length, 'verified pairs');
+        } else console.log('upbit map too small:', Object.keys(pair).length, '— keeping the previous one');
+        wip = null;
+      }
+      if (wip && done + 1 < CG_PER_RUN) await nap(CG_GAP);
+    }
+  }
+  if (wip) { up.wip = wip; console.log('upbit map walk:', wip.ex, 'page', wip.page, '·', Object.keys(wip.u).length, 'KRW /', Object.keys(wip.b).length, 'binance so far'); }
 
   if ((up.markets || []).length || Object.keys(up.map || {}).length) {
     fs.writeFileSync('data/upbit.json', JSON.stringify(up));
