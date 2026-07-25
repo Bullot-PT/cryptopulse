@@ -482,6 +482,18 @@ try {
   }
   const book = {}; // coin -> {px, step, bins:{binIdx:[sellFuelUsd, buyFuelUsd]}}
   let scanned = 0, positions = 0;
+  /* ---- position index: every position >= $250k, grouped by coin ----
+     Rides along on the SAME clearinghouseState responses the liq-book already pulls, so it costs
+     zero extra API calls. This is what lets the site answer "which positions are open in PUMP right
+     now" for ANY coin, instead of only the ~119 wallets the browser can scan by itself.
+     Addresses are stored once in a dictionary and referenced by index, so the file stays small. */
+  const POS_MIN = 250000, POS_PER_COIN = 60;
+  const posIdx = {}, addrDict = [], addrPos = new Map();
+  const addrRef = a => {
+    let k = addrPos.get(a);
+    if (k === undefined) { k = addrDict.length; addrDict.push(a); addrPos.set(a, k); }
+    return k;
+  };
   for (let i = 0; i < wallets.length; i += 15) {
     const chunk = await Promise.allSettled(wallets.slice(i, i + 15).map((r, ci) =>
       (i + ci < 1200
@@ -490,15 +502,29 @@ try {
             post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress, dex: 'xyz' }).catch(() => null)
           ]).then(([s, sx]) => (sx && (sx.assetPositions || []).length
             ? { ...s, assetPositions: (s.assetPositions || []).concat(sx.assetPositions) } : s))
-        : post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }))));
+        : post('https://api.hyperliquid.xyz/info', { type: 'clearinghouseState', user: r.ethAddress }))
+      .then(s => (s && typeof s === 'object' ? { ...s, __addr: r.ethAddress } : s))));
     chunk.forEach(c => {
       if (c.status !== 'fulfilled' || !c.value) return;
       scanned++;
+      const wAddr = (c.value.__addr) || '';
       (c.value.assetPositions || []).forEach(ap => {
         const p = ap.position;
         const v = Math.abs(parseFloat(p.positionValue));
         const liq = parseFloat(p.liquidationPx);
         const px = parseFloat(MIDS[p.coin]);
+        /* index first — the liq-book's sanity filters below must not drop rows from the search index */
+        if (v >= POS_MIN && wAddr) {
+          const szi = parseFloat(p.szi) || 0;
+          (posIdx[p.coin] || (posIdx[p.coin] = [])).push([
+            addrRef(wAddr),
+            szi >= 0 ? Math.round(v) : -Math.round(v),
+            +(parseFloat(p.entryPx) || 0).toPrecision(6),
+            liq > 0 ? +liq.toPrecision(6) : 0,
+            Math.round((p.leverage && p.leverage.value) || 0),
+            Math.round(parseFloat(p.unrealizedPnl) || 0)
+          ]);
+        }
         if (!(v >= 10000) || !(liq > 0) || !(px > 0)) return;
         if (liq < px * 0.3 || liq > px * 3) return; // sanity band
         const co = book[p.coin] || (book[p.coin] = { px, step: px * 0.005, bins: {} });
@@ -515,6 +541,50 @@ try {
   });
   fs.writeFileSync('data/liq-book.json', JSON.stringify({ t: now, wallets: scanned, positions, coins: book }));
   console.log('liq-book:', scanned, 'wallets,', positions, 'positions,', Object.keys(book).length, 'coins');
+
+  /* ---- publish the position index ----
+     Coverage is stated as a MEASURED fact, never an estimate: for each coin we divide the notional we
+     actually indexed by the real open interest from metaAndAssetCtxs. Sum of |positions| counts both
+     sides of every contract, so it is halved before comparing against OI. A coin we indexed nothing
+     for reports 0% — it is never padded or guessed. */
+  try {
+    const usedAddr = new Set();
+    const outCoins = {};
+    Object.entries(posIdx).forEach(([coin, rows]) => {
+      rows.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+      const keep = rows.slice(0, POS_PER_COIN);
+      keep.forEach(r => usedAddr.add(r[0]));
+      /* indexed notional uses EVERY position found for the coin, not just the kept ones, so the
+         coverage number stays true even where the per-coin cap trims the tail */
+      const full = rows.reduce((s, r) => s + Math.abs(r[1]), 0);
+      const oiUsd = coins[coin] || 0;
+      outCoins[coin] = {
+        n: rows.length,
+        idx: Math.round(full),
+        cov: oiUsd > 0 ? Math.min(100, Math.round(100 * (full / 2) / oiUsd)) : null,
+        rows: keep
+      };
+    });
+    /* re-pack the dictionary down to only the addresses actually referenced */
+    const remap = new Map(); const dict = [];
+    [...usedAddr].forEach(k => { remap.set(k, dict.length); dict.push(addrDict[k]); });
+    Object.values(outCoins).forEach(c => c.rows.forEach(r => { r[0] = remap.get(r[0]); }));
+    const totIdx = Object.values(outCoins).reduce((s, c) => s + c.idx, 0) / 2;
+    const totOi = Object.values(coins).reduce((s, v) => s + v, 0);
+    const out = {
+      t: now,
+      wallets: scanned,
+      min: POS_MIN,
+      cap: POS_PER_COIN,
+      cov: totOi > 0 ? Math.min(100, Math.round(100 * totIdx / totOi)) : null,
+      addrs: dict,
+      coins: outCoins
+    };
+    fs.mkdirSync('data', { recursive: true });
+    fs.writeFileSync('data/hl-pos.json', JSON.stringify(out));
+    console.log('hl-pos:', Object.keys(outCoins).length, 'coins,', dict.length, 'addresses, coverage',
+      out.cov + '% of OI,', Math.round(fs.statSync('data/hl-pos.json').size / 1024) + 'KB');
+  } catch (e) { console.log('hl-pos failed', e.message); }
 } catch (e) { console.log('liq-book failed', e.message); }
 
 // ---------------- dYdX v4: FULL on-chain book (EVERY subaccount, ~26 pages) ----------------
