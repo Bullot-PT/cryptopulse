@@ -456,9 +456,10 @@
   /* quem é a carteira, segundo a Nansen. Cinzento para as categorias, a sério para os nomes. */
   .ns-name {
     font-size: 11px; color: var(--text); font-weight: 600; cursor: help;
-    /* flex:1 1 auto + min-width:0 é o que impede o irmão do lado de o esmagar até 0 px, que foi
-       exactamente o que aconteceu à primeira: num painel de 182 px o elemento novo desaparecia. */
-    flex: 1 1 auto; min-width: 0;
+    /* flex-shrink 0 e não 1: a .wrow-line já estava em défice antes de o nome entrar, e com
+       shrink=1 o défice inteiro caía neste elemento — 0 px. O max-width é que trava um nome
+       comprido; o endereço que estava aqui ocupava 66 px. */
+    flex: 0 0 auto; max-width: 92px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .ns-name.ns-gen { color: var(--muted); font-weight: 400; }
