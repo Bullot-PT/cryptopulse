@@ -14,11 +14,11 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "probe (valida a chave), sweep (intensivo, uma vez) ou daily"
+        description: "probe (valida a chave), premium-test (mede o custo dos nomes proprios), sweep (intensivo, uma vez) ou daily"
         required: true
         default: probe
         type: choice
-        options: [probe, sweep, daily]
+        options: [probe, premium-test, sweep, daily]
   schedule:
     # 04:10 UTC — fora das horas de maior movimento, e desencontrado dos outros coletores para
     # não haver dois pushes para o main ao mesmo segundo.
