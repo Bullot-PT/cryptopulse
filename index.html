@@ -2646,6 +2646,7 @@ async function loadWhales() {
       return b.value - a.value;
     });
     $("whalesSub").textContent = "on-chain · " + found.length + " positions ≥ $5M · " + candidates.length + " wallets scanned" + (hlLb.src === "bot" ? " · wallet list via bot " + timeAgo(hlLb.botT) : "");
+    hlPosHealth();
     if (!found.length) {
       body.innerHTML = '<div id="watchBox"></div><div class="empty">No open positions ≥ $5M among scanned wallets right now.</div>';
       renderWatchlist(); return;
@@ -2826,6 +2827,18 @@ async function getHlPos() {
   return hlPos.inflight;
 }
 /* turn the packed index into the same row shape renderWhaleRows() already speaks */
+/* Watchdog. The collector can only tell you it is alive while it is alive — if it stops, its own logs stop
+   with it. So the check lives here, on the page: the index carries the moment it was written, and if that
+   moment drifts past 20 minutes the panel says so in red instead of quietly serving old positions. */
+async function hlPosHealth() {
+  let j;
+  try { j = await getHlPos(); } catch (e) { return; }
+  const el = $("whalesSub");
+  if (!el || !j || !j.t) return;
+  const stale = Date.now() - j.t > 20 * 60_000;
+  el.innerHTML = esc(el.textContent) + ' · <span class="' + (stale ? "dn" : "") + '">index ' + timeAgo(j.t) +
+    (stale ? " — stale, the collector may be down" : "") + "</span>";
+}
 function hlPosRows(j, want) {
   const key = Object.keys(j.coins || {}).find(c => exCanon(c) === want);
   if (!key) return {rows: [], key: null, meta: null};
@@ -2841,7 +2854,10 @@ function hlPosRows(j, want) {
     return {
       coin: key, szi, value, mark, liq, dist: mark > 0 ? whaleDist(szi, liq, mark) : null,
       upnl: r[5], lev: r[4] || null, entry: r[2], addr: (j.addrs || [])[r[0]] || "",
-      fresh: whaleFreshness((j.addrs || [])[r[0]] || ""), fromBot: true
+      fresh: whaleFreshness((j.addrs || [])[r[0]] || ""), fromBot: true,
+      /* the minute this row was actually read off the chain — the bot rotates through the wallet
+         population, so some rows are from an earlier pass and the panel says so out loud */
+      ageMin: Math.max(0, Math.round((j.t || 0) / 60000) - (r[6] || Math.round((j.t || 0) / 60000)))
     };
   }).filter(r => r.addr);
   return {rows, key, meta: c};
@@ -2901,7 +2917,8 @@ async function scanToken(sym) {
     const known = j && j.coins && Object.keys(j.coins).length;
     body.innerHTML = '<div class="empty" style="padding:8px 14px;text-align:left">No open position ≥ ' +
       (j ? fmtBig(j.min) : "$250k") + " in <b>" + esc(want) + "</b>" +
-      (j ? " among the " + j.wallets + " wallets the bot indexed " + timeAgo(j.t) : "") + "." +
+      (j ? " among the " + j.wallets + " wallets the bot read " + timeAgo(j.t) +
+        (j.pool > j.wallets ? " (rotating through " + j.pool.toLocaleString() + " accounts)" : "") : "") + "." +
       (known ? '<div style="margin-top:6px;opacity:.75">' + known + " coins are indexed right now — if this ticker is not one of them, nobody in the indexed set holds it.</div>" : "") +
       "</div>";
     return;
@@ -2920,6 +2937,12 @@ async function scanToken(sym) {
         (isLive ? "live from the chain just now" : "on-chain index · " + timeAgo(j ? j.t : 0)) +
         (m && m.cov != null ? " · these positions are <b>" + m.cov + "%</b> of this coin's real open interest" : "") +
         (m && m.n > (m.rows || []).length ? " · showing the " + (m.rows || []).length + " largest of " + m.n : "") +
+        /* The bot rotates through the wallet population, so part of the index can be a few minutes old.
+           Say it rather than let a stale row pass for a fresh one — the live refresh below then replaces
+           every row on screen with a reading taken this second. */
+        (!isLive && m && m.age > 0 && m.nf != null
+          ? " · " + m.nf + " of " + m.n + " read in the last pass, the rest up to " + m.age + "m ago"
+          : "") +
       "</div>";
   };
   body.innerHTML = renderWhaleRows(rows, note(rows, false));

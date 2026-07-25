@@ -488,8 +488,10 @@ try {
     const MX = await post('https://api.hyperliquid.xyz/info', { type: 'allMids', dex: 'xyz' });
     Object.entries(MX || {}).forEach(([k, v]) => { MIDS[k] = v; if (!k.startsWith('xyz:')) MIDS['xyz:' + k] = v; });
   } catch (e) {}
+  /* the whole >=$25k population, not a fixed 2500 — the rotating scan below works through it over
+     successive passes (measured 25-jul-2026: 14,767 addresses clear $25k out of 40,831 on the board) */
   const wallets = LB.filter(r => (parseFloat(r.accountValue) || 0) >= 25000)
-    .sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 2500);
+    .sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 15000);
   // publish the wallet list itself (top 700) — the browser falls back to it when stats-data hangs client-side
   if (lbFresh) {
     const wl = wallets.slice(0, 700).map(r => [r.ethAddress, Math.round(parseFloat(r.accountValue) || 0)]);
@@ -511,12 +513,26 @@ try {
     if (k === undefined) { k = addrDict.length; addrDict.push(a); addrPos.set(a, k); }
     return k;
   };
-  /* Scan a set we can actually FINISH inside the rate limit instead of firing at 2500 and losing half of
-     them to 429s. The list is sorted by account value, so these are the wallets that hold the money:
-     measured on the public leaderboard, the top 1000 accounts are 87.5% of all equity on the exchange.
-     RATE is requests per second — the measured sustainable ceiling is about 10. */
-  const SCAN_N = 1500, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
-  const scanList = wallets.slice(0, SCAN_N);
+  /* Scan a set we can actually FINISH inside the rate limit instead of firing at everything and losing
+     half of it to 429s. RATE is requests per second — the measured sustainable ceiling is about 10.
+
+     CORE is re-read every single pass: sorted by account value, the top 1000 accounts are 87.5% of all
+     equity on the exchange (measured), so the money is never more than five minutes stale. ROT is a
+     window that walks through everyone else, ~700 at a time, so the whole >=$25k population is covered
+     in roughly twenty passes. What the rotation reads is carried forward between passes with the minute
+     it was read stamped on it, and the dashboard shows that age — a carried position is presented as
+     "seen N minutes ago", never as if it had just been checked. */
+  const CORE_N = 800, ROT_N = 700, XYZ_N = 400, RATE = 9.5, CHUNK = 12;
+  let prevPos = null;
+  try { prevPos = JSON.parse(fs.readFileSync('data/hl-pos.json', 'utf8')); } catch (e) {}
+  const rotPool = wallets.slice(CORE_N);
+  const rotStart = rotPool.length ? (((prevPos && prevPos.ro) || 0) % rotPool.length) : 0;
+  const rotSlice = [];
+  for (let k = 0; k < Math.min(ROT_N, rotPool.length); k++) rotSlice.push(rotPool[(rotStart + k) % rotPool.length]);
+  const scanList = wallets.slice(0, CORE_N).concat(rotSlice);
+  const nextRo = rotPool.length ? (rotStart + rotSlice.length) % rotPool.length : 0;
+  const scannedAddrs = new Set();
+  const NOW_MIN = Math.round(now / 60000);
   let rlDrop = 0;
   for (let i = 0; i < scanList.length; i += CHUNK) {
     const t0 = Date.now();
@@ -534,6 +550,7 @@ try {
       if (c.status !== 'fulfilled' || !c.value) { rlDrop++; return; }
       scanned++;
       const wAddr = (c.value.__addr) || '';
+      if (wAddr) scannedAddrs.add(wAddr.toLowerCase());
       (c.value.assetPositions || []).forEach(ap => {
         const p = ap.position;
         const v = Math.abs(parseFloat(p.positionValue));
@@ -548,7 +565,8 @@ try {
             +(parseFloat(p.entryPx) || 0).toPrecision(6),
             liq > 0 ? +liq.toPrecision(6) : 0,
             Math.round((p.leverage && p.leverage.value) || 0),
-            Math.round(parseFloat(p.unrealizedPnl) || 0)
+            Math.round(parseFloat(p.unrealizedPnl) || 0),
+            NOW_MIN /* the minute this was actually read off the chain — the dashboard shows its age */
           ]);
         }
         if (!(v >= 10000) || !(liq > 0) || !(px > 0)) return;
@@ -578,6 +596,26 @@ try {
      sides of every contract, so it is halved before comparing against OI. A coin we indexed nothing
      for reports 0% — it is never padded or guessed. */
   try {
+    /* Carry forward what the rotation read on earlier passes, so a coin does not blink out of the index
+       just because its holders were not in this pass's window. Two rules keep this honest:
+       an address re-read this pass is taken ONLY from this pass (its old rows are dropped, because the
+       position may have been closed), and anything older than CARRY_MAX is discarded rather than shown
+       as current. Every row keeps the minute it was read so the age is displayed, never implied. */
+    const CARRY_MAX = 150;
+    let carried = 0;
+    if (prevPos && Array.isArray(prevPos.addrs)) {
+      const prevMin = Math.round((prevPos.t || now) / 60000);
+      Object.entries(prevPos.coins || {}).forEach(([coin, c]) => {
+        (c.rows || []).forEach(r => {
+          const a = prevPos.addrs[r[0]];
+          if (!a || scannedAddrs.has(String(a).toLowerCase())) return;
+          const m = r[6] || prevMin;
+          if (NOW_MIN - m > CARRY_MAX) return;
+          (posIdx[coin] || (posIdx[coin] = [])).push([addrRef(a), r[1], r[2], r[3], r[4], r[5], m]);
+          carried++;
+        });
+      });
+    }
     const usedAddr = new Set();
     const outCoins = {};
     Object.entries(posIdx).forEach(([coin, rows]) => {
@@ -588,10 +626,17 @@ try {
          coverage number stays true even where the per-coin cap trims the tail */
       const full = rows.reduce((s, r) => s + Math.abs(r[1]), 0);
       const oiUsd = coins[coin] || 0;
+      /* nf / covf describe only what was read in THIS pass. They are reported next to the totals so the
+         dashboard can say plainly how much of a coin's picture is live and how much is carried. */
+      const fresh = rows.filter(r => r[6] === NOW_MIN);
+      const freshNot = fresh.reduce((s, r) => s + Math.abs(r[1]), 0);
       outCoins[coin] = {
         n: rows.length,
+        nf: fresh.length,
         idx: Math.round(full),
         cov: oiUsd > 0 ? Math.min(100, Math.round(100 * (full / 2) / oiUsd)) : null,
+        covf: oiUsd > 0 ? Math.min(100, Math.round(100 * (freshNot / 2) / oiUsd)) : null,
+        age: keep.reduce((mx, r) => Math.max(mx, NOW_MIN - (r[6] || NOW_MIN)), 0),
         rows: keep
       };
     });
@@ -603,7 +648,10 @@ try {
     const totOi = Object.values(coins).reduce((s, v) => s + v, 0);
     const out = {
       t: now,
-      wallets: scanned,
+      wallets: scanned,          // wallets read on THIS pass
+      pool: wallets.length,      // how many are in the rotation altogether
+      ro: nextRo,                // where the next pass picks the rotation up
+      carried,                   // rows kept from earlier passes, each with its own read time
       min: POS_MIN,
       cap: POS_PER_COIN,
       cov: totOi > 0 ? Math.min(100, Math.round(100 * totIdx / totOi)) : null,
@@ -613,7 +661,8 @@ try {
     fs.mkdirSync('data', { recursive: true });
     fs.writeFileSync('data/hl-pos.json', JSON.stringify(out));
     console.log('hl-pos:', Object.keys(outCoins).length, 'coins,', dict.length, 'addresses, coverage',
-      out.cov + '% of OI,', Math.round(fs.statSync('data/hl-pos.json').size / 1024) + 'KB');
+      out.cov + '% of OI,', carried, 'carried, rotation at', nextRo, 'of', rotPool.length + ',',
+      Math.round(fs.statSync('data/hl-pos.json').size / 1024) + 'KB');
   } catch (e) { console.log('hl-pos failed', e.message); }
 } catch (e) { console.log('liq-book failed', e.message); }
 
