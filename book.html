@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'sha256-yGC1/UZR9MRcR96w6nssOb/sADuiMMf6olTFAnd/XMU='; connect-src 'self' https://www.okx.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-elwwb42p3g48t3LSpM4LBuHt+eNHd+8nZCpXlJUw860='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
 <style>
 :root {
   --bg:#0b0e13; --surface:#11151d; --surface-2:#161b25; --border:#232a37; --grid:#1c2230;
@@ -16,9 +17,10 @@
 html, body { height: 100%; }
 body { margin:0; background:var(--bg); color:var(--ink); font:12px/1.45 -apple-system,'Segoe UI',Roboto,sans-serif; display:flex; flex-direction:column; overflow:hidden; }
 header { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--border); background:var(--surface); flex:0 0 auto; flex-wrap:wrap; }
-.logo { font-weight:800; font-size:15px; letter-spacing:.02em; color:var(--ink); text-decoration:none; display:flex; align-items:center; gap:8px; }
-.logo .dot { width:10px; height:10px; border-radius:50%; background:var(--logo); box-shadow:0 0 8px var(--logo); }
-.logo span b { color: var(--logo); }
+body { font-family:'Inter', -apple-system, "Segoe UI", Roboto, sans-serif; }
+.logo { color:var(--ink); text-decoration:none; display:flex; align-items:center; gap:10px; }
+.logo svg { width:34px; height:34px; display:block; }
+.logo .wordmark { font-family:'Inter', -apple-system, sans-serif; font-size:21px; font-weight:650; letter-spacing:-0.01em; }
 .crumb { color:var(--muted); font-size:11px; }
 .tabs, .modes { display:flex; gap:5px; }
 .tb { background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--muted);
@@ -43,14 +45,53 @@ canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 footer { flex:0 0 auto; padding:5px 14px; border-top:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:10px; display:flex; gap:14px; flex-wrap:wrap; }
 footer b { color:var(--ink-2); font-weight:600; }
 #histNote { color:var(--warn); }
+#domView { position:absolute; inset:0; display:none; overflow:hidden; background:#07090d;
+  font:11px/1 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+#domView.on { display:flex; }
+.dcol { flex:1 1 0; min-width:0; border-right:1px solid #151b26; display:flex; flex-direction:column; }
+.dcol-h { flex:0 0 auto; display:flex; align-items:center; gap:7px; padding:7px 10px; border-bottom:1px solid #151b26;
+  font:700 11.5px/1 -apple-system,'Segoe UI',Roboto,sans-serif; color:var(--ink); background:#0b0e14; }
+.dcol-h .exdot { width:8px; height:8px; border-radius:50%; background:var(--logo); }
+.dcol-h .pair { color:var(--muted); font-weight:600; }
+.dcol-b { flex:1 1 auto; position:relative; overflow:hidden; }
+.drow { position:relative; display:flex; align-items:center; height:15px; padding:0 8px; }
+.drow .cum { position:absolute; top:0; bottom:0; right:0; opacity:.13; }
+.drow.a .cum { background:var(--down); }
+.drow.b .cum { background:var(--logo); }
+.drow .cumline { position:absolute; top:0; bottom:0; width:0; border-left:1.5px solid; }
+.drow.a .cumline { border-color:rgba(240,110,80,.85); }
+.drow.b .cumline { border-color:rgba(25,201,74,.85); }
+.drow .p { width:62px; color:#93a0b4; z-index:1; }
+.drow.a .p.hot { color:#ffb4a6; } .drow.b .p.hot { color:#a9f5c0; }
+.drow .q { min-width:52px; padding:1.5px 4px; border-radius:2px; z-index:1; color:var(--ink); }
+.drow .q:empty { visibility:hidden; }
+.dmid { display:flex; align-items:center; gap:10px; height:22px; padding:0 8px; border-top:1px solid #2c3648; border-bottom:1px solid #2c3648;
+  background:#0d1420; color:#fff; font-weight:700; }
+.dmid .mp { color:var(--logo); font-size:12px; }
+.dmid .sp { color:var(--muted); font-weight:400; }
+.dmid .dv.up { color:var(--logo); } .dmid .dv.dn { color:var(--down); }
+.dmark { position:relative; }
+.dmark::after { content:""; position:absolute; left:0; right:0; top:0; border-top:1px solid rgba(255,255,255,.35); }
+.dmark .mk { position:absolute; right:8px; top:-6px; font-size:10px; color:#e8ecf3; background:#07090d; padding:0 4px; z-index:2; }
 @media (max-width: 760px) { #dom { display:none; } .stats { display:none; } }
 </style>
 </head>
 <body>
 <header>
-  <a class="logo" href="./"><span class="dot"></span><span>CRYPTO<b>MACHO</b></span></a>
-  <span class="crumb">📖 Order Book · liquidity heatmap</span>
+  <a class="logo" href="./" title="Voltar ao dashboard"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg><span class="wordmark">Cryptomacho</span></a>
+  <span class="crumb">📖 Order Book</span>
   <span class="tabs" id="coinTabs"></span>
+  <span class="modes" id="viewBtns">
+    <button class="tb" data-view="dom" title="Multi-exchange depth ladder — per-venue price levels, sizes, cumulative profile and ±0.3% totals">DOM</button>
+    <button class="tb" data-view="heat" title="Price×time liquidity heatmap">HEATMAP</button>
+  </span>
+  <span class="modes" id="domCtl" style="display:none">
+    <button class="tb" data-dmode="single" title="One column per exchange">SINGLE</button>
+    <button class="tb" data-dmode="agg" title="All selected exchanges merged into one book">AGG</button>
+    <span class="crumb" style="align-self:center">group</span>
+    <span id="grpBtns" style="display:flex;gap:4px"></span>
+    <span id="exBtns" style="display:flex;gap:4px;margin-left:6px"></span>
+  </span>
   <span class="modes" id="spanBtns">
     <button class="tb" data-span="60">1M</button>
     <button class="tb on" data-span="300">5M</button>
@@ -68,7 +109,7 @@ footer b { color:var(--ink-2); font-weight:600; }
   </span>
 </header>
 <main>
-  <div id="wrap"><canvas id="cv"></canvas></div>
+  <div id="wrap"><canvas id="cv"></canvas><div id="domView"></div></div>
   <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
 </main>
 <footer>
@@ -106,6 +147,34 @@ let cvd = 0;
 let liveCols = [];           /* {t, b:{idx:usd}, a:{idx:usd}, src:[]} a cada 5 s, máx 2h */
 let hist = null;             /* doc do KV */
 let sockets = [];
+/* memória da sessão: por moeda, em RAM enquanto a página vive + localStorage para reabrir já
+   com dados (pedido dele: "não pode voltar ao início a cada clique"). Dados reais com o gap
+   honesto — se estiveste 1h fora, o buraco aparece no heatmap, não se inventa nada. */
+const sess = {};
+function sessKey(c) { return "cryptomacho-book-sess-" + c; }
+function sessStash(c) { sess[c] = { cols: liveCols, trades: trades, cvd: cvd }; }
+function sessSave() {
+  try {
+    localStorage.setItem(sessKey(coin), JSON.stringify({ t: Date.now(), cvd: cvd,
+      cols: liveCols.slice(-900), trades: trades.slice(-600) }));
+  } catch (e) { /* quota: a sessão vive só em RAM, paciência */ }
+}
+function sessRestore(c) {
+  const cut = Date.now() - 30 * 60_000;
+  if (sess[c]) {
+    liveCols = sess[c].cols.filter(x => x.t > cut); trades = sess[c].trades.filter(x => x.t > cut); cvd = sess[c].cvd;
+    return;
+  }
+  liveCols = []; trades = []; cvd = 0;
+  try {
+    const j = JSON.parse(localStorage.getItem(sessKey(c)));
+    if (j && Array.isArray(j.cols)) {
+      liveCols = j.cols.filter(x => x && x.t > cut);
+      trades = (j.trades || []).filter(x => x && x.t > cut);
+      cvd = j.cvd || 0;
+    }
+  } catch (e) {}
+}
 
 function setBook(src, bids, asks) { books[src] = { bids, asks, t: Date.now() }; conn[src] = true; paintSrc(); }
 function dropBook(src) { conn[src] = false; delete books[src]; paintSrc(); }
@@ -390,6 +459,123 @@ function paintDom() {
   c.classList.toggle("pos", cvd >= 0); c.classList.toggle("neg", cvd < 0);
 }
 
+/* ---------- DOM ladder (vista tipo tapesurf, cores da casa) ---------- */
+const EX_META = { BN: {name: "Binance", pair: c => c + "/USDT (spot)"}, BY: {name: "Bybit", pair: c => c + "/USDT"},
+                  OKX: {name: "OKX", pair: c => c + "/USDT"}, HL: {name: "Hyperliquid", pair: c => c + "/USD"} };
+const GROUPS = { BTC: [1, 5, 10, 25, 50], ETH: [0.1, 0.5, 1, 2], SOL: [0.01, 0.05, 0.1, 0.5], HYPE: [0.005, 0.02, 0.05, 0.1] };
+let view = (() => { try { return localStorage.getItem("cryptomacho-book-view") || "dom"; } catch (e) { return "dom"; } })();
+let domMode = (() => { try { return localStorage.getItem("cryptomacho-book-dmode") || "single"; } catch (e) { return "single"; } })();
+let exSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-ex")) || { BN: 1, BY: 1, OKX: 1, HL: 1 }; } catch (e) { return { BN: 1, BY: 1, OKX: 1, HL: 1 }; } })();
+let grpSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-grp")) || {}; } catch (e) { return {}; } })();
+function grpOf() { const g = GROUPS[coin]; const v = grpSel[coin]; return g.indexOf(v) >= 0 ? v : g[2] || g[g.length - 1]; }
+const deep = {};              /* src -> {bids:[[px,qty]], asks:[[px,qty]], t} — qty em MOEDA */
+let deepBusy = false;
+async function pollDeep() {
+  if (view !== "dom" || deepBusy || document.visibilityState === "hidden") return;
+  deepBusy = true;
+  const cfg = COINS[coin], me = coin;
+  const jobs = [];
+  if (exSel.BN) jobs.push(fetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=500")
+    .then(r => r.json()).then(j => { if (me === coin && j.bids) deep.BN = { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
+  if (exSel.BY) jobs.push(fetch("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=" + cfg.by + "&limit=500")
+    .then(r => r.json()).then(j => { const d = j.result; if (me === coin && d && d.b) deep.BY = { bids: d.b.map(x => [+x[0], +x[1]]), asks: d.a.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
+  if (exSel.OKX) jobs.push(fetch("https://www.okx.com/api/v5/market/books?instId=" + cfg.ok + "&sz=400")
+    .then(r => r.json()).then(j => { const d = j.data && j.data[0]; if (me === coin && d) deep.OKX = { bids: d.bids.map(x => [+x[0], +x[1] * okxCt]), asks: d.asks.map(x => [+x[0], +x[1] * okxCt]), t: Date.now() }; }).catch(() => {}));
+  if (exSel.HL) jobs.push(fetch("https://api.hyperliquid.xyz/info", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "l2Book", coin: cfg.hl, nSigFigs: 5 }) })
+    .then(r => r.json()).then(j => { const lv = j.levels; if (me === coin && lv) deep.HL = { bids: lv[0].map(x => [+x.px, +x.sz]), asks: lv[1].map(x => [+x.px, +x.sz]), t: Date.now() }; }).catch(() => {}));
+  await Promise.allSettled(jobs);
+  deepBusy = false;
+  if (view === "dom") renderDom();
+}
+function groupBook(bk, g) {
+  const b = new Map(), a = new Map();
+  bk.bids.forEach(([p, q]) => { const k = Math.floor(p / g) * g; b.set(k, (b.get(k) || 0) + q); });
+  bk.asks.forEach(([p, q]) => { const k = Math.floor(p / g) * g; a.set(k, (a.get(k) || 0) + q); });
+  const bb = bk.bids.length ? bk.bids[0][0] : 0, ba = bk.asks.length ? bk.asks[0][0] : 0;
+  return { b, a, mid: bb && ba ? (bb + ba) / 2 : 0 };
+}
+function fmtQ(q) { return q >= 100 ? q.toFixed(0) : q >= 10 ? q.toFixed(1) : q >= 1 ? q.toFixed(1) : q >= 0.005 ? ("." + Math.round(q * 100)) : ""; }
+function domColHTML(tag, gb, g) {
+  const mid = gb.mid; if (!mid) return "";
+  const span = mid * 0.0055;
+  const hi = Math.ceil((mid + span) / g) * g, lo = Math.floor((mid - span) / g) * g;
+  const rows = [];
+  let maxQ = 0;
+  for (let p = lo; p <= hi + g / 2; p += g) { const q = (p >= mid ? gb.a.get(+p.toFixed(8)) : gb.b.get(+p.toFixed(8))) || 0; if (q > maxQ) maxQ = q; }
+  /* cumulativos a partir do mid */
+  const cum = new Map();
+  let cA = 0;
+  for (let p = Math.ceil(mid / g) * g; p <= hi + g / 2; p += g) { cA += gb.a.get(+p.toFixed(8)) || 0; cum.set(+p.toFixed(8), cA); }
+  let cB = 0;
+  for (let p = Math.floor(mid / g) * g; p >= lo - g / 2; p -= g) { cB += gb.b.get(+p.toFixed(8)) || 0; cum.set(+p.toFixed(8), cB); }
+  const maxC = Math.max(cA, cB, 1e-9);
+  const mkUp = mid * 1.003, mkDn = mid * 0.997;
+  let html = "";
+  const pxDec = g < 0.02 ? 3 : g < 1 ? 2 : 0;
+  for (let p = hi; p >= mid; p -= g) {
+    const k = +p.toFixed(8), q = gb.a.get(k) || 0, c = cum.get(k) || 0;
+    const heatA = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
+    const isMk = p - g < mkUp && p >= mkUp;
+    html += '<div class="drow a' + (isMk ? " dmark" : "") + '">' +
+      (isMk ? '<span class="mk">' + fmtQ(c) + "&nbsp;0.3%</span>" : "") +
+      '<span class="cum" style="width:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
+      '<span class="cumline" style="right:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
+      '<span class="p' + (heatA > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
+      '<span class="q" style="background:rgba(208,59,59,' + (heatA * 0.75).toFixed(2) + ')">' + fmtQ(q) + "</span></div>";
+  }
+  const bb = mid, sp = gb.a.size && gb.b.size ? "" : "";
+  html += '<div class="dmid"><span class="mp">' + mid.toFixed(pxDec === 0 ? 1 : pxDec + 1) + "</span>" +
+    '<span class="sp">±0.3% = branco · barra = cumulativo</span></div>';
+  for (let p = Math.floor(mid / g) * g; p >= lo; p -= g) {
+    const k = +p.toFixed(8), q = gb.b.get(k) || 0, c = cum.get(k) || 0;
+    const heatB = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
+    const isMk = p > mkDn && p - g <= mkDn;
+    html += '<div class="drow b' + (isMk ? " dmark" : "") + '">' +
+      (isMk ? '<span class="mk">' + fmtQ(c) + "&nbsp;0.3%</span>" : "") +
+      '<span class="cum" style="width:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
+      '<span class="cumline" style="right:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
+      '<span class="p' + (heatB > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
+      '<span class="q" style="background:rgba(18,163,58,' + (heatB * 0.8).toFixed(2) + ')">' + fmtQ(q) + "</span></div>";
+  }
+  return html;
+}
+function renderDom() {
+  const el = document.getElementById("domView");
+  if (!el || view !== "dom") return;
+  const g = grpOf();
+  const sel = Object.keys(EX_META).filter(k => exSel[k] && deep[k] && Date.now() - deep[k].t < 20000);
+  let html = "";
+  if (domMode === "agg") {
+    const merged = { bids: [], asks: [] };
+    sel.forEach(k => { merged.bids.push(...deep[k].bids); merged.asks.push(...deep[k].asks); });
+    merged.bids.sort((x, y) => y[0] - x[0]); merged.asks.sort((x, y) => x[0] - y[0]);
+    if (merged.bids.length) {
+      html = '<div class="dcol"><div class="dcol-h"><span class="exdot"></span>AGGREGATED <span class="pair">' +
+        sel.join(" + ") + " · " + esc2(coin) + '</span></div><div class="dcol-b">' + domColHTML("AGG", groupBook(merged, g), g) + "</div></div>";
+    }
+  } else {
+    html = sel.map(k => '<div class="dcol"><div class="dcol-h"><span class="exdot"></span>' + EX_META[k].name +
+      ' <span class="pair">' + EX_META[k].pair(coin) + '</span></div><div class="dcol-b">' +
+      domColHTML(k, groupBook(deep[k], g), g) + "</div></div>").join("");
+  }
+  el.innerHTML = html || '<div style="margin:auto;color:var(--muted);font-family:sans-serif">A carregar os livros das exchanges seleccionadas…</div>';
+}
+const esc2 = x => String(x).replace(/[&<>"']/g, "");
+function paintCtl() {
+  document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
+  document.getElementById("domCtl").style.display = view === "dom" ? "inline-flex" : "none";
+  document.getElementById("spanBtns").style.display = view === "heat" ? "inline-flex" : "none";
+  document.querySelectorAll("[data-mode]").forEach(b => { b.parentElement.style.display = view === "heat" ? "inline-flex" : "none"; });
+  document.querySelectorAll("[data-dmode]").forEach(b => b.classList.toggle("on", b.dataset.dmode === domMode));
+  document.getElementById("grpBtns").innerHTML = GROUPS[coin].map(g =>
+    '<button class="tb' + (g === grpOf() ? " on" : "") + '" data-grp="' + g + '">' + g + "</button>").join("");
+  document.getElementById("exBtns").innerHTML = Object.keys(EX_META).map(k =>
+    '<button class="tb' + (exSel[k] ? " on" : "") + '" data-ex="' + k + '" title="' + EX_META[k].name + '">' + k + "</button>").join("");
+  document.getElementById("domView").classList.toggle("on", view === "dom");
+  cv.style.display = view === "dom" ? "none" : "block";
+}
+
 /* ---------- UI ---------- */
 function paintTabs() {
   $("coinTabs").innerHTML = Object.keys(COINS).map(c =>
@@ -398,10 +584,14 @@ function paintTabs() {
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-coin]");
   if (c) {
+    const prevCoin = coin;
     coin = c.dataset.coin;
     try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
-    trades = []; cvd = 0; liveCols = []; zoomHalf = null; yCenter = null;
-    paintTabs(); fetchOkxCt(COINS[coin]).then(startFeeds); loadHist(); draw();
+    sessStash(prevCoin);
+    sessRestore(coin);
+    zoomHalf = null; yCenter = null;
+    Object.keys(deep).forEach(k => delete deep[k]);
+    paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();
     return;
   }
   const m = e.target.closest("[data-mode]");
@@ -417,12 +607,29 @@ document.addEventListener("click", e => {
     viewSpan = (+sp.dataset.span) * 1000;
     document.querySelectorAll("[data-span]").forEach(b => b.classList.toggle("on", b.dataset.span === sp.dataset.span));
     draw();
+    return;
   }
+  const vw = e.target.closest("[data-view]");
+  if (vw) { view = vw.dataset.view; try { localStorage.setItem("cryptomacho-book-view", view); } catch (er) {}
+    paintCtl(); if (view === "dom") pollDeep(); else draw(); return; }
+  const dm = e.target.closest("[data-dmode]");
+  if (dm) { domMode = dm.dataset.dmode; try { localStorage.setItem("cryptomacho-book-dmode", domMode); } catch (er) {}
+    paintCtl(); renderDom(); return; }
+  const gr = e.target.closest("[data-grp]");
+  if (gr) { grpSel[coin] = +gr.dataset.grp; try { localStorage.setItem("cryptomacho-book-grp", JSON.stringify(grpSel)); } catch (er) {}
+    paintCtl(); renderDom(); return; }
+  const ex = e.target.closest("[data-ex]");
+  if (ex) { exSel[ex.dataset.ex] = exSel[ex.dataset.ex] ? 0 : 1; try { localStorage.setItem("cryptomacho-book-ex", JSON.stringify(exSel)); } catch (er) {}
+    paintCtl(); pollDeep(); return; }
 });
 
 /* ---------- arranque ---------- */
-paintTabs(); sizeCanvas();
-fetchOkxCt(COINS[coin]).then(startFeeds);
+sessRestore(coin);
+paintTabs(); paintCtl(); sizeCanvas();
+fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); });
+setInterval(pollDeep, 2000);
+setInterval(sessSave, 10_000);
+window.addEventListener("beforeunload", sessSave);
 loadHist();
 setInterval(loadHist, 5 * 60_000);
 setInterval(sampleCol, 1000);
