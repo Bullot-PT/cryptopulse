@@ -154,16 +154,9 @@ jobs:
             # data/alert-state.json and survives across passes, so nothing gets sent twice
             node collect.mjs || echo "collector exited non-zero on this pass — continuing"
             push_data
-            # QUOTA KV (26-jul): o free tier tem 1.000 writes/dia e chegámos aos 90% — o espelho
-            # KV passa a 1 em cada 3 passes (grelha de 15 min). O git/Pages continua a receber
-            # TODOS os passes de 5 min (história intacta); só a frescura do espelho KV baixa.
-            # Reverter este gate se o plano passar a Workers Paid.
-            MIN_NOW=$(date -u +%M)
-            if [ $(( 10#$MIN_NOW % 15 )) -lt 5 ]; then
-              kv_put $KV_LIST
-            else
-              echo "kv: throttled to the 15-min grid (free-tier write quota)"
-            fi
+            # KV a cada passe de 5 min (máxima frescura — regra do Bullot). Conta permitida pelo
+            # Workers Paid desde 26-jul; ao planear coletores novos, calcular writes/dia primeiro.
+            kv_put $KV_LIST
             NOW=$(date +%s)
             if [ "$NOW" -ge "$END" ]; then break; fi
             # land on the 5-minute grid so samples are evenly spaced no matter how long a pass took
