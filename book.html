@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-elwwb42p3g48t3LSpM4LBuHt+eNHd+8nZCpXlJUw860='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-3Qyo1A8h851O7hka/ZJmErfTKEKzG9nQoUPfgr1hOTY='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
 <style>
@@ -54,7 +54,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 .dcol-h .exdot { width:8px; height:8px; border-radius:50%; background:var(--logo); }
 .dcol-h .pair { color:var(--muted); font-weight:600; }
 .dcol-b { flex:1 1 auto; position:relative; overflow:hidden; }
-.drow { position:relative; display:flex; align-items:center; height:15px; padding:0 8px; }
+.drow { position:relative; display:flex; align-items:center; height:12px; padding:0 8px; font-size:10px; }
 .drow .cum { position:absolute; top:0; bottom:0; right:0; opacity:.13; }
 .drow.a .cum { background:var(--down); }
 .drow.b .cum { background:var(--logo); }
@@ -65,8 +65,8 @@ footer b { color:var(--ink-2); font-weight:600; }
 .drow.a .p.hot { color:#ffb4a6; } .drow.b .p.hot { color:#a9f5c0; }
 .drow .q { min-width:52px; padding:1.5px 4px; border-radius:2px; z-index:1; color:var(--ink); }
 .drow .q:empty { visibility:hidden; }
-.dmid { display:flex; align-items:center; gap:10px; height:22px; padding:0 8px; border-top:1px solid #2c3648; border-bottom:1px solid #2c3648;
-  background:#0d1420; color:#fff; font-weight:700; }
+.dmid { display:flex; align-items:center; gap:8px; height:19px; padding:0 8px; border-top:1px solid #2c3648; border-bottom:1px solid #2c3648;
+  background:#0d1420; color:#fff; font-weight:700; font-size:10.5px; }
 .dmid .mp { color:var(--logo); font-size:12px; }
 .dmid .sp { color:var(--muted); font-weight:400; }
 .dmid .dv.up { color:var(--logo); } .dmid .dv.dn { color:var(--down); }
@@ -475,11 +475,11 @@ async function pollDeep() {
   deepBusy = true;
   const cfg = COINS[coin], me = coin;
   const jobs = [];
-  if (exSel.BN) jobs.push(fetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=500")
+  if (exSel.BN) jobs.push(fetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=1000")
     .then(r => r.json()).then(j => { if (me === coin && j.bids) deep.BN = { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
   if (exSel.BY) jobs.push(fetch("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=" + cfg.by + "&limit=500")
     .then(r => r.json()).then(j => { const d = j.result; if (me === coin && d && d.b) deep.BY = { bids: d.b.map(x => [+x[0], +x[1]]), asks: d.a.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
-  if (exSel.OKX) jobs.push(fetch("https://www.okx.com/api/v5/market/books?instId=" + cfg.ok + "&sz=400")
+  if (exSel.OKX) jobs.push(fetch("https://www.okx.com/api/v5/market/books-full?instId=" + cfg.ok + "&sz=2000")
     .then(r => r.json()).then(j => { const d = j.data && j.data[0]; if (me === coin && d) deep.OKX = { bids: d.bids.map(x => [+x[0], +x[1] * okxCt]), asks: d.asks.map(x => [+x[0], +x[1] * okxCt]), t: Date.now() }; }).catch(() => {}));
   if (exSel.HL) jobs.push(fetch("https://api.hyperliquid.xyz/info", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "l2Book", coin: cfg.hl, nSigFigs: 5 }) })
@@ -490,54 +490,70 @@ async function pollDeep() {
 }
 function groupBook(bk, g) {
   const b = new Map(), a = new Map();
-  bk.bids.forEach(([p, q]) => { const k = Math.floor(p / g) * g; b.set(k, (b.get(k) || 0) + q); });
-  bk.asks.forEach(([p, q]) => { const k = Math.floor(p / g) * g; a.set(k, (a.get(k) || 0) + q); });
+  bk.bids.forEach(([p, q]) => { const k = Math.floor(p / g) * g; b.set(+k.toFixed(8), (b.get(+k.toFixed(8)) || 0) + q); });
+  bk.asks.forEach(([p, q]) => { const k = Math.floor(p / g) * g; a.set(+k.toFixed(8), (a.get(+k.toFixed(8)) || 0) + q); });
   const bb = bk.bids.length ? bk.bids[0][0] : 0, ba = bk.asks.length ? bk.asks[0][0] : 0;
-  return { b, a, mid: bb && ba ? (bb + ba) / 2 : 0 };
+  return { b, a, mid: bb && ba ? (bb + ba) / 2 : 0, bb, ba };
 }
 function fmtQ(q) { return q >= 100 ? q.toFixed(0) : q >= 10 ? q.toFixed(1) : q >= 1 ? q.toFixed(1) : q >= 0.005 ? ("." + Math.round(q * 100)) : ""; }
+/* célula: cor do lado a AQUECER para amarelo nas walls grandes (o pop visual do tapesurf),
+   mantendo os tons da casa (verde bids / vermelho asks) nos tamanhos normais */
+function cellBg(side, x) {
+  if (x <= 0) return "";
+  if (side === "a") {
+    if (x < 0.7) return "rgba(208,59,59," + (0.16 + x * 0.75).toFixed(2) + ")";
+    const k = (x - 0.7) / 0.3;
+    return "rgb(" + Math.round(212 + 40 * k) + "," + Math.round(90 + 110 * k) + "," + Math.round(40 * (1 - k) + 20) + ")";
+  }
+  if (x < 0.7) return "rgba(18,163,58," + (0.18 + x * 0.75).toFixed(2) + ")";
+  const k = (x - 0.7) / 0.3;
+  return "rgb(" + Math.round(40 + 170 * k) + "," + Math.round(190 + 45 * k) + "," + Math.round(70 - 20 * k) + ")";
+}
+/* âncora estável por coluna: a grelha de preços NÃO recentra a cada tick — só quando o mid
+   se afasta 25% da janela. É isto que tira o ar "clunky": as linhas ficam quietas e os
+   números mudam dentro delas. */
+const domAnchor = {};
+const domPrevMid = {};
 function domColHTML(tag, gb, g) {
   const mid = gb.mid; if (!mid) return "";
-  const span = mid * 0.0055;
-  const hi = Math.ceil((mid + span) / g) * g, lo = Math.floor((mid - span) / g) * g;
-  const rows = [];
+  const span = mid * 0.0045;
+  const akey = coin + "|" + tag + "|" + g;
+  let anchor = domAnchor[akey];
+  if (!anchor || Math.abs(mid - anchor) > span * 0.25) { anchor = mid; domAnchor[akey] = anchor; }
+  const hi = Math.ceil((anchor + span) / g) * g, lo = Math.floor((anchor - span) / g) * g;
   let maxQ = 0;
-  for (let p = lo; p <= hi + g / 2; p += g) { const q = (p >= mid ? gb.a.get(+p.toFixed(8)) : gb.b.get(+p.toFixed(8))) || 0; if (q > maxQ) maxQ = q; }
-  /* cumulativos a partir do mid */
+  gb.a.forEach((q, p) => { if (p >= lo && p <= hi && q > maxQ) maxQ = q; });
+  gb.b.forEach((q, p) => { if (p >= lo && p <= hi && q > maxQ) maxQ = q; });
+  if (!maxQ) maxQ = 1;
   const cum = new Map();
   let cA = 0;
-  for (let p = Math.ceil(mid / g) * g; p <= hi + g / 2; p += g) { cA += gb.a.get(+p.toFixed(8)) || 0; cum.set(+p.toFixed(8), cA); }
+  for (let p = Math.ceil(mid / g) * g; p <= hi + g / 2; p += g) { const k = +p.toFixed(8); cA += gb.a.get(k) || 0; cum.set(k, cA); }
   let cB = 0;
-  for (let p = Math.floor(mid / g) * g; p >= lo - g / 2; p -= g) { cB += gb.b.get(+p.toFixed(8)) || 0; cum.set(+p.toFixed(8), cB); }
+  for (let p = Math.floor(mid / g) * g; p >= lo - g / 2; p -= g) { const k = +p.toFixed(8); cB += gb.b.get(k) || 0; cum.set(k, cB); }
   const maxC = Math.max(cA, cB, 1e-9);
   const mkUp = mid * 1.003, mkDn = mid * 0.997;
-  let html = "";
   const pxDec = g < 0.02 ? 3 : g < 1 ? 2 : 0;
-  for (let p = hi; p >= mid; p -= g) {
-    const k = +p.toFixed(8), q = gb.a.get(k) || 0, c = cum.get(k) || 0;
-    const heatA = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
-    const isMk = p - g < mkUp && p >= mkUp;
-    html += '<div class="drow a' + (isMk ? " dmark" : "") + '">' +
+  const prev = domPrevMid[akey]; domPrevMid[akey] = mid;
+  const dv = prev ? mid - prev : 0;
+  const spread = gb.ba && gb.bb ? gb.ba - gb.bb : 0;
+  let html = "";
+  const row = (side, k) => {
+    const q = (side === "a" ? gb.a.get(k) : gb.b.get(k)) || 0;
+    const c = cum.get(k) || 0;
+    const x = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
+    const isMk = side === "a" ? (k - g < mkUp && k >= mkUp) : (k > mkDn && k - g <= mkDn);
+    return '<div class="drow ' + side + (isMk ? " dmark" : "") + '">' +
       (isMk ? '<span class="mk">' + fmtQ(c) + "&nbsp;0.3%</span>" : "") +
-      '<span class="cum" style="width:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
-      '<span class="cumline" style="right:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
-      '<span class="p' + (heatA > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
-      '<span class="q" style="background:rgba(208,59,59,' + (heatA * 0.75).toFixed(2) + ')">' + fmtQ(q) + "</span></div>";
-  }
-  const bb = mid, sp = gb.a.size && gb.b.size ? "" : "";
+      '<span class="cum" style="width:' + (c / maxC * 60).toFixed(1) + '%"></span>' +
+      '<span class="cumline" style="right:' + (c / maxC * 60).toFixed(1) + '%"></span>' +
+      '<span class="p' + (x > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
+      '<span class="q" style="background:' + cellBg(side, x) + '">' + fmtQ(q) + "</span></div>";
+  };
+  for (let p = hi; p >= mid; p -= g) html += row("a", +p.toFixed(8));
   html += '<div class="dmid"><span class="mp">' + mid.toFixed(pxDec === 0 ? 1 : pxDec + 1) + "</span>" +
-    '<span class="sp">±0.3% = branco · barra = cumulativo</span></div>';
-  for (let p = Math.floor(mid / g) * g; p >= lo; p -= g) {
-    const k = +p.toFixed(8), q = gb.b.get(k) || 0, c = cum.get(k) || 0;
-    const heatB = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
-    const isMk = p > mkDn && p - g <= mkDn;
-    html += '<div class="drow b' + (isMk ? " dmark" : "") + '">' +
-      (isMk ? '<span class="mk">' + fmtQ(c) + "&nbsp;0.3%</span>" : "") +
-      '<span class="cum" style="width:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
-      '<span class="cumline" style="right:' + (c / maxC * 62).toFixed(1) + '%"></span>' +
-      '<span class="p' + (heatB > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
-      '<span class="q" style="background:rgba(18,163,58,' + (heatB * 0.8).toFixed(2) + ')">' + fmtQ(q) + "</span></div>";
-  }
+    (spread > 0 ? '<span class="sp">' + spread.toFixed(pxDec === 0 ? 1 : pxDec + 1) + "</span>" : "") +
+    (dv ? '<span class="dv ' + (dv > 0 ? "up" : "dn") + '">' + (dv > 0 ? "▲" : "▼") + " " + Math.abs(dv).toFixed(1) + "</span>" : "") + "</div>";
+  for (let p = Math.floor(mid / g) * g; p >= lo; p -= g) html += row("b", +p.toFixed(8));
   return html;
 }
 function renderDom() {
@@ -627,7 +643,7 @@ document.addEventListener("click", e => {
 sessRestore(coin);
 paintTabs(); paintCtl(); sizeCanvas();
 fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); });
-setInterval(pollDeep, 2000);
+setInterval(pollDeep, 1000);
 setInterval(sessSave, 10_000);
 window.addEventListener("beforeunload", sessSave);
 loadHist();
