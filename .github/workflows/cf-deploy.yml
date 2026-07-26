@@ -15,6 +15,7 @@ jobs:
       CF_ZONE_ID: 58e910c80e16e6947f4a4fbd16f3698c
       SCRIPT_NAME: cryptomacho-data
       ROUTE_PATTERN: cryptomacho.io/data/*
+      ROUTE_PATTERN2: cryptomacho.io/px/*
     steps:
       - name: Write worker module
         run: |
@@ -22,6 +23,25 @@ jobs:
           export default {
             async fetch(request, env) {
               const url = new URL(request.url);
+              /* /px/bnf/<SYMBOL> — ponte para o depth dos FUTUROS da Binance. A fapi não tem
+                 CORS, portanto o browser não lhe chega directamente; o Worker vai lá por ele e
+                 serve do nosso próprio domínio. cacheTtl 2 s no edge: mil separadores abertos
+                 continuam a ser ~1 pedido/2 s à Binance. Se a Binance geo-bloquear o colo da
+                 Cloudflare, o status dela passa TAL E QUAL para o browser — nada de fingir. */
+              if (url.pathname.startsWith("/px/bnf/")) {
+                const sym = url.pathname.slice(8);
+                if (!/^[A-Z0-9]{2,20}$/.test(sym)) {
+                  return new Response("bad symbol", { status: 400 });
+                }
+                const up = await fetch("https://fapi.binance.com/fapi/v1/depth?symbol=" + sym + "&limit=1000",
+                  { cf: { cacheTtl: 2, cacheEverything: true } });
+                return new Response(up.body, { status: up.status, headers: {
+                  "content-type": "application/json; charset=utf-8",
+                  "cache-control": "public, max-age=2",
+                  "access-control-allow-origin": "*",
+                  "x-px-upstream": String(up.status)
+                } });
+              }
               if (!url.pathname.startsWith("/data/")) {
                 return fetch(request);
               }
@@ -59,20 +79,22 @@ jobs:
             -F "worker.js=@worker.js;type=application/javascript+module" > deploy.json
           cat deploy.json
           jq -e '.success == true' deploy.json > /dev/null
-      - name: Ensure route
+      - name: Ensure routes
         run: |
           curl -sS -H "Authorization: Bearer ${CF_API_TOKEN}" \
             "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" > routes.json
           cat routes.json
-          if jq -e --arg p "${ROUTE_PATTERN}" '.result[]? | select(.pattern == $p)' routes.json > /dev/null; then
-            echo "route already exists"
-          else
-            curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" \
-              -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
-              -d "{\"pattern\":\"${ROUTE_PATTERN}\",\"script\":\"${SCRIPT_NAME}\"}" > route.json
-            cat route.json
-            jq -e '.success == true' route.json > /dev/null
-          fi
+          for P in "${ROUTE_PATTERN}" "${ROUTE_PATTERN2}"; do
+            if jq -e --arg p "$P" '.result[]? | select(.pattern == $p)' routes.json > /dev/null; then
+              echo "route $P already exists"
+            else
+              curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/workers/routes" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" -H "Content-Type: application/json" \
+                -d "{\"pattern\":\"$P\",\"script\":\"${SCRIPT_NAME}\"}" > route.json
+              cat route.json
+              jq -e '.success == true' route.json > /dev/null
+            fi
+          done
       - name: KV self-test and end-to-end check
         run: |
           echo "{\"selftest\":true,\"runId\":\"${GITHUB_RUN_ID}\"}" > ping.json
@@ -83,5 +105,6 @@ jobs:
           sleep 8
           echo "--- via cryptomacho.io ---"
           curl -sS -D - "https://cryptomacho.io/data/kv-selftest.json"
-          echo "--- fallback file ---"
-          curl -sS -o /dev/null -D - "https://cryptomacho.io/data/hl-pos.json" | grep -i -e x-data-source -e cache-control -e HTTP || true
+          echo "--- proxy binance perp (o 451/403 aqui e o geo-block da Binance ao colo, nao um erro nosso) ---"
+          curl -sS -o px.json -D - "https://cryptomacho.io/px/bnf/BTCUSDT" || true
+          head -c 200 px.json; echo
