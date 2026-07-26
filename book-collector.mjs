@@ -48,8 +48,15 @@ async function kvPut(key, obj) {
 
 /* devolve [[px, usd], ...] dos dois lados, ou null se a fonte falhou */
 async function srcBinance(sym) {
-  const j = await jfetch("https://fapi.binance.com/fapi/v1/depth?symbol=" + sym + "&limit=500");
-  return { bids: j.bids.map(x => [+x[0], +x[0] * +x[1]]), asks: j.asks.map(x => [+x[0], +x[0] * +x[1]]) };
+  /* os runners do GitHub (IPs EUA) levam 451 da fapi. A própria Binance publica um endpoint
+     público de market data SEM geo-block — data-api.binance.vision (book do SPOT, o mercado
+     mais líquido; é o que o TapeSurf usa). Fallback para a fapi caso o vision falhe. */
+  const mk = j => ({ bids: j.bids.map(x => [+x[0], +x[0] * +x[1]]), asks: j.asks.map(x => [+x[0], +x[0] * +x[1]]) });
+  try {
+    return mk(await jfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + sym + "&limit=500"));
+  } catch (e) {
+    return mk(await jfetch("https://fapi.binance.com/fapi/v1/depth?symbol=" + sym + "&limit=500"));
+  }
 }
 async function srcOkx(inst) {
   const j = await jfetch("https://www.okx.com/api/v5/market/books?instId=" + inst + "&sz=400");
