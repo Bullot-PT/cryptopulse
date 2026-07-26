@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cryptomacho — Order Book</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'sha256-x6K6aBCYJuRxkDjl5izAvIzB5hQlnTLIvErD5N0CXCY='; connect-src 'self' https://www.okx.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<link rel="icon" href="icon-192.png">
+<style>
+:root {
+  --bg:#0b0e13; --surface:#11151d; --surface-2:#161b25; --border:#232a37; --grid:#1c2230;
+  --ink:#e8ecf3; --ink-2:#aab4c4; --muted:#6b7688;
+  --up:#0ca30c; --down:#d03b3b; --accent:#3987e5; --warn:#fab219; --logo:#19c94a;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font:12px/1.45 -apple-system,'Segoe UI',Roboto,sans-serif; display:flex; flex-direction:column; overflow:hidden; }
+header { display:flex; align-items:center; gap:12px; padding:8px 14px; border-bottom:1px solid var(--border); background:var(--surface); flex:0 0 auto; flex-wrap:wrap; }
+.logo { font-weight:800; font-size:15px; letter-spacing:.02em; color:var(--ink); text-decoration:none; display:flex; align-items:center; gap:8px; }
+.logo .dot { width:10px; height:10px; border-radius:50%; background:var(--logo); box-shadow:0 0 8px var(--logo); }
+.logo span b { color: var(--logo); }
+.crumb { color:var(--muted); font-size:11px; }
+.tabs, .modes { display:flex; gap:5px; }
+.tb { background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--muted);
+  font:700 11px/1 inherit; font-family:inherit; padding:6px 11px; cursor:pointer; letter-spacing:.03em; }
+.tb:hover { color:var(--ink); }
+.tb.on { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 1px rgba(57,135,229,.35); }
+.stats { margin-left:auto; display:flex; gap:14px; font-variant-numeric:tabular-nums; font-size:11.5px; color:var(--ink-2); flex-wrap:wrap; }
+.stats b { color:var(--ink); }
+.stats .cvdv.pos { color:var(--up); } .stats .cvdv.neg { color:var(--down); }
+main { flex:1 1 auto; display:flex; min-height:0; }
+#wrap { flex:1 1 auto; position:relative; min-width:0; }
+canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
+#dom { flex:0 0 224px; border-left:1px solid var(--border); background:var(--surface); overflow:hidden auto; padding:8px 0; }
+.dom-h { padding:2px 12px 6px; font-size:10px; letter-spacing:.06em; color:var(--muted); font-weight:700; text-transform:uppercase; }
+.dr { display:grid; grid-template-columns: 72px 1fr 58px; gap:6px; align-items:center; padding:1px 12px; font-size:10.5px; font-variant-numeric:tabular-nums; }
+.dr .px { text-align:right; }
+.dr.ask .px { color:var(--down); } .dr.bid .px { color:var(--up); }
+.dr .bar { height:9px; border-radius:2px; }
+.dr.ask .bar { background:rgba(208,59,59,.45); } .dr.bid .bar { background:rgba(12,163,12,.45); }
+.dr .v { text-align:right; color:var(--ink-2); }
+.dr.mid { padding:5px 12px; font-weight:800; color:var(--accent); font-size:12px; border-top:1px dashed var(--grid); border-bottom:1px dashed var(--grid); margin:3px 0; }
+footer { flex:0 0 auto; padding:5px 14px; border-top:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:10px; display:flex; gap:14px; flex-wrap:wrap; }
+footer b { color:var(--ink-2); font-weight:600; }
+#histNote { color:var(--warn); }
+@media (max-width: 760px) { #dom { display:none; } .stats { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="./"><span class="dot"></span><span>CRYPTO<b>MACHO</b></span></a>
+  <span class="crumb">📖 Order Book · liquidity heatmap</span>
+  <span class="tabs" id="coinTabs"></span>
+  <span class="modes">
+    <button class="tb on" data-mode="live" title="Session heatmap: 5-second columns built LIVE in your browser from Binance + Bybit + OKX + Hyperliquid WebSockets. Starts when you open the page.">LIVE</button>
+    <button class="tb" data-mode="hist" title="Collector history: 10-minute columns (rolling 48h) sampled 24/7 by the repo bot from OKX + Hyperliquid and stored at the edge. Grows forever from 26-jul-2026 onward.">48H</button>
+  </span>
+  <span class="stats">
+    <span title="Aggregated mid price (best bid/ask across connected venues)">mid <b id="stPx">—</b></span>
+    <span title="USD resting within ±0.5% of mid, all connected venues">±0.5% <b id="stNear">—</b></span>
+    <span title="Session cumulative volume delta: buy-aggressor USD − sell-aggressor USD since you opened the page. Positive = buyers hitting asks.">CVD <b class="cvdv" id="stCvd">—</b></span>
+    <span title="Connected live feeds">feeds <b id="stSrc">—</b></span>
+  </span>
+</header>
+<main>
+  <div id="wrap"><canvas id="cv"></canvas></div>
+  <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
+</main>
+<footer>
+  <span><b>live</b>: Binance + Bybit + OKX + Hyperliquid via WebSocket, sampled every 5 s in your browser</span>
+  <span><b>history 48H</b>: OKX + Hyperliquid, 10-min frames collected 24/7 (Binance/Bybit block the collector's IPs — said, not hidden)</span>
+  <span id="histNote"></span>
+  <span><b>bubbles</b>: aggressor trades ≥ $25k (green = market buy, red = market sell) · price line = aggregated mid · bottom strip = CVD</span>
+</footer>
+<script>
+"use strict";
+/* Cryptomacho Order Book — página dedicada (v128). Desenhada de raiz; a inspiração de layout
+   (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
+   REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
+const COINS = {
+  BTC:  { step: 5,    bn: "btcusdt",  by: "BTCUSDT",  ok: "BTC-USDT-SWAP",  hl: "BTC" },
+  ETH:  { step: 0.2,  bn: "ethusdt",  by: "ETHUSDT",  ok: "ETH-USDT-SWAP",  hl: "ETH" },
+  SOL:  { step: 0.05, bn: "solusdt",  by: "SOLUSDT",  ok: "SOL-USDT-SWAP",  hl: "SOL" },
+  HYPE: { step: 0.02, bn: "hypeusdt", by: "HYPEUSDT", ok: "HYPE-USDT-SWAP", hl: "HYPE" }
+};
+let coin = (() => { try { return localStorage.getItem("cryptomacho-book-coin") || "BTC"; } catch (e) { return "BTC"; } })();
+if (!COINS[coin]) coin = "BTC";
+let mode = "live";
+const $ = id => document.getElementById(id);
+const fmtBig = v => { const a = Math.abs(v);
+  return (v < 0 ? "-" : "") + (a >= 1e9 ? "$" + (a / 1e9).toFixed(2) + "B" : a >= 1e6 ? "$" + (a / 1e6).toFixed(1) + "M" : a >= 1e3 ? "$" + (a / 1e3).toFixed(0) + "k" : "$" + a.toFixed(0)); };
+const fmtPx = v => v >= 1000 ? v.toLocaleString("en-US", { maximumFractionDigits: 1 }) : v >= 1 ? v.toFixed(2) : v.toFixed(5);
+
+/* ---------- estado live ---------- */
+const books = {};            /* src -> { bids: Map(px->usd), asks: Map(px->usd), t } */
+const conn = {};             /* src -> bool */
+let trades = [];             /* {t, px, usd, buy} — só ≥ $25k entram nas bolhas; TODOS entram no CVD */
+let cvd = 0;
+let liveCols = [];           /* {t, b:{idx:usd}, a:{idx:usd}, src:[]} a cada 5 s, máx 2h */
+let hist = null;             /* doc do KV */
+let sockets = [];
+
+function setBook(src, bids, asks) { books[src] = { bids, asks, t: Date.now() }; conn[src] = true; paintSrc(); }
+function dropBook(src) { conn[src] = false; delete books[src]; paintSrc(); }
+function paintSrc() { $("stSrc").textContent = Object.keys(conn).filter(k => conn[k]).join("+") || "—"; }
+function addTrade(px, usd, buy, t) { cvd += buy ? usd : -usd; if (usd >= 25000) { trades.push({ t: t || Date.now(), px, usd, buy }); if (trades.length > 4000) trades = trades.slice(-3000); } }
+
+function wsOpen(url, onopen, onmsg, tag) {
+  let dead = false;
+  const w = new WebSocket(url);
+  w.onopen = () => { try { onopen(w); } catch (e) {} };
+  w.onmessage = ev => { try { onmsg(JSON.parse(ev.data), w); } catch (e) {} };
+  w.onclose = () => { dropBook(tag); if (!dead) setTimeout(() => { if (!dead) startFeeds(); }, 4000); };
+  w.onerror = () => { try { w.close(); } catch (e) {} };
+  w._kill = () => { dead = true; try { w.onclose = null; w.close(); } catch (e) {} };
+  sockets.push(w);
+  return w;
+}
+function killFeeds() { sockets.forEach(w => w._kill && w._kill()); sockets = []; Object.keys(books).forEach(k => delete books[k]); Object.keys(conn).forEach(k => delete conn[k]); }
+
+let okxCt = 1;
+async function fetchOkxCt(cfg) {
+  okxCt = 1;
+  try {
+    const j = await (await fetch("https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=" + cfg.ok)).json();
+    if (j.data && j.data[0] && +j.data[0].ctVal > 0) okxCt = +j.data[0].ctVal;
+  } catch (e) {}
+}
+
+function startFeeds() {
+  killFeeds();
+  const cfg = COINS[coin];
+  /* Binance futures: book de 20 níveis completo a cada 500 ms + aggTrades */
+  wsOpen("wss://fstream.binance.com/stream?streams=" + cfg.bn + "@depth20@500ms/" + cfg.bn + "@aggTrade",
+    () => {},
+    m => {
+      const d = m.data; if (!d) return;
+      if (d.e === "depthUpdate" || d.b && d.a && !d.e) {
+        const mk = arr => { const M = new Map(); arr.forEach(x => { const p = +x[0], q = +x[1]; if (q > 0) M.set(p, p * q); }); return M; };
+        setBook("BN", mk(d.b || []), mk(d.a || []));
+      } else if (d.e === "aggTrade") {
+        addTrade(+d.p, +d.p * +d.q, !d.m, d.T);   /* m=true ⇒ buyer é maker ⇒ agressor VENDEU */
+      }
+    }, "BN");
+  /* Bybit linear: snapshot+delta de 50 níveis + trades */
+  const byB = { bids: new Map(), asks: new Map() };
+  wsOpen("wss://stream.bybit.com/v5/public/linear",
+    w => w.send(JSON.stringify({ op: "subscribe", args: ["orderbook.50." + cfg.by, "publicTrade." + cfg.by] })),
+    m => {
+      if (m.topic && m.topic.startsWith("orderbook")) {
+        const d = m.data;
+        const app = (M, arr) => arr.forEach(x => { const p = +x[0], q = +x[1]; if (q === 0) M.delete(p); else M.set(p, p * q); });
+        if (m.type === "snapshot") { byB.bids.clear(); byB.asks.clear(); }
+        app(byB.bids, d.b || []); app(byB.asks, d.a || []);
+        setBook("BY", new Map(byB.bids), new Map(byB.asks));
+      } else if (m.topic && m.topic.startsWith("publicTrade")) {
+        (m.data || []).forEach(x => addTrade(+x.p, +x.p * +x.v, x.S === "Buy", +x.T));
+      }
+    }, "BY");
+  /* OKX: books5 (5 níveis, snapshot completo) + trades — sz em CONTRATOS ⇒ ×ctVal */
+  wsOpen("wss://ws.okx.com:8443/ws/v5/public",
+    w => w.send(JSON.stringify({ op: "subscribe", args: [{ channel: "books5", instId: cfg.ok }, { channel: "trades", instId: cfg.ok }] })),
+    m => {
+      if (!m.arg || !m.data) return;
+      if (m.arg.channel === "books5") {
+        const d = m.data[0]; if (!d) return;
+        const mk = arr => { const M = new Map(); (arr || []).forEach(x => { const p = +x[0]; M.set(p, p * +x[1] * okxCt); }); return M; };
+        setBook("OKX", mk(d.bids), mk(d.asks));
+      } else if (m.arg.channel === "trades") {
+        m.data.forEach(x => addTrade(+x.px, +x.px * +x.sz * okxCt, x.side === "buy", +x.ts));
+      }
+    }, "OKX");
+  /* Hyperliquid: l2Book completo + trades */
+  wsOpen("wss://api.hyperliquid.xyz/ws",
+    w => { w.send(JSON.stringify({ method: "subscribe", subscription: { type: "l2Book", coin: cfg.hl } }));
+           w.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: cfg.hl } })); },
+    m => {
+      if (m.channel === "l2Book" && m.data && m.data.levels) {
+        const mk = arr => { const M = new Map(); (arr || []).forEach(x => { const p = +x.px; M.set(p, p * +x.sz); }); return M; };
+        setBook("HL", mk(m.data.levels[0]), mk(m.data.levels[1]));
+      } else if (m.channel === "trades" && Array.isArray(m.data)) {
+        m.data.forEach(x => addTrade(+x.px, +x.px * +x.sz, x.side === "B", +x.time));
+      }
+    }, "HL");
+}
+
+/* ---------- mid + amostragem de colunas ---------- */
+function midPx() {
+  let bb = 0, ba = Infinity;
+  Object.values(books).forEach(b => {
+    let hb = 0, la = Infinity;
+    b.bids.forEach((v, p) => { if (p > hb) hb = p; });
+    b.asks.forEach((v, p) => { if (p < la) la = p; });
+    if (hb > bb) bb = hb; if (la < ba) ba = la;
+  });
+  return bb > 0 && isFinite(ba) ? (bb + ba) / 2 : null;
+}
+function sampleCol() {
+  const cfg = COINS[coin], st = cfg.step;
+  const col = { t: Date.now(), b: {}, a: {}, src: Object.keys(conn).filter(k => conn[k]) };
+  if (!col.src.length) return;
+  Object.values(books).forEach(bk => {
+    bk.bids.forEach((usd, p) => { const i = Math.round(p / st); col.b[i] = (col.b[i] || 0) + usd; });
+    bk.asks.forEach((usd, p) => { const i = Math.round(p / st); col.a[i] = (col.a[i] || 0) + usd; });
+  });
+  const px = midPx(); if (px) col.px = px;
+  liveCols.push(col);
+  if (liveCols.length > 1440) liveCols = liveCols.slice(-1200);   /* ~2h de colunas de 5 s */
+}
+
+/* ---------- história do coletor ---------- */
+async function loadHist() {
+  try {
+    const r = await fetch("data/book-live.json?b=" + Math.floor(Date.now() / 300000), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    hist = await r.json();
+    const f = hist && hist.coins && hist.coins[coin] || [];
+    $("histNote").textContent = f.length ? "history: " + f.length + " frames stored (grows 24/7)" : "history: building — the collector started today, frames land every 10 min";
+  } catch (e) { $("histNote").textContent = "history: not reachable right now"; }
+  if (mode === "hist") draw();
+}
+
+/* ---------- desenho ---------- */
+const cv = $("cv"), cx = cv.getContext("2d");
+function sizeCanvas() {
+  const r = cv.parentElement.getBoundingClientRect();
+  const d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  cx.setTransform(d, 0, 0, d, 0, 0);
+}
+window.addEventListener("resize", () => { sizeCanvas(); draw(); });
+function heat(v, max) {
+  const x = Math.sqrt(Math.min(1, v / max));           /* sqrt: os valores médios ganham cor */
+  if (x <= 0) return null;
+  if (x < 0.35) { const k = x / 0.35; return "rgba(30,74,120," + (0.25 + 0.55 * k).toFixed(2) + ")"; }
+  if (x < 0.7) { const k = (x - 0.35) / 0.35; return "rgba(" + Math.round(30 + k * 26) + "," + Math.round(74 + k * 106) + "," + Math.round(120 + k * 88) + ",0.9)"; }
+  const k = (x - 0.7) / 0.3;
+  return "rgba(" + Math.round(56 + k * 189) + "," + Math.round(180 + k * 35) + "," + Math.round(208 - k * 98) + ",0.95)";
+}
+function draw() {
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cx.clearRect(0, 0, W, H);
+  cx.fillStyle = "#0b0e13"; cx.fillRect(0, 0, W, H);
+  const cfg = COINS[coin], st = mode === "live" ? cfg.step : (hist && hist.step && hist.step[coin]) || cfg.step;
+  const cols = mode === "live" ? liveCols : (hist && hist.coins && hist.coins[coin] || []);
+  if (!cols.length) {
+    cx.fillStyle = "#6b7688"; cx.font = "13px sans-serif"; cx.textAlign = "center";
+    cx.fillText(mode === "live" ? "A ligar aos feeds — as primeiras colunas aparecem em segundos…"
+      : "History is building — the collector writes a frame every 10 minutes, 24/7.", W / 2, H / 2);
+    return;
+  }
+  const CVD_H = 46, AXIS_W = 64, TW = W - AXIS_W, TH = H - CVD_H - 16;
+  /* alcance Y: bins presentes nas colunas visíveis */
+  let loI = Infinity, hiI = -Infinity, maxV = 0;
+  const nCols = Math.min(cols.length, Math.max(60, Math.floor(TW / 3)));
+  const view = cols.slice(-nCols);
+  view.forEach(c => {
+    for (const k in c.b) { const i = +k; if (i < loI) loI = i; if (i > hiI) hiI = i; if (c.b[k] > maxV) maxV = c.b[k]; }
+    for (const k in c.a) { const i = +k; if (i < loI) loI = i; if (i > hiI) hiI = i; if (c.a[k] > maxV) maxV = c.a[k]; }
+  });
+  if (!isFinite(loI) || maxV <= 0) return;
+  const rows = hiI - loI + 1;
+  const cw = TW / view.length, rh = Math.max(1, TH / rows);
+  const yOf = i => TH - (i - loI + 0.5) * (TH / rows);
+  view.forEach((c, xi) => {
+    const x = xi * cw;
+    for (const k in c.b) { const col = heat(c.b[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(+k) - rh / 2, cw + 0.6, rh + 0.5); } }
+    for (const k in c.a) { const col = heat(c.a[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(+k) - rh / 2, cw + 0.6, rh + 0.5); } }
+  });
+  /* linha do mid */
+  cx.strokeStyle = "#3987e5"; cx.lineWidth = 1.4; cx.beginPath();
+  let started = false;
+  view.forEach((c, xi) => {
+    if (!c.px) return;
+    const y = yOf(c.px / st);
+    if (!started) { cx.moveTo(xi * cw, y); started = true; } else cx.lineTo(xi * cw + cw / 2, y);
+  });
+  cx.stroke();
+  /* bolhas de trades (só no modo live — a história de 10 min não guarda trades) */
+  if (mode === "live" && trades.length) {
+    const t0 = view[0].t, t1 = view[view.length - 1].t + 5000;
+    trades.forEach(tr => {
+      if (tr.t < t0 || tr.t > t1) return;
+      const x = ((tr.t - t0) / (t1 - t0)) * TW;
+      const y = yOf(tr.px / st);
+      const r = Math.min(16, 3 + Math.sqrt(tr.usd / 25000) * 2.2);
+      cx.beginPath(); cx.arc(x, y, r, 0, 6.2832);
+      cx.fillStyle = tr.buy ? "rgba(12,163,12,0.5)" : "rgba(208,59,59,0.5)";
+      cx.fill();
+      cx.strokeStyle = tr.buy ? "#0ca30c" : "#d03b3b"; cx.lineWidth = 1; cx.stroke();
+    });
+  }
+  /* eixo Y */
+  cx.fillStyle = "#0f131b"; cx.fillRect(TW, 0, AXIS_W, H);
+  cx.fillStyle = "#aab4c4"; cx.font = "10px sans-serif"; cx.textAlign = "left";
+  const ticks = 8;
+  for (let k = 0; k <= ticks; k++) {
+    const i = loI + (rows * k) / ticks;
+    const y = yOf(i);
+    if (y < 8 || y > TH - 2) continue;
+    cx.fillText(fmtPx(i * st), TW + 6, y + 3);
+    cx.strokeStyle = "rgba(255,255,255,0.05)"; cx.beginPath(); cx.moveTo(0, y); cx.lineTo(TW, y); cx.stroke();
+  }
+  /* faixa CVD (modo live) / rótulo de tempo (hist) */
+  const cy0 = TH + 14;
+  cx.fillStyle = "#6b7688"; cx.font = "9.5px sans-serif"; cx.textAlign = "left";
+  const tSpanMin = Math.round((view[view.length - 1].t - view[0].t) / 60000);
+  cx.fillText((mode === "live" ? "session · last " : "collector history · last ") + (tSpanMin >= 90 ? (tSpanMin / 60).toFixed(1) + "h" : tSpanMin + "m") + " → now", 4, TH + 10);
+  if (mode === "live") {
+    let acc = 0, pts = [], mn = 0, mx = 0;
+    const t0 = view[0].t;
+    const evs = trades.length ? trades : [];
+    /* CVD por coluna: recomputado do zero (barato: ~4k trades) */
+    let ti = 0; acc = 0;
+    view.forEach((c, xi) => {
+      while (ti < evs.length && evs[ti].t <= c.t + 5000) { acc += evs[ti].buy ? evs[ti].usd : -evs[ti].usd; ti++; }
+      pts.push(acc); if (acc < mn) mn = acc; if (acc > mx) mx = acc;
+    });
+    const rng = Math.max(1, mx - mn);
+    cx.strokeStyle = acc >= 0 ? "#0ca30c" : "#d03b3b"; cx.lineWidth = 1.3; cx.beginPath();
+    pts.forEach((v, xi) => {
+      const y = cy0 + (CVD_H - 6) * (1 - (v - mn) / rng);
+      if (xi === 0) cx.moveTo(0, y); else cx.lineTo(xi * cw + cw / 2, y);
+    });
+    cx.stroke();
+    cx.strokeStyle = "rgba(255,255,255,0.12)"; cx.beginPath();
+    const y0 = cy0 + (CVD_H - 6) * (1 - (0 - mn) / rng); cx.moveTo(0, y0); cx.lineTo(TW, y0); cx.stroke();
+  }
+}
+
+/* ---------- DOM ladder + stats ---------- */
+function paintDom() {
+  const cfg = COINS[coin], st = cfg.step;
+  const agg = { b: new Map(), a: new Map() };
+  Object.values(books).forEach(bk => {
+    bk.bids.forEach((usd, p) => { const i = Math.round(p / st); agg.b.set(i, (agg.b.get(i) || 0) + usd); });
+    bk.asks.forEach((usd, p) => { const i = Math.round(p / st); agg.a.set(i, (agg.a.get(i) || 0) + usd); });
+  });
+  const px = midPx();
+  const asks = [...agg.a.entries()].sort((x, y) => x[0] - y[0]).slice(0, 12).reverse();
+  const bids = [...agg.b.entries()].sort((x, y) => y[0] - x[0]).slice(0, 12);
+  const mx = Math.max(1, ...asks.map(x => x[1]), ...bids.map(x => x[1]));
+  const row = (cls, i, v) => '<div class="dr ' + cls + '"><span class="px">' + fmtPx(i * st) + '</span>' +
+    '<span class="bar" style="width:' + Math.max(2, v / mx * 100).toFixed(0) + '%"></span>' +
+    '<span class="v">' + fmtBig(v) + "</span></div>";
+  $("domBody").innerHTML = asks.map(x => row("ask", x[0], x[1])).join("") +
+    '<div class="dr mid">' + (px ? fmtPx(px) : "—") + "</div>" +
+    bids.map(x => row("bid", x[0], x[1])).join("");
+  $("stPx").textContent = px ? fmtPx(px) : "—";
+  if (px) {
+    let near = 0;
+    Object.values(books).forEach(bk => {
+      bk.bids.forEach((usd, p) => { if (Math.abs(p - px) / px <= 0.005) near += usd; });
+      bk.asks.forEach((usd, p) => { if (Math.abs(p - px) / px <= 0.005) near += usd; });
+    });
+    $("stNear").textContent = fmtBig(near);
+  }
+  const c = $("stCvd"); c.textContent = (cvd >= 0 ? "+" : "") + fmtBig(cvd).replace("$-", "-$");
+  c.classList.toggle("pos", cvd >= 0); c.classList.toggle("neg", cvd < 0);
+}
+
+/* ---------- UI ---------- */
+function paintTabs() {
+  $("coinTabs").innerHTML = Object.keys(COINS).map(c =>
+    '<button class="tb' + (c === coin ? " on" : "") + '" data-coin="' + c + '">' + c + "</button>").join("");
+}
+document.addEventListener("click", e => {
+  const c = e.target.closest("[data-coin]");
+  if (c) {
+    coin = c.dataset.coin;
+    try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
+    trades = []; cvd = 0; liveCols = [];
+    paintTabs(); fetchOkxCt(COINS[coin]).then(startFeeds); loadHist(); draw();
+    return;
+  }
+  const m = e.target.closest("[data-mode]");
+  if (m) {
+    mode = m.dataset.mode;
+    document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+    draw();
+  }
+});
+
+/* ---------- arranque ---------- */
+paintTabs(); sizeCanvas();
+fetchOkxCt(COINS[coin]).then(startFeeds);
+loadHist();
+setInterval(loadHist, 5 * 60_000);
+setInterval(sampleCol, 5000);
+setInterval(() => { if (document.visibilityState === "visible") { paintDom(); draw(); } }, 1000);
+</script>
+</body>
+</html>
