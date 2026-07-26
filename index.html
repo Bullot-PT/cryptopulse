@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-gzvhgZqDueudot8WNxUcNP7Yqf9P4/zLLpiYb5YKrc8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-ApU2dBZZfgI5eRnFoxTG57/xQclKkVXiemZZgMPz624=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -7545,9 +7545,24 @@ function rdPlayKind(kind) {
   if (rdMuted || rdVolV <= 0) return;
   if (kind >= 3) { rdVoice(); return; }
   const a = rdAudio[kind]; if (!a) return;
-  try { a.volume = rdVolV; a.currentTime = 0; a.play().catch(() => { rdPendingKind = kind; }); } catch (e) {}
+  try { a.volume = rdVolV; a.currentTime = 0; a.play().catch(() => { rdPendingKind = kind; rdSoundBlockedPaint(); }); } catch (e) {}
 }
-document.addEventListener("pointerdown", () => { if (rdPendingKind) { const k = rdPendingKind; rdPendingKind = 0; rdPlayKind(k); } });
+function rdSoundBlockedPaint() {
+  const b = document.getElementById("rdSound");
+  if (b) { b.style.color = "var(--warn)"; b.title = "Chrome blocked the alert sound — click anywhere on the page once to unlock it"; }
+}
+/* primeiro gesto: "destranca" os dois mp3 (play mudo + pause) — a partir daí o .play() dos
+   alertas funciona mesmo com a tab em segundo plano */
+document.addEventListener("pointerdown", function rdUnlock() {
+  document.removeEventListener("pointerdown", rdUnlock);
+  Object.values(rdAudio).forEach(a => {
+    try { a.muted = true; const p = a.play(); if (p) p.then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; }); } catch (e) {}
+  });
+});
+document.addEventListener("pointerdown", () => {
+  if (rdPendingKind) { const k = rdPendingKind; rdPendingKind = 0; rdPlayKind(k); }
+  const b = document.getElementById("rdSound"); if (b) { b.style.color = ""; }
+});
 const rdBootT = Date.now();
 function rdSound(lvl, coin) {
   if (Date.now() - rdBootT < 20_000) return; /* no sounds right after page load — visuals still show */
@@ -7598,10 +7613,25 @@ document.getElementById("rdBody").addEventListener("click", e => {
   paint();
 })();
 rdFetchHl(); rdFetchBook(); rdFetchOiRef(); rdFetchHist();
-setInterval(rdFetchHl, 90_000);
-setInterval(rdFetchBook, 120_000);
-setInterval(rdFetchOiRef, 300_000);
-setInterval(rdFetchHist, 300_000);
+/* O Chrome estrangula setInterval em tabs em SEGUNDO PLANO para ~1×/min — era por isso que o
+   alerta chegava ao Telegram (bot) e só aparecia aqui minutos depois quando ele estava a ver a
+   chart noutra tab. Um Web Worker não é estrangulado: é ele que dá o tique de 10 s; o interval
+   normal fica só como rede para browsers sem workers. Book a 60 s (KV serve com ~20 s de edge). */
+const rdTickLast = { hl: Date.now(), book: Date.now(), oi: Date.now(), hist: Date.now() };
+function rdTick() {
+  const n = Date.now();
+  if (n - rdTickLast.hl > 90_000) { rdTickLast.hl = n; rdFetchHl(); }
+  if (n - rdTickLast.book > 60_000) { rdTickLast.book = n; rdFetchBook(); }
+  if (n - rdTickLast.oi > 300_000) { rdTickLast.oi = n; rdFetchOiRef(); }
+  if (n - rdTickLast.hist > 300_000) { rdTickLast.hist = n; rdFetchHist(); }
+  renderRadar();
+}
+let rdTicker = null;
+try {
+  rdTicker = new Worker(URL.createObjectURL(new Blob(["setInterval(function(){postMessage(1)},10000)"], { type: "text/javascript" })));
+  rdTicker.onmessage = rdTick;
+} catch (e) { /* sem workers — fica o interval estrangulável */ }
+setInterval(() => { if (!rdTicker) rdTick(); }, 10_000);
 setTimeout(renderRadar, 2500);
 setInterval(renderRadar, 10_000); /* feels live — the underlying inputs refresh at 90s (funding/OI) and ~10 min (books/liq mirror) */
 
