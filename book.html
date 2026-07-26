@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-YoJB27PqlJKyDPmy2UNpUxytZzcBoy3db7RPUDnCSSw='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-cbmajOOEYLoUVYhKoPqvdK2vLVDG/aK+jYjOYXRWwi8='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -66,6 +66,7 @@ footer b { color:var(--ink-2); font-weight:600; }
     <button class="tb" data-dmode="agg" title="All selected books merged into one">AGG</button>
     <button class="tb" data-mkt="spot" title="Show SPOT order books">SPOT</button>
     <button class="tb" data-mkt="perp" title="Show PERPETUAL order books">PERP</button>
+    <button class="tb" data-cmp="1" title="Denser rows — ~40% more price levels on screen">COMPACT</button>
     <span class="crumb" style="align-self:center">group</span>
     <span id="grpBtns" style="display:flex;gap:4px"></span>
     <span id="exBtns" style="display:flex;gap:4px;margin-left:6px"></span>
@@ -105,7 +106,7 @@ footer b { color:var(--ink-2); font-weight:600; }
   <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
 </main>
 <footer>
-  <span><b>DOM depth</b>: Coinbase FULL book · Binance 5000 spot + perp rebuilt LIVE from its futures WebSocket (their REST blocks browsers and proxies) · OKX 5000 spot+perp · Bybit 500 perp / 200 spot (public API caps) · Kraken 500 · HL ~20 grouped · <b>SPOT/PERP filter the columns</b> · <b>drag a column header to reorder</b> · wheel scrolls, click snaps back</span>
+  <span><b>DOM depth</b>: Coinbase FULL book · Binance 5000 spot + perp rebuilt LIVE from its futures WebSocket (their REST blocks browsers and proxies) · OKX 5000 spot+perp · Bybit 500 perp / 200 spot (public API caps) · Kraken 500 · HL ~20 grouped · <b>SPOT/PERP filter the columns</b> · <b>drag a header to reorder</b> · <b>wheel or grab-drag the ladder to browse the whole public book</b>, click snaps back to mid · <b>Σ</b> = cumulative size from mid · <b>B/S bar</b> = resting USD within ±1% · COMPACT = denser rows</span>
   <span><b>live</b>: Binance + Bybit + OKX + Hyperliquid via WebSocket, sampled every 5 s in your browser</span>
   <span><b>history 48H</b>: OKX + Hyperliquid, 10-min frames collected 24/7 (Binance/Bybit block the collector's IPs — said, not hidden)</span>
   <span id="histNote"></span>
@@ -113,7 +114,8 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v128). Desenhada de raiz; a inspiração de layout
+/* Cryptomacho Order Book — página dedicada (v6f: pan/drag na ladder, coluna Σ cumulativa,
+   barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
 /* step = história do coletor (10 min) · lstep = LIVE no browser, ~5× mais fino para a
@@ -220,10 +222,10 @@ function startFeeds() {
         addTrade(+d.p, +d.p * +d.q, !d.m, d.T);   /* m=true ⇒ buyer é maker ⇒ agressor VENDEU */
       }
     }, "BN");
-  /* Bybit linear: snapshot+delta de 50 níveis + trades */
+  /* Bybit linear: snapshot+delta de 500 níveis (máximo do WS público) + trades */
   const byB = { bids: new Map(), asks: new Map() };
   wsOpen("wss://stream.bybit.com/v5/public/linear",
-    w => w.send(JSON.stringify({ op: "subscribe", args: ["orderbook.50." + cfg.by, "publicTrade." + cfg.by] })),
+    w => w.send(JSON.stringify({ op: "subscribe", args: ["orderbook.500." + cfg.by, "publicTrade." + cfg.by] })),
     m => {
       if (m.topic && m.topic.startsWith("orderbook")) {
         const d = m.data;
@@ -735,7 +737,8 @@ function cellBg(side, x) {
    números mudam dentro delas. */
 const domAnchor = {};
 const domPrevMid = {};
-let domOff = 0;               /* deslocamento da janela em buckets (roda do rato) — 0 = colado ao mid */
+let domOff = 0;               /* deslocamento da janela em buckets (roda/drag) — 0 = colado ao mid */
+let domCompact = (() => { try { return localStorage.getItem("cryptomacho-book-compact") === "1"; } catch (e) { return false; } })();
 /* ---------- ladder em CANVAS (arquitectura tapesurf: um canvas, zero mutações de DOM) ----------
    Provado no site deles a 26-jul: o widget do book é UM canvas com 0 mutações de DOM em 3 s.
    É por isso que flui — nada de innerHTML a cada segundo. Aqui é igual: ~30 fps, valores com
@@ -745,7 +748,7 @@ const MONO = "'IBM Plex Mono', monospace";
 const domDisp = {};           /* akey -> Map(lado+preço -> quantidade EXIBIDA, a perseguir o alvo) */
 function fmtAge(ms) { return ms < 9500 ? (ms / 1000).toFixed(1) + "s" : ms < 90000 ? Math.round(ms / 1000) + "s" : Math.round(ms / 60000) + "m"; }
 function drawCol(c, x0, cw, H, g, now, fl) {
-  const HDR = 30, MIDH = 24, ROWH = 17, pad = 8;
+  const HDR = 30, MIDH = 24, ROWH = domCompact ? 12 : 17, pad = 8;
   if (x0 > 0) { dcx.fillStyle = "#1c2230"; dcx.fillRect(x0, 0, 1, H); }
   const age = c.t ? now - c.t : Infinity;
   const okAge = age < 12000;
@@ -815,7 +818,13 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     disp.set(key, v); used.add(key);
     return v;
   };
-  const priceR = x0 + cw * 0.47, qx0 = x0 + cw * 0.51, qw = x0 + cw - pad - qx0;
+  /* coluna Σ (cumulativo numérico desde o mid, estilo bybit) quando a largura deixa */
+  const wide = c.tag === "AGG" || cw >= 205;
+  const priceR = x0 + cw * (wide ? 0.40 : 0.47), qx0 = x0 + cw * (wide ? 0.44 : 0.51);
+  const qEnd = wide ? x0 + cw * 0.73 : x0 + cw - pad;
+  const qw = qEnd - qx0;
+  const qFont = "500 " + (domCompact ? 9 : 10.5) + "px " + MONO;
+  const pxFsz = domCompact ? 10 : 11;
   const row = (p, y) => {
     const side = sideOf(p);
     const tgt = (side === "a" ? gb.a.get(p) : gb.b.get(p)) || 0;
@@ -832,11 +841,16 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     }
     const bg = cellBg(side, xx);
     if (bg) { dcx.fillStyle = bg; dcx.fillRect(qx0, y + 1, qw, ROWH - 2); }
-    dcx.textAlign = "right"; dcx.font = "500 10.5px " + MONO;
+    dcx.textAlign = "right"; dcx.font = qFont;
     dcx.fillStyle = xx > 0.7 ? "#0b0e13" : "#e8ecf3";
     const qs = fmtQ(q);
-    if (qs) dcx.fillText(qs, qx0 + qw - 4, y + ROWH / 2 + 0.5);
-    dcx.font = (xx > 0.55 ? "700 " : "400 ") + "11px " + MONO;
+    if (qs) dcx.fillText(qs, qEnd - 4, y + ROWH / 2 + 0.5);
+    if (wide && c2 > 0) {
+      dcx.font = "400 " + (domCompact ? 8.5 : 9.5) + "px " + MONO;
+      dcx.fillStyle = side === "a" ? "rgba(208,59,59,0.75)" : "rgba(25,201,74,0.75)";
+      dcx.fillText(fmtQ(c2), x0 + cw - pad, y + ROWH / 2 + 0.5);
+    }
+    dcx.font = (xx > 0.55 ? "700 " : "400 ") + pxFsz + "px " + MONO;
     dcx.fillStyle = xx > 0.55 ? "#ffffff" : side === "a" ? "#d03b3b" : "#19c94a";
     dcx.fillText(p.toFixed(pxDec), priceR, y + ROWH / 2 + 0.5);
     const isMk = side === "a" ? (p - g < mkUp && p >= mkUp) : (p > mkDn && p - g <= mkDn);
@@ -873,6 +887,24 @@ function drawCol(c, x0, cw, H, g, now, fl) {
         (c.tag === "BY" ? " (500/side = API cap)" : c.tag === "BYS" ? " (200/side = API cap)" : "");
       dcx.fillText(dcx.measureText(capTxt).width > cw - 10 ? "book ends: " + bkLo.toFixed(pxDec) + "–" + bkHi.toFixed(pxDec) : capTxt, x0 + cw / 2, H - 7);
       dcx.restore();
+    }
+  }
+  /* barra B/S (estilo bybit): USD em descanso a ±1% do mid, bids vs asks — dados do book completo */
+  if (c.bk && c.bk.bids.length && c.bk.asks.length) {
+    let ib = 0, ia = 0;
+    for (let i2 = 0; i2 < c.bk.bids.length; i2++) { const bp = c.bk.bids[i2][0]; if (bp < mid * 0.99) break; ib += bp * c.bk.bids[i2][1]; }
+    for (let i2 = 0; i2 < c.bk.asks.length; i2++) { const ap = c.bk.asks[i2][0]; if (ap > mid * 1.01) break; ia += ap * c.bk.asks[i2][1]; }
+    const tot = ib + ia;
+    if (tot > 0) {
+      const bw = cw - pad * 2, bx = x0 + pad, byY = H - 26;
+      dcx.fillStyle = "rgba(5,7,11,0.94)"; dcx.fillRect(x0 + 1, byY - 15, cw - 2, 23);
+      const fb = ib / tot;
+      dcx.fillStyle = "rgba(25,201,74,0.85)"; dcx.fillRect(bx, byY, bw * fb, 4);
+      dcx.fillStyle = "rgba(208,59,59,0.85)"; dcx.fillRect(bx + bw * fb, byY, bw * (1 - fb), 4);
+      dcx.font = "600 8.5px " + MONO;
+      dcx.textAlign = "left"; dcx.fillStyle = "#19c94a"; dcx.fillText("B " + Math.round(fb * 100) + "%", bx, byY - 5);
+      dcx.textAlign = "right"; dcx.fillStyle = "#d03b3b"; dcx.fillText(Math.round((1 - fb) * 100) + "% S", bx + bw, byY - 5);
+      if (cw >= 190) { dcx.textAlign = "center"; dcx.fillStyle = "#6b7688"; dcx.fillText("±1% " + fmtBig(tot), bx + bw / 2, byY - 5); }
     }
   }
   /* linha do mid: preço, spread e direcção do último movimento */
@@ -915,17 +947,33 @@ function drawCol(c, x0, cw, H, g, now, fl) {
   if (disp.size > used.size * 2 + 32) { for (const k of disp.keys()) if (!used.has(k)) disp.delete(k); }
 }
 let dragTag = null, dragX0 = 0, dragMoved = false, dragJust = false;
+let panY0 = null, panOff0 = 0, panMoved = false;   /* agarrar o corpo e arrastar = navegar o book */
+const OFF_MAX = 20000;                              /* alcance prático: o book público inteiro */
 dcv.addEventListener("mousedown", e => {
-  if (view !== "dom" || domMode !== "single") return;
+  if (e.button === 1) { e.preventDefault(); return; } /* trava o autoscroll do Chrome no botão do meio */
+  if (view !== "dom" || e.button !== 0) return;
   const r = dcv.getBoundingClientRect();
-  if (e.clientY - r.top > 30) return;                 /* só a faixa do cabeçalho arrasta */
-  if (!lastColTags || lastColTags.length < 2) return;
-  const cw2 = r.width / lastColTags.length;
-  const idx = Math.max(0, Math.min(lastColTags.length - 1, Math.floor((e.clientX - r.left) / cw2)));
-  dragTag = lastColTags[idx]; dragX0 = e.clientX; dragMoved = false;
+  if (e.clientY - r.top <= 30) {                      /* faixa do cabeçalho: reordenar colunas */
+    if (domMode !== "single" || !lastColTags || lastColTags.length < 2) return;
+    const cw2 = r.width / lastColTags.length;
+    const idx = Math.max(0, Math.min(lastColTags.length - 1, Math.floor((e.clientX - r.left) / cw2)));
+    dragTag = lastColTags[idx]; dragX0 = e.clientX; dragMoved = false;
+    e.preventDefault();
+    return;
+  }
+  /* corpo: pan vertical (como no tapesurf — puxa a ladder para veres mais fundo) */
+  panY0 = e.clientY; panOff0 = domOff; panMoved = false;
+  dcv.style.cursor = "grabbing";
   e.preventDefault();
 });
 window.addEventListener("mousemove", e => {
+  if (panY0 != null) {
+    if (Math.abs(e.clientY - panY0) > 4) panMoved = true;
+    const rh = domCompact ? 12 : 17;
+    const nv = Math.max(-OFF_MAX, Math.min(OFF_MAX, panOff0 + Math.round((e.clientY - panY0) / rh)));
+    if (nv !== domOff) { domOff = nv; drawDom(); }
+    return;
+  }
   if (dragTag == null) return;
   if (Math.abs(e.clientX - dragX0) > 6) dragMoved = true;
   if (!dragMoved) return;
@@ -941,19 +989,20 @@ window.addEventListener("mousemove", e => {
     drawDom();
   }
 });
-window.addEventListener("mouseup", () => { if (dragMoved) dragJust = true; dragTag = null; });
-dcv.addEventListener("mousemove", e => {
-  const r = dcv.getBoundingClientRect();
-  dcv.style.cursor = (view === "dom" && domMode === "single" && e.clientY - r.top <= 30) ? "grab" : "default";
+window.addEventListener("mouseup", () => { if (dragMoved || panMoved) dragJust = true; dragTag = null; panY0 = null; panMoved = false; dcv.style.cursor = ""; });
+dcv.addEventListener("mousemove", () => {
+  if (panY0 != null) return;
+  dcv.style.cursor = view === "dom" ? "grab" : "default";
 });
 dcv.addEventListener("wheel", e => {
   e.preventDefault();
-  domOff = Math.max(-400, Math.min(400, domOff + (e.deltaY > 0 ? -3 : 3)));
+  /* passo proporcional à roda: um flick forte salta dezenas de níveis, um toque fino ajusta 3 */
+  const stp = 3 * Math.max(1, Math.min(12, Math.round(Math.abs(e.deltaY) / 40)));
+  domOff = Math.max(-OFF_MAX, Math.min(OFF_MAX, domOff + (e.deltaY > 0 ? -stp : stp)));
   drawDom();
 }, { passive: false });
 dcv.addEventListener("click", () => { if (dragJust) { dragJust = false; return; } if (domOff) { domOff = 0; drawDom(); } });
 dcv.addEventListener("auxclick", e => { if (e.button === 1) { e.preventDefault(); if (domOff) { domOff = 0; drawDom(); } } });
-dcv.addEventListener("mousedown", e => { if (e.button === 1) e.preventDefault(); }); /* trava o autoscroll do Chrome no botão do meio */
 function drawDom() {
   const W = dcv.clientWidth, H = dcv.clientHeight;
   if (!W || !H) return;
@@ -1002,6 +1051,7 @@ function paintCtl() {
   document.getElementById("spanBtns").style.display = view === "heat" ? "inline-flex" : "none";
   document.getElementById("palCtl").style.display = view === "heat" ? "inline-flex" : "none";
   document.querySelectorAll("[data-mkt]").forEach(b => b.classList.toggle("on", !!mktSel[b.dataset.mkt]));
+  document.querySelectorAll("[data-cmp]").forEach(b => b.classList.toggle("on", !!domCompact));
   document.querySelectorAll("[data-pal]").forEach(b => b.classList.toggle("on", b.dataset.pal === heatPal));
   document.querySelectorAll("[data-mode]").forEach(b => { b.parentElement.style.display = view === "heat" ? "inline-flex" : "none"; });
   document.querySelectorAll("[data-dmode]").forEach(b => b.classList.toggle("on", b.dataset.dmode === domMode));
@@ -1055,6 +1105,9 @@ document.addEventListener("click", e => {
     paintCtl(); drawDom(); return; }
   const gr = e.target.closest("[data-grp]");
   if (gr) { grpSel[coin] = +gr.dataset.grp; domOff = 0; try { localStorage.setItem("cryptomacho-book-grp", JSON.stringify(grpSel)); } catch (er) {}
+    paintCtl(); drawDom(); return; }
+  const cp = e.target.closest("[data-cmp]");
+  if (cp) { domCompact = !domCompact; try { localStorage.setItem("cryptomacho-book-compact", domCompact ? "1" : "0"); } catch (er) {}
     paintCtl(); drawDom(); return; }
   const mk2 = e.target.closest("[data-mkt]");
   if (mk2) { mktSel[mk2.dataset.mkt] = mktSel[mk2.dataset.mkt] ? 0 : 1;
