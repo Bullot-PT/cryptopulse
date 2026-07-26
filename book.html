@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'sha256-C9PQGt4QfSnJsf6ARtlKsB02Z0RDEoAWHCpV3bJJabA='; connect-src 'self' https://www.okx.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'sha256-yGC1/UZR9MRcR96w6nssOb/sADuiMMf6olTFAnd/XMU='; connect-src 'self' https://www.okx.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <style>
 :root {
@@ -272,7 +272,8 @@ function draw() {
   /* centro Y: mid suavizado (EMA) para a vista seguir o preço sem tremer */
   const lastPx = (cols[cols.length - 1].px) || (yCenter || 0);
   if (lastPx > 0) yCenter = yCenter == null ? lastPx : yCenter + (lastPx - yCenter) * 0.15;
-  const half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0016, st * 24) : Math.max(lastPx * 0.02, st * 24));
+  /* por defeito a vista ABRAÇA o book real (±~0.06%) — o wheel afasta se quiseres contexto */
+  const half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0006, st * 28) : Math.max(lastPx * 0.02, st * 24));
   const pLo = yCenter - half, pHi = yCenter + half;
   const yOf = p => TH - (p - pLo) / (pHi - pLo) * TH;
   const rowH = Math.max(1, st / (pHi - pLo) * TH);
