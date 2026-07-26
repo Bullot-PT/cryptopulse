@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-snkXQ+GmVjaIwQrdIVjgHTUO1s52Pio+b3A3wIib18Q='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-YoJB27PqlJKyDPmy2UNpUxytZzcBoy3db7RPUDnCSSw='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -72,11 +72,15 @@ footer b { color:var(--ink-2); font-weight:600; }
   </span>
   <span class="modes" id="palCtl" style="display:none">
     <span class="crumb" style="align-self:center">colors</span>
+    <button class="tb" data-pal="macho" title="House colors — green ramp, white hot, RED only on the very biggest walls">MACHO</button>
     <button class="tb" data-pal="classic" title="Dark blue to cyan to yellow to white — bookmap style">CLASSIC</button>
     <button class="tb" data-pal="fire" title="Black to red to orange to white">FIRE</button>
     <button class="tb" data-pal="green" title="House green ramp">GREEN</button>
     <button class="tb" data-pal="ice" title="Deep blue to white">ICE</button>
     <input type="range" id="palGamma" min="25" max="70" step="1" title="Heat curve — left: only the big walls glow · right: everything glows" style="width:70px;accent-color:var(--accent);align-self:center">
+    <span class="crumb" id="palGv" style="align-self:center;min-width:24px"></span>
+    <span class="crumb" style="align-self:center">scale</span>
+    <input id="palCap" placeholder="auto" title="USD value that maps to the hottest color — e.g. 2M, 500k. Empty = automatic (visible peak). Fixing it makes colors comparable across time." style="width:52px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--ink);font:600 10px 'Inter',-apple-system,sans-serif;padding:4px 6px;align-self:center" spellcheck="false">
   </span>
   <span class="modes" id="spanBtns">
     <button class="tb" data-span="60">1M</button>
@@ -306,14 +310,22 @@ window.addEventListener("resize", () => { sizeCanvas(); if (view === "dom") draw
 /* paletas do heatmap — o heat quantifica LIQUIDEZ PASSIVA (USD por nível de preço).
    Personalizável: paleta + curva (gamma) nos controlos, guardado no browser. */
 const PALS = {
+  macho:   [[0, [5, 18, 10]], [0.35, [18, 102, 52]], [0.6, [25, 201, 74]], [0.8, [242, 255, 244]], [1, [208, 59, 59]]],
   classic: [[0, [8, 14, 30]], [0.25, [20, 54, 120]], [0.5, [30, 150, 200]], [0.75, [245, 230, 80]], [1, [255, 255, 255]]],
   fire:    [[0, [16, 5, 4]], [0.3, [122, 22, 10]], [0.6, [222, 82, 20]], [0.85, [250, 190, 44]], [1, [255, 252, 235]]],
   green:   [[0, [6, 20, 12]], [0.35, [10, 92, 46]], [0.65, [25, 201, 74]], [0.85, [190, 240, 92]], [1, [255, 255, 255]]],
   ice:     [[0, [6, 10, 26]], [0.35, [26, 60, 142]], [0.65, [72, 152, 232]], [0.85, [172, 220, 250]], [1, [255, 255, 255]]]
 };
-let heatPal = (() => { try { const p = localStorage.getItem("cryptomacho-book-pal"); return PALS[p] ? p : "classic"; } catch (e) { return "classic"; } })();
+let heatPal = (() => { try { const p = localStorage.getItem("cryptomacho-book-pal"); return PALS[p] ? p : "macho"; } catch (e) { return "macho"; } })();
+let heatCap = (() => { try { const v = parseFloat(localStorage.getItem("cryptomacho-book-cap")); return isFinite(v) && v > 0 ? v : 0; } catch (e) { return 0; } })();
+function parseUsd(t) {
+  const m = String(t || "").trim().match(/^\$?\s*([\d.]+)\s*([kKmMbB]?)$/);
+  if (!m) return 0;
+  return parseFloat(m[1]) * ({ k: 1e3, m: 1e6, b: 1e9 }[(m[2] || "").toLowerCase()] || 1);
+}
 let heatGamma = (() => { try { const v = parseFloat(localStorage.getItem("cryptomacho-book-gamma")); return isFinite(v) && v >= 0.25 && v <= 0.7 ? v : 0.42; } catch (e) { return 0.42; } })();
 function heat(v, max) {
+  if (heatCap > 0) max = heatCap;   /* escala fixada pelo utilizador — cores comparáveis no tempo */
   const x = Math.pow(Math.min(1, v / max), heatGamma);
   if (x <= 0.02) return null;
   const stops = PALS[heatPal] || PALS.classic;
@@ -362,7 +374,48 @@ function draw() {
     for (const k in c.b) { const p = k * st; if (p >= pLo && p <= pHi && c.b[k] > maxV) maxV = c.b[k]; }
     for (const k in c.a) { const p = k * st; if (p >= pLo && p <= pHi && c.a[k] > maxV) maxV = c.a[k]; }
   }
+  if (live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length) {
+    /* o pico de cor tem de contar TAMBÉM com a história cosida — senão a esquerda satura */
+    const firstLive0 = cols.length ? cols[0].t : now;
+    const hstep0 = (hist.step && hist.step[coin]) || cfg.step;
+    const hf0 = hist.coins[coin];
+    for (let i = hf0.length - 1; i >= 0; i--) {
+      const f = hf0[i]; if (!f || f.t >= firstLive0) continue;
+      if (f.t < t0 - 600_000) break;
+      for (const k in f.b) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.b[k] > maxV) maxV = f.b[k]; }
+      for (const k in f.a) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.a[k] > maxV) maxV = f.a[k]; }
+    }
+  }
   if (maxV <= 0) maxV = 1;
+  /* história do coletor por trás da sessão live (só na zona onde a sessão ainda não existia) */
+  let histEdgeX = null;
+  if (live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length) {
+    const firstLive = cols.length ? cols[0].t : now;
+    const hstep = (hist.step && hist.step[coin]) || cfg.step;
+    const hw = TW * 600_000 / span;
+    const hf = hist.coins[coin];
+    let drew = false;
+    for (let i = hf.length - 1; i >= 0; i--) {
+      const f = hf[i]; if (!f || f.t >= firstLive) continue;
+      if (f.t < t0 - 600_000) break;
+      const x = TW - (now - f.t) / span * TW;
+      const wClip = Math.min(hw, (firstLive - f.t) / span * TW);
+      const hRowH = Math.max(1, hstep / (pHi - pLo) * TH);
+      for (const k in f.b) { const p = k * hstep; if (p < pLo || p > pHi) continue;
+        const col2 = heat(f.b[k], maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
+      for (const k in f.a) { const p = k * hstep; if (p < pLo || p > pHi) continue;
+        const col2 = heat(f.a[k], maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
+      drew = true;
+    }
+    if (drew && cols.length) {
+      histEdgeX = TW - (now - firstLive) / span * TW;
+      cx.strokeStyle = "rgba(250,178,25,0.5)"; cx.setLineDash([3, 4]); cx.beginPath();
+      cx.moveTo(histEdgeX, 0); cx.lineTo(histEdgeX, TH); cx.stroke(); cx.setLineDash([]);
+      cx.fillStyle = "#8f9aac"; cx.font = "8.5px 'IBM Plex Mono', monospace"; cx.textAlign = "right";
+      cx.fillText("collector history (10m) ◂", histEdgeX - 4, 12);
+      cx.textAlign = "left"; cx.fillText("▸ this session (1s)", histEdgeX + 4, 12);
+    }
+  }
   /* células — cada bin no seu preço exacto, coluna na sua posição exacta no tempo */
   for (let i = cols.length - 1; i >= 0; i--) {
     const c = cols[i]; if (c.t < t0) break;
@@ -424,7 +477,7 @@ function draw() {
   }
   cx.fillStyle = "#8f9aac"; cx.font = "9px 'IBM Plex Mono', monospace";
   cx.textAlign = "left"; cx.fillText("$0", lgX, lgY + 19);
-  cx.textAlign = "right"; cx.fillText(fmtBig(maxV), lgX + lgW, lgY + 19);
+  cx.textAlign = "right"; cx.fillText(fmtBig(heatCap > 0 ? heatCap : maxV) + (heatCap > 0 ? " (set)" : " (auto)"), lgX + lgW, lgY + 19);
   cx.textAlign = "center"; cx.fillText("resting liquidity per level", lgX + lgW / 2, lgY + 30);
   cx.textAlign = "left";
   /* rótulo da janela + CVD */
@@ -596,7 +649,7 @@ function hlParams() {
   return best;
 }
 function pollDeep() {
-  if (view !== "dom" || document.visibilityState === "hidden") return;
+  if (document.visibilityState === "hidden") return;
   const cfg = COINS[coin];
   const want = tag => { const sc = SRCS[tag]; return exSel[sc.venue] && mktSel[sc.type] && exSym(cfg, tag) && !deepNo[coin + "|" + tag]; };
   /* cada fonte devolve o book, ou "NP" quando a PRÓPRIA API diz que o par não existe */
@@ -826,20 +879,30 @@ function drawCol(c, x0, cw, H, g, now, fl) {
   pm.m = mid; domPrevMid[akey] = pm;
   dcx.fillStyle = "#161b25"; dcx.fillRect(x0 + 1, my, cw - 2, MIDH);
   dcx.fillStyle = "#232a37"; dcx.fillRect(x0 + 1, my, cw - 2, 1); dcx.fillRect(x0 + 1, my + MIDH - 1, cw - 2, 1);
-  dcx.textAlign = "left"; dcx.font = "700 13px " + MONO; dcx.fillStyle = "#e8ecf3";
-  dcx.fillText(mid.toFixed(pxDec === 0 ? 1 : pxDec + 1), x0 + pad + 2, my + MIDH / 2 + 0.5);
+  const midTxt = mid.toFixed(pxDec === 0 ? 1 : pxDec + 1);
+  const midFont = "700 " + (cw < 230 ? 11 : 13) + "px " + MONO;
+  dcx.textAlign = "left"; dcx.font = midFont; dcx.fillStyle = "#e8ecf3";
+  dcx.fillText(midTxt, x0 + pad + 2, my + MIDH / 2 + 0.5);
   const spread = gb.ba && gb.bb ? gb.ba - gb.bb : 0;
-  dcx.textAlign = "right"; dcx.font = "400 10px " + MONO; dcx.fillStyle = "#6b7688";
-  if (spread > 0) dcx.fillText("sprd " + spread.toFixed(pxDec === 0 ? 1 : pxDec + 2), x0 + cw - pad, my + MIDH / 2 + 0.5);
-  if (pm.dir) {
-    dcx.fillStyle = pm.dir > 0 ? "#19c94a" : "#d03b3b"; dcx.font = "700 11px " + MONO;
-    dcx.fillText(pm.dir > 0 ? "▲" : "▼", x0 + cw - pad - (spread > 0 ? 62 : 0), my + MIDH / 2 + 0.5);
-  }
-  if (domOff) {
-    /* tapa o sprd/seta para o aviso não se atropelar com eles */
-    dcx.fillStyle = "#161b25"; dcx.fillRect(x0 + cw * 0.34, my + 1, cw * 0.66 - 1, MIDH - 2);
-    dcx.textAlign = "right"; dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
-    dcx.fillText((domOff > 0 ? "↑ " : "↓ ") + Math.abs(domOff) + " buckets from mid · click = snap back", x0 + cw - pad, my + MIDH / 2 + 0.5);
+  if (!domOff) {
+    dcx.textAlign = "right"; dcx.font = "400 10px " + MONO; dcx.fillStyle = "#6b7688";
+    if (spread > 0 && cw >= 170) dcx.fillText("sprd " + spread.toFixed(pxDec === 0 ? 1 : pxDec + 2), x0 + cw - pad, my + MIDH / 2 + 0.5);
+    if (pm.dir) {
+      dcx.fillStyle = pm.dir > 0 ? "#19c94a" : "#d03b3b"; dcx.font = "700 11px " + MONO;
+      dcx.fillText(pm.dir > 0 ? "▲" : "▼", x0 + cw - pad - (spread > 0 && cw >= 170 ? 62 : 0), my + MIDH / 2 + 0.5);
+    }
+  } else {
+    /* janela deslocada: limpa-se TUDO à direita do preço (medido) e o aviso encurta se não couber */
+    dcx.font = midFont;
+    const midW = dcx.measureText(midTxt).width;
+    const hx0 = x0 + pad + 2 + midW + 8;
+    dcx.fillStyle = "#161b25"; dcx.fillRect(hx0, my + 1, x0 + cw - 2 - hx0, MIDH - 2);
+    dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
+    const long = (domOff > 0 ? "↑ " : "↓ ") + Math.abs(domOff) + " buckets from mid · click = snap back";
+    const shortT = (domOff > 0 ? "↑" : "↓") + Math.abs(domOff) + " · click";
+    const txt = dcx.measureText(long).width < x0 + cw - pad - hx0 - 4 ? long : shortT;
+    dcx.textAlign = "right";
+    dcx.fillText(txt, x0 + cw - pad, my + MIDH / 2 + 0.5);
   }
   /* dados velhos NÃO desaparecem (era isso que "quebrava" as colunas): escurecem e dizem a idade */
   if (!okAge) {
@@ -887,6 +950,8 @@ dcv.addEventListener("wheel", e => {
   drawDom();
 }, { passive: false });
 dcv.addEventListener("click", () => { if (dragJust) { dragJust = false; return; } if (domOff) { domOff = 0; drawDom(); } });
+dcv.addEventListener("auxclick", e => { if (e.button === 1) { e.preventDefault(); if (domOff) { domOff = 0; drawDom(); } } });
+dcv.addEventListener("mousedown", e => { if (e.button === 1) e.preventDefault(); }); /* trava o autoscroll do Chrome no botão do meio */
 function drawDom() {
   const W = dcv.clientWidth, H = dcv.clientHeight;
   if (!W || !H) return;
@@ -1005,12 +1070,23 @@ document.addEventListener("click", e => {
 /* ---------- arranque ---------- */
 sessRestore(coin);
 (() => {
-  const pg = $("palGamma");
+  const pg = $("palGamma"), pv = $("palGv"), pc = $("palCap");
+  const gvPaint = () => { if (pv) pv.textContent = heatGamma.toFixed(2); };
   if (pg) {
-    pg.value = Math.round(heatGamma * 100);
-    pg.addEventListener("input", () => { heatGamma = (+pg.value) / 100; draw(); });
+    pg.value = Math.round(heatGamma * 100); gvPaint();
+    pg.addEventListener("input", () => { heatGamma = (+pg.value) / 100; gvPaint(); draw(); });
     pg.addEventListener("change", () => { try { localStorage.setItem("cryptomacho-book-gamma", String(heatGamma)); } catch (e) {} });
     ["pointerdown", "mousedown", "click"].forEach(ev => pg.addEventListener(ev, e => e.stopPropagation()));
+  }
+  if (pc) {
+    if (heatCap > 0) pc.value = fmtBig(heatCap).replace("$", "");
+    pc.addEventListener("change", () => {
+      heatCap = parseUsd(pc.value);
+      if (!(heatCap > 0)) { heatCap = 0; pc.value = ""; }
+      try { localStorage.setItem("cryptomacho-book-cap", String(heatCap)); } catch (e) {}
+      draw();
+    });
+    ["pointerdown", "mousedown", "click", "keydown"].forEach(ev => pc.addEventListener(ev, e => e.stopPropagation()));
   }
 })();
 paintTabs(); paintCtl(); sizeCanvas();
