@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-3O9X/Hv3bRWedXDyr0fuFuwd+vjnBBJOlFfwatsRWnQ='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-oD7QTqLs2mKz4MoKPHmOVmxZItstzIYo4c94k0BSZ9M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -487,7 +487,7 @@ function draw() {
   /* rótulo da janela + CVD */
   cx.fillStyle = "#6b7688"; cx.font = "9.5px sans-serif"; cx.textAlign = "left";
   cx.fillText((live ? "live · last " + (span >= 90_000 ? Math.round(span / 60_000) + "m" : Math.round(span / 1000) + "s")
-    : "collector history · " + Math.round(span / 3600_000) + "h") + " → now · wheel = zoom", 4, TH + 10);
+    : "collector history · " + Math.round(span / 3600_000) + "h") + " → now · wheel = zoom · click = snap to price", 4, TH + 10);
   if (live && trades.length) {
     const cy0 = TH + 13, ch = CVD_H - 8;
     let acc = 0; const pts = [];
@@ -512,6 +512,12 @@ cv.addEventListener("wheel", e => {
   zoomHalf = Math.max(st * 8, Math.min((yCenter || 1) * 0.05, base * (e.deltaY > 0 ? 1.25 : 0.8)));
   draw();
 }, { passive: false });
+/* clique no heatmap = snap back ao preço ACTUAL (pedido dele — a função voltou): recentra a
+   vista no mid corrente e repõe o zoom automático; botão do meio faz o mesmo, como na ladder */
+function heatSnap() { zoomHalf = null; yCenter = null; draw(); }
+cv.addEventListener("click", heatSnap);
+cv.addEventListener("auxclick", e => { if (e.button === 1) { e.preventDefault(); heatSnap(); } });
+cv.addEventListener("mousedown", e => { if (e.button === 1) e.preventDefault(); });
 
 /* ---------- DOM ladder + stats ---------- */
 function paintDom() {
