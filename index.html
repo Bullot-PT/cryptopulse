@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-s1q4O+u3r4elMFXPB6yHxWwFo4MnYDSoNkFtyv8gT1o=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-4FOaK1dEwVAl7z7tShkQrZqutNrH8uhwQYZPMDKHrds=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -241,12 +241,14 @@
   .pm-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; }
   .pm-meta { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; }
   /* v123: o valor do lado contrário num binário (o "Yes 23%" quando o líder é No) */
-  .pm-alt { flex: 0 0 auto; font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .pm-alt.po-yes { background: none; border: none; padding: 0; color: var(--up); font-weight: 650; }
-  .pm-alt.po-no { background: none; border: none; padding: 0; color: var(--down); font-weight: 650; }
+  .pm-row.pm-r2 { margin-top: 4px; }
+  .pm-opt-side { font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+  .pm-opt-side.po-yes { background: rgba(12,163,12,0.18); color: var(--up); border: 1px solid rgba(12,163,12,0.35); border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .pm-opt-side.po-no { background: rgba(208,59,59,0.18); color: var(--down); border: 1px solid rgba(208,59,59,0.4); border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .stale-note { padding: 6px 14px; font-size: 11px; color: var(--warn); border-bottom: 1px solid var(--grid); }
   /* v123: num evento multi-opção, as 3 primeiras opções (Yes de cada uma) em linhas discretas */
   .pm-opts { margin-top: 5px; display: flex; flex-direction: column; gap: 2px; }
-  .pm-opt { display: grid; grid-template-columns: minmax(0, 1fr) 40px 56px; align-items: center; gap: 8px; font-size: 10.5px; color: var(--ink-2); }
+  .pm-opt { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px 56px; align-items: center; gap: 8px; font-size: 10.5px; color: var(--ink-2); }
   .pm-opt-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pm-opt-p { text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; color: var(--ink); }
   .pm-opt-bar { height: 4px; background: var(--grid); border-radius: 2px; overflow: hidden; }
@@ -1681,6 +1683,7 @@ async function loadUpbit() {
     upBySym = {}; rows.forEach(r => { upBySym[r.s] = r; });
     if (upBySym.USDT && upBySym.USDT.px > 0) upKrwUsdt = upBySym.USDT.px; /* the FX leg — Upbit's own market */
     upTickT = Date.now();
+    try { localStorage.setItem("cryptopulse-upbit-cache", JSON.stringify({t: upTickT, rows: upTick})); } catch (e2) {}
     renderUpbit();
     upScanAlerts();
     if (priceCoins.length) renderPriceRows();     /* the 🇰🇷 badges appear as soon as the data lands */
@@ -1689,6 +1692,19 @@ async function loadUpbit() {
     renderListingRows();
   } catch (e) {
     if (body && !body.querySelector("tr")) {
+      if (!upTick.length) {
+        /* v124: arranque com a API em baixo (o rate-limit por IP da Upbit morde depois de reloads
+           seguidos) — usa-se o último snapshot bom guardado, com a idade à vista no cabeçalho,
+           em vez de um painel vazio. Dado real com idade declarada, não estimativa. */
+        try {
+          const c = JSON.parse(localStorage.getItem("cryptopulse-upbit-cache"));
+          if (c && Array.isArray(c.rows) && c.rows.length) {
+            upTick = c.rows; upBySym = {}; upTick.forEach(r => { upBySym[r.s] = r; });
+            if (upBySym.USDT && upBySym.USDT.px > 0) upKrwUsdt = upBySym.USDT.px;
+            upTickT = c.t || 0;
+          }
+        } catch (er) {}
+      }
       if (upTick.length) renderUpbit();
       else setError(body, "Upbit's public API isn't answering right now — retrying automatically.");
     }
@@ -2489,13 +2505,22 @@ async function loadHyperliquid() {
     });
     rows.sort((a, b) => b.src.AGG - a.src.AGG);
     hyperRows = rows;
+    try { localStorage.setItem("cryptopulse-oi-cache", JSON.stringify({t: Date.now(), rows})); } catch (e2) {}
     recordOiSamples(rows);
     renderHyperRows();
     if (perpPopCoin) renderPerpPop();
     markUpdated();
   } catch (e) {
-    if (!body.querySelector(".perp-row"))
-      setError(body, "OI feed unavailable right now — retrying automatically.");
+    if (!body.querySelector(".perp-row")) {
+      /* v124: arranque com o feed em baixo — pinta o último snapshot bom com a idade declarada,
+         em vez do painel vazio. Sem recordOiSamples (dados velhos não entram na história). */
+      let c = null; try { c = JSON.parse(localStorage.getItem("cryptopulse-oi-cache")); } catch (er) {}
+      if (c && Array.isArray(c.rows) && c.rows.length) {
+        hyperRows = c.rows;
+        renderHyperRows();
+        body.insertAdjacentHTML("afterbegin", '<div class="stale-note">⚠ feed down — showing data from ' + timeAgo(c.t) + " · retrying</div>");
+      } else setError(body, "OI feed unavailable right now — retrying automatically.");
+    }
   }
 }
 function buildPerpRow(r, i) {
@@ -4295,8 +4320,8 @@ function goiPick(rows) {
 }
 async function renderGlobalOI(rows, total, cachedAt) {
   const body = $("goiBody");
-  const windowMs = goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
-  const bucket = goiView === "1d" ? 4 * 60_000 : 40 * 60_000;
+  const windowMs = goiView === "1h" ? 3_600_000 : goiView === "1d" ? 24 * 3_600_000 : 7 * 86_400_000;
+  const bucket = goiView === "1h" ? 60_000 : goiView === "1d" ? 4 * 60_000 : 40 * 60_000;
   const now = Date.now();
   const hist = (await getOiHistory()).filter(s => s.t > now - windowMs && s.agg);
   const st = goiStore.load();
@@ -4305,21 +4330,35 @@ async function renderGlobalOI(rows, total, cachedAt) {
      Interleaving the two makes the line square-wave between two versions of the same number, so the old ones
      only ever fill stretches of time where no same-method sample exists at all. */
   const good = hist.filter(s => s.aggx).map(s => [s.t, s.agg])
-    .concat((goiView === "1d" ? st.f : st.c).filter(x => x[0] > now - windowMs))
+    .concat((goiView === "7d" ? st.c : st.f).filter(x => x[0] > now - windowMs))
     .sort((a, b) => a[0] - b[0]);
   const firstGood = good.length ? good[0][0] : Infinity;
   const merged = hist.filter(s => !s.aggx && s.t < firstGood).map(s => [s.t, s.agg])
     .concat(good).sort((a, b) => a[0] - b[0]);
-  const series = [];
+  const raw = [];
   let lastT = 0;
-  merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { series.push(x[1]); lastT = x[0]; } });
+  merged.forEach(x => { if (x[0] - lastT > bucket * 0.8) { raw.push(x); lastT = x[0]; } });
+  /* v124 (foto dele com dois picos verticais): uma amostra isolada ±15% contra AMBOS os vizinhos,
+     com os vizinhos de acordo entre si, é falha de recolha (soma parcial ou dupla contagem no
+     agregador), não mercado — o OI global não faz ±$20B e volta em 4 minutos. Ignora-se essa
+     amostra e DIZ-SE quantas foram ignoradas; nada de suavizar o resto. */
+  let goiSkip = 0;
+  const series = raw.filter((x, i) => {
+    if (i === 0 || i === raw.length - 1) return true;
+    const a = raw[i - 1][1], b = x[1], c = raw[i + 1][1];
+    if (!(a > 0) || !(c > 0)) return true;
+    const bad = Math.abs(b - a) / a > 0.15 && Math.abs(b - c) / c > 0.15 && Math.abs(a - c) / a < 0.05;
+    if (bad) goiSkip++;
+    return !bad;
+  }).map(x => x[1]);
   body.innerHTML =
     '<div class="goi-hero"><div class="oi-head" style="margin:0">' +
       '<span class="goi-total">' + fmtBig(total) + "</span>" +
-      '<span style="margin-left:auto" class="oi-side">1D</span>' +
-      '<input type="range" id="goiSlider" min="0" max="1" step="1" value="' + (goiView === "7d" ? 1 : 0) + '" title="Slide: 1D ↔ 7D">' +
+      '<span style="margin-left:auto" class="oi-side">1H</span>' +
+      '<input type="range" id="goiSlider" min="0" max="2" step="1" value="' + (goiView === "7d" ? 2 : goiView === "1h" ? 0 : 1) + '" title="Slide: 1H · 1D · 7D">' +
       '<span class="oi-side">7D</span></div>' +
-    '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1d" ? "today" : "last 7 days") +
+    '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1h" ? "last hour" : goiView === "1d" ? "today" : "last 7 days") +
+      (goiSkip ? ' · <span style="color:var(--warn)" title="Isolated one-sample spikes that disagree with BOTH neighbours by >15% while the neighbours agree with each other — collection glitches (partial or double-counted sums), not market. They are dropped from the line and counted here.">' + goiSkip + " bad sample" + (goiSkip > 1 ? "s" : "") + " ignored</span>" : "") +
       (cachedAt ? ' · <span style="color:var(--warn)">cached ' + timeAgo(cachedAt) + " · refreshing…</span>" : "") + "</div>" +
     (series.length > 1 ? oiPopSVG(series) : '<div class="oi-note">history is building (collected 24/7 by the repo bot)…</div>') +
     "</div>" +
@@ -4333,7 +4372,7 @@ async function renderGlobalOI(rows, total, cachedAt) {
     ).join("");
   const sl = document.getElementById("goiSlider");
   if (sl) sl.addEventListener("input", async () => {
-    goiView = sl.value === "1" ? "7d" : "1d";
+    goiView = sl.value === "0" ? "1h" : sl.value === "1" ? "1d" : "7d";
     try { localStorage.setItem("cryptopulse-goi-view", goiView); } catch (er) {}
     const gx = rows;
     await renderGlobalOI(gx, total);
@@ -4912,9 +4951,13 @@ function pmEventCard(ev, opts) {
     let oi2 = -1;
     for (let i = 0; i < prices.length; i++) if (i !== li && isFinite(prices[i])) { oi2 = i; break; }
     if (oi2 !== -1) {
+      /* v124 (foto 2): o outro lado deixa de ser um textinho — leva a MESMA linha do líder:
+         percentagem como a do No, caixa verde/vermelha como a do No, e a sua própria barra azul. */
       const p2 = prices[oi2] * 100;
       const n2 = String(outcomes[oi2] || "");
-      pmAlt = '<span class="pm-alt' + pmSideClass(n2) + '">' + esc(n2) + " " + p2.toFixed(p2 < 10 ? 1 : 0) + "%</span>";
+      pmAlt = '<div class="pm-row pm-r2"><span class="pm-odds">' + p2.toFixed(p2 < 10 ? 1 : 0) + '%</span>' +
+        '<span class="pm-outcome' + pmSideClass(n2) + '">' + esc(n2) + "</span>" +
+        '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, p2).toFixed(1) + '%"></div></div></div>';
     }
   }
   if (multi) {
@@ -4927,7 +4970,7 @@ function pmEventCard(ev, opts) {
       for (let i = 0; i < os.length; i++) if (String(os[i]).trim().toUpperCase() === "YES") { yi = i; break; }
       if (yi === -1) { yi = 0; for (let i = 1; i < ps.length; i++) if (ps[i] > ps[yi]) yi = i; }
       if (!isFinite(ps[yi])) continue;
-      op.push({n: String(mk.groupItemTitle || os[yi] || "?"), v: ps[yi] * 100});
+      op.push({n: String(mk.groupItemTitle || os[yi] || "?"), v: ps[yi] * 100, sd: String(os[yi] || "")});
     }
     op.sort((a, b) => b.v - a.v);
     /* v123b: uma opção a ~100% já não é informação (o WTI mostrava ↑$70/80/90 todos a 100%).
@@ -4936,6 +4979,7 @@ function pmEventCard(ev, opts) {
     const opU = op.filter(o => o.v <= 98.5).concat(op.filter(o => o.v > 98.5));
     pmOpts = op.length ? '<div class="pm-opts">' + opU.slice(0, 3).map(o =>
       '<div class="pm-opt"><span class="pm-opt-n">' + esc(o.n) + "</span>" +
+      '<span class="pm-opt-side' + pmSideClass(o.sd) + '">' + esc(o.sd) + "</span>" +
       '<span class="pm-opt-p">' + o.v.toFixed(o.v < 10 ? 1 : 0) + "%</span>" +
       '<div class="pm-opt-bar"><div style="width:' + Math.min(100, o.v).toFixed(1) + '%"></div></div></div>').join("") + "</div>" : "";
   }
@@ -4945,8 +4989,8 @@ function pmEventCard(ev, opts) {
         '" title="' + (isFav ? "Remove from favourites" : "Save as a favourite — reachable from the ⭐ in the corner") + '">' +
         (isFav ? "★" : "☆") + "</button></div>" +
     '<div class="pm-row"><span class="pm-odds"' + (tok ? ' data-pmtok="' + esc(tok) + '"' : "") + ">" + pct.toFixed(pct < 10 ? 1 : 0) + '%</span>' +
-    '<span class="pm-outcome' + pmSideClass(label) + '">' + esc(label) + "</span>" + pmAlt +
-    '<div class="pm-bar"><div class="pm-bar-fill"' + (tok ? ' data-pmbar="' + esc(tok) + '"' : "") + ' style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' + pmOpts +
+    '<span class="pm-outcome' + pmSideClass(label) + '">' + esc(label) + "</span>" +
+    '<div class="pm-bar"><div class="pm-bar-fill"' + (tok ? ' data-pmbar="' + esc(tok) + '"' : "") + ' style="width:' + Math.min(100, pct).toFixed(1) + '%"></div></div></div>' + pmAlt + pmOpts +
     '<div class="pm-meta"><span>24h vol ' + fmtBig(parseFloat(ev.volume24hr) || 0) + "</span>" +
     (end ? "<span>ends " + end.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + "</span>" : "") +
     "</div></a>";
@@ -5703,7 +5747,12 @@ function whaleResortDom() {
   const now = Date.now();
   if (now - whaleResortAt < 4000) return;
   const body = document.getElementById("whalesBody");
-  if (!body || body.dataset.home === "0") return;
+  if (!body) return;
+  /* v124: também reordena nas pesquisas (bug apanhado por foto a 26-jul: a posição de $445k
+     cruzou os 7% AO VIVO — o ticker de ~1s pintou-a de amarelo mas ela ficou sentada no meio,
+     porque este resort saía logo aqui quando havia pesquisa activa). Na pesquisa o critério
+     é o da COR (só distância, sem o mínimo de $25M) — o mesmo do whaleHotSort. */
+  const searching = body.dataset.home === "0";
   const rows = Array.prototype.slice.call(body.querySelectorAll(".wrow[data-coin]"));
   if (rows.length < 2) return;
   if (body.querySelector(".wrow:hover")) return;
@@ -5723,7 +5772,8 @@ function whaleResortDom() {
       }
     } else dist = d === "" ? null : parseFloat(d);
     return {el: el, i: i, value: value, dist: dist,
-      a: value >= 25e6 && dist != null && dist <= LIQ_T1};
+      a: searching ? (dist != null && dist <= LIQ_T1)
+                   : (value >= 25e6 && dist != null && dist <= LIQ_T1)};
   });
   const sorted = info.slice().sort(function (x, y) {
     if (x.a !== y.a) return (y.a ? 1 : 0) - (x.a ? 1 : 0);
