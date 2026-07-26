@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-yyzkk+QLqd7rC/kvfCKTipAKe3y+WPewZ7zHZ/ElB0M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Hp37JGV4+dsTpLD7tWPdBrroU8SGu6rxbJpKNAOs5t0='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -85,6 +85,7 @@ footer b { color:var(--ink-2); font-weight:600; }
   <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
 </main>
 <footer>
+  <span><b>DOM</b>: Binance 5000 níveis (spot) · Bybit 500 (tecto da API pública) · OKX 5000 · HL ~20 agregados ao group · <b>roda do rato = subir/descer no book</b>, clique volta ao mid</span>
   <span><b>live</b>: Binance + Bybit + OKX + Hyperliquid via WebSocket, sampled every 5 s in your browser</span>
   <span><b>history 48H</b>: OKX + Hyperliquid, 10-min frames collected 24/7 (Binance/Bybit block the collector's IPs — said, not hidden)</span>
   <span id="histNote"></span>
@@ -449,32 +450,62 @@ function tfetch(url, opts, ms) {
   const t = setTimeout(() => ctl.abort(), ms || 4000);
   return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).finally(() => clearTimeout(t));
 }
-async function pollOne(tag, fn) {
+const deepLast = {};          /* última tentativa por fonte — cadência independente do interval */
+async function pollOne(tag, minMs, fn) {
   if (deepBusySrc[tag]) return;
+  if (Date.now() - (deepLast[tag] || 0) < minMs) return;
   deepBusySrc[tag] = true;
+  deepLast[tag] = Date.now();
   const me = coin;
   try { const bk = await fn(); if (me === coin && bk && bk.bids && bk.bids.length) deep[tag] = { bids: bk.bids, asks: bk.asks, t: Date.now() }; }
   catch (e) {}
   deepBusySrc[tag] = false;
 }
+/* HL: o l2Book devolve SEMPRE ~20 níveis — a LARGURA escolhe-se pela agregação (nSigFigs, e
+   mantissa 2/5 quando nSigFigs=5). Escolhe-se o passo mais largo que ainda cabe no group:
+   BTC com group 10 ⇒ passo 10 ⇒ ±200 de alcance em vez de ±20. Agregado, mas real. */
+function hlParams() {
+  const b = deep.HL && deep.HL.bids && deep.HL.bids[0];
+  const px = (b && b[0]) || midPx() || 0;
+  const g = grpOf();
+  if (!(px > 0)) return { nSigFigs: 5 };
+  const base = Math.pow(10, Math.floor(Math.log10(px)) - 4);
+  const cands = [
+    { nSigFigs: 5, s: base },
+    { nSigFigs: 5, mantissa: 2, s: 2 * base },
+    { nSigFigs: 5, mantissa: 5, s: 5 * base },
+    { nSigFigs: 4, s: 10 * base },
+    { nSigFigs: 3, s: 100 * base }
+  ];
+  let best = cands[0];
+  for (const c of cands) if (c.s <= g * 1.001) best = c;
+  return best;
+}
 function pollDeep() {
   if (view !== "dom" || document.visibilityState === "hidden") return;
   const cfg = COINS[coin];
-  if (exSel.BN) pollOne("BN", async () => {
-    const j = await (await tfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=1000")).json();
+  /* Binance spot REST aceita limit=5000 (peso 250 ⇒ 1 pedido/4 s respeita os 6000/min; o
+     easing do canvas disfarça a cadência). Era 1000 — foi ISTO que deixava a coluna vazia longe do mid. */
+  if (exSel.BN) pollOne("BN", 4000, async () => {
+    const j = await (await tfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=5000", null, 8000)).json();
     return { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]) };
   });
-  if (exSel.BY) pollOne("BY", async () => {
+  /* Bybit: 500 níveis/lado É o tecto da API pública (o site deles usa o book interno completo).
+     Fica dito no ecrã quando a janela pede mais do que isso — regra da casa: nada escondido. */
+  if (exSel.BY) pollOne("BY", 900, async () => {
     const j = await (await tfetch("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=" + cfg.by + "&limit=500")).json();
     const d = j.result; return { bids: d.b.map(x => [+x[0], +x[1]]), asks: d.a.map(x => [+x[0], +x[1]]) };
   });
-  if (exSel.OKX) pollOne("OKX", async () => {
-    const j = await (await tfetch("https://www.okx.com/api/v5/market/books-full?instId=" + cfg.ok + "&sz=2000")).json();
+  if (exSel.OKX) pollOne("OKX", 1400, async () => {
+    const j = await (await tfetch("https://www.okx.com/api/v5/market/books-full?instId=" + cfg.ok + "&sz=5000", null, 8000)).json();
     const d = j.data && j.data[0]; return { bids: d.bids.map(x => [+x[0], +x[1] * okxCt]), asks: d.asks.map(x => [+x[0], +x[1] * okxCt]) };
   });
-  if (exSel.HL) pollOne("HL", async () => {
+  if (exSel.HL) pollOne("HL", 900, async () => {
+    const p = hlParams();
+    const body = { type: "l2Book", coin: cfg.hl, nSigFigs: p.nSigFigs };
+    if (p.mantissa) body.mantissa = p.mantissa;
     const j = await (await tfetch("https://api.hyperliquid.xyz/info", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "l2Book", coin: cfg.hl, nSigFigs: 5 }) })).json();
+      body: JSON.stringify(body) })).json();
     const lv = j.levels; return { bids: lv[0].map(x => [+x.px, +x.sz]), asks: lv[1].map(x => [+x.px, +x.sz]) };
   });
 }
@@ -504,6 +535,7 @@ function cellBg(side, x) {
    números mudam dentro delas. */
 const domAnchor = {};
 const domPrevMid = {};
+let domOff = 0;               /* deslocamento da janela em buckets (roda do rato) — 0 = colado ao mid */
 /* ---------- ladder em CANVAS (arquitectura tapesurf: um canvas, zero mutações de DOM) ----------
    Provado no site deles a 26-jul: o widget do book é UM canvas com 0 mutações de DOM em 3 s.
    É por isso que flui — nada de innerHTML a cada segundo. Aqui é igual: ~30 fps, valores com
@@ -541,17 +573,23 @@ function drawCol(c, x0, cw, H, g, now, fl) {
   const ideal = +(Math.floor(mid / g) * g).toFixed(8);
   let bh = domAnchor[akey];
   if (bh == null || Math.abs(ideal - bh) > g * 1.001) { bh = ideal; domAnchor[akey] = bh; }
-  const askP = [], bidP = [];
-  for (let r = 1; r <= nSide; r++) askP.push(+(bh + r * g).toFixed(8));
-  for (let r = 0; r < nSide; r++) bidP.push(+(bh - r * g).toFixed(8));
+  /* janela deslocável: com a roda do rato o centro mostrado afasta-se do mid (como no tapesurf);
+     o lado de cada linha decide-se pelo PREÇO vs mid, não pela posição no ecrã */
+  const bhD = +(bh + (domOff | 0) * g).toFixed(8);
+  const midBk = +(Math.floor(mid / g) * g).toFixed(8);
+  const rowsP = [];
+  for (let i = 0; i < nSide * 2; i++) rowsP.push(+(bhD + (nSide - i) * g).toFixed(8));
+  const sideOf = p => p > midBk ? "a" : "b";
   let maxQ = 0;
-  askP.forEach(p => { const q = gb.a.get(p) || 0; if (q > maxQ) maxQ = q; });
-  bidP.forEach(p => { const q = gb.b.get(p) || 0; if (q > maxQ) maxQ = q; });
+  rowsP.forEach(p => { const q = (sideOf(p) === "a" ? gb.a.get(p) : gb.b.get(p)) || 0; if (q > maxQ) maxQ = q; });
   if (!maxQ) maxQ = 1;
-  const cumA = new Map(); let ca = 0;
-  askP.forEach(p => { ca += gb.a.get(p) || 0; cumA.set(p, ca); });
-  const cumB = new Map(); let cb = 0;
-  bidP.forEach(p => { cb += gb.b.get(p) || 0; cumB.set(p, cb); });
+  /* cumulativo sempre A PARTIR DO MID, mesmo com a janela deslocada (conta o troço fora do ecrã) */
+  const topP = rowsP[0], botP = rowsP[rowsP.length - 1];
+  const cum = new Map();
+  let ca = 0;
+  for (let p = +(midBk + g).toFixed(8); p <= topP + g / 2; p = +(p + g).toFixed(8)) { ca += gb.a.get(p) || 0; if (p >= botP - g / 2) cum.set(p, ca); }
+  let cb = 0;
+  for (let p = midBk; p >= botP - g / 2; p = +(p - g).toFixed(8)) { cb += gb.b.get(p) || 0; if (p <= topP + g / 2) cum.set(p, cb); }
   const maxC = Math.max(ca, cb, 1e-9);
   const mkUp = mid * 1.003, mkDn = mid * 0.997;
   const pxDec = g < 0.02 ? 3 : g < 1 ? 2 : g < 5 ? 1 : 0;
@@ -564,13 +602,14 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     return v;
   };
   const priceR = x0 + cw * 0.47, qx0 = x0 + cw * 0.51, qw = x0 + cw - pad - qx0;
-  const row = (side, p, y) => {
+  const row = (p, y) => {
+    const side = sideOf(p);
     const tgt = (side === "a" ? gb.a.get(p) : gb.b.get(p)) || 0;
     const q = ease(side + p, tgt);
     const xx = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
-    const cum = (side === "a" ? cumA.get(p) : cumB.get(p)) || 0;
+    const c2 = cum.get(p) || 0;
     /* perfil cumulativo (sombra + linha), atrás do preço */
-    const cwid = cum / maxC * (cw * 0.42);
+    const cwid = c2 / maxC * (cw * 0.42);
     if (cwid > 0.5) {
       dcx.fillStyle = side === "a" ? "rgba(208,59,59,0.07)" : "rgba(25,201,74,0.07)";
       dcx.fillRect(x0 + 1, y, cwid, ROWH);
@@ -591,7 +630,7 @@ function drawCol(c, x0, cw, H, g, now, fl) {
       dcx.fillStyle = "rgba(250,178,25,0.85)";
       dcx.fillRect(x0 + 1, side === "a" ? y : y + ROWH - 1, cw - 2, 1);
       dcx.textAlign = "left"; dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
-      dcx.fillText("0.3% " + fmtQ(cum), x0 + pad, side === "a" ? y + 5 : y + ROWH - 5);
+      dcx.fillText("0.3% " + fmtQ(c2), x0 + pad, side === "a" ? y + 5 : y + ROWH - 5);
     }
     const f = fl.get(p);
     if (f) {
@@ -599,9 +638,23 @@ function drawCol(c, x0, cw, H, g, now, fl) {
       dcx.fillRect(x0 + 1, y, cw - 2, ROWH);
     }
   };
-  for (let r = 0; r < nSide; r++) row("a", askP[nSide - 1 - r], HDR + r * ROWH);
+  for (let i = 0; i < nSide * 2; i++) row(rowsP[i], i < nSide ? HDR + i * ROWH : HDR + i * ROWH + MIDH);
   const my = HDR + nSide * ROWH;
-  for (let r = 0; r < nSide; r++) row("b", bidP[r], my + MIDH + r * ROWH);
+  /* mid fora do centro (janela deslocada): risca amarela no sítio onde o mid está de verdade */
+  if (domOff && midBk <= topP && midBk >= botP) {
+    const mi = Math.round((topP - midBk) / g);
+    const yLine = mi < nSide ? HDR + mi * ROWH : HDR + mi * ROWH + MIDH;
+    dcx.fillStyle = "rgba(250,178,25,0.7)"; dcx.fillRect(x0 + 1, yLine, cw - 2, 1.5);
+  }
+  /* fim do book público antes do fim da janela? diz-se (Bybit pára nos 500 níveis/lado) */
+  if (c.bk.asks.length && c.bk.bids.length) {
+    const bkHi = c.bk.asks[c.bk.asks.length - 1][0], bkLo = c.bk.bids[c.bk.bids.length - 1][0];
+    if (bkHi < topP || bkLo > botP) {
+      dcx.textAlign = "center"; dcx.font = "500 8.5px " + MONO; dcx.fillStyle = "#6b7688";
+      dcx.fillText("fim do book público: " + bkLo.toFixed(pxDec) + " – " + bkHi.toFixed(pxDec) +
+        (c.tag === "BY" ? " (500 níveis/lado = tecto da API)" : ""), x0 + cw / 2, H - 7);
+    }
+  }
   /* linha do mid: preço, spread e direcção do último movimento */
   const pm = domPrevMid[akey] || { m: mid, dir: 0 };
   if (mid > pm.m + 1e-9) pm.dir = 1; else if (mid < pm.m - 1e-9) pm.dir = -1;
@@ -617,6 +670,12 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     dcx.fillStyle = pm.dir > 0 ? "#19c94a" : "#d03b3b"; dcx.font = "700 11px " + MONO;
     dcx.fillText(pm.dir > 0 ? "▲" : "▼", x0 + cw - pad - (spread > 0 ? 62 : 0), my + MIDH / 2 + 0.5);
   }
+  if (domOff) {
+    /* tapa o sprd/seta para o aviso não se atropelar com eles */
+    dcx.fillStyle = "#161b25"; dcx.fillRect(x0 + cw * 0.34, my + 1, cw * 0.66 - 1, MIDH - 2);
+    dcx.textAlign = "right"; dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
+    dcx.fillText((domOff > 0 ? "↑ " : "↓ ") + Math.abs(domOff) + " buckets do mid · clique = voltar", x0 + cw - pad, my + MIDH / 2 + 0.5);
+  }
   /* dados velhos NÃO desaparecem (era isso que "quebrava" as colunas): escurecem e dizem a idade */
   if (!okAge) {
     dcx.fillStyle = "rgba(11,14,19,0.55)"; dcx.fillRect(x0 + 1, HDR, cw - 2, H - HDR);
@@ -625,6 +684,12 @@ function drawCol(c, x0, cw, H, g, now, fl) {
   }
   if (disp.size > used.size * 2 + 32) { for (const k of disp.keys()) if (!used.has(k)) disp.delete(k); }
 }
+dcv.addEventListener("wheel", e => {
+  e.preventDefault();
+  domOff = Math.max(-400, Math.min(400, domOff + (e.deltaY > 0 ? -3 : 3)));
+  drawDom();
+}, { passive: false });
+dcv.addEventListener("click", () => { if (domOff) { domOff = 0; drawDom(); } });
 function drawDom() {
   const W = dcv.clientWidth, H = dcv.clientHeight;
   if (!W || !H) return;
@@ -687,7 +752,7 @@ document.addEventListener("click", e => {
     try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
     sessStash(prevCoin);
     sessRestore(coin);
-    zoomHalf = null; yCenter = null;
+    zoomHalf = null; yCenter = null; domOff = 0;
     Object.keys(deep).forEach(k => delete deep[k]);
     paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();
     return;
@@ -714,7 +779,7 @@ document.addEventListener("click", e => {
   if (dm) { domMode = dm.dataset.dmode; try { localStorage.setItem("cryptomacho-book-dmode", domMode); } catch (er) {}
     paintCtl(); drawDom(); return; }
   const gr = e.target.closest("[data-grp]");
-  if (gr) { grpSel[coin] = +gr.dataset.grp; try { localStorage.setItem("cryptomacho-book-grp", JSON.stringify(grpSel)); } catch (er) {}
+  if (gr) { grpSel[coin] = +gr.dataset.grp; domOff = 0; try { localStorage.setItem("cryptomacho-book-grp", JSON.stringify(grpSel)); } catch (er) {}
     paintCtl(); drawDom(); return; }
   const ex = e.target.closest("[data-ex]");
   if (ex) { exSel[ex.dataset.ex] = exSel[ex.dataset.ex] ? 0 : 1; try { localStorage.setItem("cryptomacho-book-ex", JSON.stringify(exSel)); } catch (er) {}
