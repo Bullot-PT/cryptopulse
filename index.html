@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-Ed/bEl5ifxlCCXAxBeS7Ep/PjQvH+jny+YDIbDhciQI=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-bjeLW8k1Pd8LDS04XNiVdXZ7SJ27/3/DhVe0Lqbblu8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -781,7 +781,10 @@
   }
   @supports (padding: env(safe-area-inset-left)) {
     header { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-  }
+  }/* ícones da casa (v129): substituem os emojis — traço verde do logo, detalhe vermelho */
+.cmi { width:1.06em; height:1.06em; display:inline-block; vertical-align:-0.16em; flex:0 0 auto; }
+.panel-head > .cmi:first-child { width:1.2em; height:1.2em; margin-right:1px; }
+
 </style>
 <style id="gridstack-css">.grid-stack{position:relative}.grid-stack-placeholder>.placeholder-content{background-color:rgba(0,0,0,.1);margin:0;position:absolute;width:auto;z-index:0!important}.grid-stack>.grid-stack-item{position:absolute;padding:0;top:0;width:var(--gs-column-width);height:var(--gs-cell-height)}.grid-stack>.grid-stack-item>.grid-stack-item-content{margin:0;position:absolute;width:auto;overflow-x:hidden;overflow-y:auto}.grid-stack>.grid-stack-item.size-to-content:not(.size-to-content-max)>.grid-stack-item-content{overflow-y:hidden}.grid-stack:not(.grid-stack-rtl)>.grid-stack-item{left:0}.grid-stack.grid-stack-rtl>.grid-stack-item{right:0}.grid-stack>.grid-stack-item>.grid-stack-item-content,.grid-stack>.grid-stack-placeholder>.placeholder-content{top:var(--gs-item-margin-top);right:var(--gs-item-margin-right);bottom:var(--gs-item-margin-bottom);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-handle{position:absolute;font-size:.1px;display:block;-ms-touch-action:none;touch-action:none;user-select:none;z-index:100}.grid-stack-item.ui-resizable-autohide>.ui-resizable-handle,.grid-stack-item.ui-resizable-disabled>.ui-resizable-handle{display:none}.grid-stack-item>.ui-resizable-ne,.grid-stack-item>.ui-resizable-nw,.grid-stack-item>.ui-resizable-se,.grid-stack-item>.ui-resizable-sw{background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="%23666" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 20 20"><path d="m10 3 2 2H8l2-2v14l-2-2h4l-2 2"/></svg>');background-repeat:no-repeat;background-position:center;z-index:101}.grid-stack-item>.ui-resizable-ne{transform:rotate(45deg)}.grid-stack-item>.ui-resizable-sw{transform:rotate(45deg)}.grid-stack-item>.ui-resizable-nw{transform:rotate(-45deg)}.grid-stack-item>.ui-resizable-se{transform:rotate(-45deg)}.grid-stack-item>.ui-resizable-nw{cursor:nw-resize;width:20px;height:20px;top:var(--gs-item-margin-top);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-n{cursor:n-resize;height:10px;top:var(--gs-item-margin-top);left:25px;right:25px}.grid-stack-item>.ui-resizable-ne{cursor:ne-resize;width:20px;height:20px;top:var(--gs-item-margin-top);right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-e{cursor:e-resize;width:10px;top:15px;bottom:15px;right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-se{cursor:se-resize;width:20px;height:20px;bottom:var(--gs-item-margin-bottom);right:var(--gs-item-margin-right)}.grid-stack-item>.ui-resizable-s{cursor:s-resize;height:10px;left:25px;bottom:var(--gs-item-margin-bottom);right:25px}.grid-stack-item>.ui-resizable-sw{cursor:sw-resize;width:20px;height:20px;bottom:var(--gs-item-margin-bottom);left:var(--gs-item-margin-left)}.grid-stack-item>.ui-resizable-w{cursor:w-resize;width:10px;top:15px;bottom:15px;left:var(--gs-item-margin-left)}.grid-stack-item.ui-draggable-dragging>.ui-resizable-handle{display:none!important}.grid-stack-item.ui-draggable-dragging{will-change:left,right,top}.grid-stack-item.ui-resizable-resizing{will-change:width,height}.ui-draggable-dragging,.ui-resizable-resizing{z-index:10000}.ui-draggable-dragging>.grid-stack-item-content,.ui-resizable-resizing>.grid-stack-item-content{box-shadow:1px 4px 6px rgba(0,0,0,.2);opacity:.8}.grid-stack-animate,.grid-stack-animate .grid-stack-item{transition:left .3s,right .3s,top .3s,height .3s,width .3s}.grid-stack-animate .grid-stack-item.grid-stack-placeholder,.grid-stack-animate .grid-stack-item.ui-draggable-dragging,.grid-stack-animate .grid-stack-item.ui-resizable-resizing{transition:left 0s,right 0s,top 0s,height 0s,width 0s}.grid-stack>.grid-stack-item[gs-y="0"]{top:0}.grid-stack:not(.grid-stack-rtl)>.grid-stack-item[gs-x="0"]{left:0}.grid-stack.grid-stack-rtl>.grid-stack-item[gs-x="0"]{right:0}</style>
 </head>
@@ -795,9 +798,9 @@
     <span>Order Book</span></a>
   <div class="spacer"></div>
   <span class="hint">drag panels by their header · drag edges to resize</span>
-  <button class="btn-ghost" id="lockBtn" title="Lock the layout so panels can't be moved or resized by accident">🔓</button>
-  <button class="btn-ghost" id="indBtn" title="Add or remove indicators from your layout">🧩 Indicators</button>
-  <button class="btn-ghost" id="saveLayout" title="Save the CURRENT arrangement (positions, sizes and hidden indicators) as YOUR preset — Reset layout will restore it">💾 Save layout</button>
+  <button class="btn-ghost" id="lockBtn" title="Lock the layout so panels can't be moved or resized by accident"><i data-icn="unlock"></i></button>
+  <button class="btn-ghost" id="indBtn" title="Add or remove indicators from your layout"><i data-icn="grid"></i> Indicators</button>
+  <button class="btn-ghost" id="saveLayout" title="Save the CURRENT arrangement (positions, sizes and hidden indicators) as YOUR preset — Reset layout will restore it"><i data-icn="save"></i> Save layout</button>
   <button class="btn-ghost" id="resetLayout" title="Restore your saved preset (or the default arrangement if you haven't saved one)">Reset layout</button>
   <div class="updated"><span class="pulse-dot" id="liveDot" title="Live WebSocket feed"></span><span id="updatedAt">connecting…</span></div>
 </header>
@@ -806,31 +809,31 @@
   <div class="grid-stack">
     <div class="grid-stack-item" gs-id="prices">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💰 Prices <span class="sub" id="pricesSub"></span></div>
+        <div class="panel-head"><i data-icn="prices"></i> Prices <span class="sub" id="pricesSub"></span></div>
         <div class="panel-body" id="pricesOuter">
-          <div class="scan-bar"><input class="scan-input" id="priceSearch" placeholder="🔎 search top 1000 coins…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="priceSearch" placeholder="search top 1000 coins…" spellcheck="false"></div>
           <div id="pricesBody"><div class="empty">Loading prices…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="listings">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🪙 Coin Listings <span class="sub">🇰🇷 Upbit KRW + DexScreener newest tokens</span></div>
+        <div class="panel-head"><i data-icn="coin"></i> Coin Listings <span class="sub">🇰🇷 Upbit KRW + DexScreener newest tokens</span></div>
         <div class="panel-body" id="listingsOuter">
-          <div class="scan-bar"><input class="scan-input" id="listingSearch" placeholder="🔎 search new listings…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="listingSearch" placeholder="search new listings…" spellcheck="false"></div>
           <div id="listingsBody"><div class="empty">Loading listings…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="fng">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">😱 Fear &amp; Greed</div>
+        <div class="panel-head"><i data-icn="gauge"></i> Fear &amp; Greed</div>
         <div class="panel-body" id="fngBody"><div class="empty">Loading index…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="trending">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🔥 Trending <span class="sub" id="trendSub">CoinGecko searches</span></div>
+        <div class="panel-head"><i data-icn="flame"></i> Trending <span class="sub" id="trendSub">CoinGecko searches</span></div>
         <div class="panel-body" id="trendBody"><div class="empty">Loading trending…</div></div>
       </div></div>
     </div>
@@ -839,18 +842,18 @@
         <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=polymarket.com&amp;sz=64" alt="" data-hoe="1">Polymarket</span> <span class="sub" id="pmSub"></span>
           <input type="range" id="pmVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="pmSound" title="Sound on new big-bet alerts" style="padding:4px 7px;color:var(--muted)"></button>
-          <button class="btn-ghost" id="pmFavBtn" title="Favourite markets — click to open/close the list" style="padding:2px 8px">⭐ 0</button>
-          <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button>
+          <button class="btn-ghost" id="pmFavBtn" title="Favourite markets — click to open/close the list" style="padding:2px 8px"><i data-icn="star"></i> 0</button>
+          <button class="btn-ghost" id="pmBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px"><i data-icn="block"></i> 0</button>
           <button class="btn-ghost" id="pmOrdBtn" title="Reset the manual order — favourites stay on top" style="padding:2px 8px">↕</button></div>
         <div class="panel-body" id="pmOuter" style="position:relative">
-          <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="🔎 search prediction markets…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="pmSearch" placeholder="search prediction markets…" spellcheck="false"></div>
           <div id="pmBody"><div class="empty">Loading markets…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="smartmoney">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🧠 Smart Money <span class="sub" id="smSub" title="Nansen Smart Money, collected once a day by the repo bot (04:10 UTC) at zero extra credits. Flows = net buys − sells of the wallets with the best track record, per token, in 4 windows. Perp Desks = the perp positions of the top smart traders, WITH NAMES, entry, leverage, liquidation price and uPnL.">token netflows + smart perp desks · Nansen daily</span>
+        <div class="panel-head"><i data-icn="brain"></i> Smart Money <span class="sub" id="smSub" title="Nansen Smart Money, collected once a day by the repo bot (04:10 UTC) at zero extra credits. Flows = net buys − sells of the wallets with the best track record, per token, in 4 windows. Perp Desks = the perp positions of the top smart traders, WITH NAMES, entry, leverage, liquidation price and uPnL.">token netflows + smart perp desks · Nansen daily</span>
           <span style="margin-left:auto;display:inline-flex;gap:4px">
             <button class="src-btn sm-tab" data-smtab="flows">Flows</button>
             <button class="src-btn sm-tab" data-smtab="desks">Perp Desks</button>
@@ -863,9 +866,9 @@
         <div class="panel-head"><span class="pm-brand"><img src="https://www.google.com/s2/favicons?domain=kalshi.com&amp;sz=64" alt="" data-hoe="1">Kalshi</span> <span class="sub" id="kaSub"></span>
           <input type="range" id="kaVol" min="0" max="100" step="5" title="Alert volume — drag, then release to hear a preview">
           <button class="btn-ghost" id="kaSound" title="Sound on new odds-move alerts" style="padding:4px 7px;color:var(--muted)"></button>
-          <button class="btn-ghost" id="kaBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px">🚫 0</button></div>
+          <button class="btn-ghost" id="kaBlkBtn" title="Blocked markets — click to open/close the list" style="padding:2px 8px"><i data-icn="block"></i> 0</button></div>
         <div class="panel-body" id="kaOuter" style="position:relative">
-          <div class="scan-bar"><input class="scan-input" id="kaSearch" placeholder="🔎 search Kalshi markets…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="kaSearch" placeholder="search Kalshi markets…" spellcheck="false"></div>
           <div id="kaBody"><div class="empty">Loading Kalshi…</div></div>
         </div>
       </div></div>
@@ -877,20 +880,20 @@
             <button class="src-btn up-f src-on" data-upf="vol" title="Sort by 24h traded value">volume</button>
             <button class="src-btn up-f" data-upf="prem" title="Sort by the size of the kimchi premium (biggest gap first)">premium</button>
             <button class="src-btn up-f" data-upf="chg" title="Sort by 24h price change">24h</button>
-            <button class="src-btn up-f" data-upf="flag" title="Only coins Upbit itself has flagged with a warning or caution notice">⚠ flagged</button>
+            <button class="src-btn up-f" data-upf="flag" title="Only coins Upbit itself has flagged with a warning or caution notice"><i data-icn="warn"></i> flagged</button>
           </span></div>
         <div class="panel-body" id="upOuter">
-          <div class="scan-bar"><input class="scan-input" id="upSearch" placeholder="🔎 search Upbit KRW markets…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="upSearch" placeholder="search Upbit KRW markets…" spellcheck="false"></div>
           <div id="upBody"><div class="empty">Loading Upbit…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="sec">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🏛️ SEC Filings <span class="sub">crypto-exposed companies + your alerts</span></div>
+        <div class="panel-head"><i data-icn="bank"></i> SEC Filings <span class="sub">crypto-exposed companies + your alerts</span></div>
         <div class="panel-body" id="secOuter">
           <div class="sec-alert-bar">
-            <input class="scan-input" id="secFTS" placeholder="🔎 full-text search ALL SEC filings — any phrase, Enter" spellcheck="false">
+            <input class="scan-input" id="secFTS" placeholder="full-text search ALL SEC filings — any phrase, Enter" spellcheck="false">
           </div>
           <div class="sec-alert-bar" style="padding-top:0">
             <input class="scan-input" id="secKeyword" placeholder="+ keyword alert (form / description / company)" spellcheck="false">
@@ -904,34 +907,34 @@
     </div>
     <div class="grid-stack-item" gs-id="hyper">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Aggregated OI <span class="sub" id="hyperSub">HL + Binance + Bybit + OKX · search all</span></div>
+        <div class="panel-head"><i data-icn="bolt"></i> Aggregated OI <span class="sub" id="hyperSub">HL + Binance + Bybit + OKX · search all</span></div>
         <div class="panel-body" id="hyperOuter">
-          <div class="scan-bar"><input class="scan-input" id="hyperSearch" placeholder="🔎 search a token's OI — e.g. BTC, HYPE, DOGE…" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="hyperSearch" placeholder="search a token's OI — e.g. BTC, HYPE, DOGE…" spellcheck="false"></div>
           <div id="hyperBody"><div class="empty">Loading perps…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="liqs">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Liquidation Risk <span class="sub">live Morpho · Aave · Euler · Kamino + DefiLlama</span></div>
+        <div class="panel-head"><i data-icn="burst"></i> Liquidation Risk <span class="sub">live Morpho · Aave · Euler · Kamino + DefiLlama</span></div>
         <div class="panel-body" id="liqsBody"><div class="empty">Loading positions…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="globaloi">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🌐 Global OI <span class="sub">all exchanges · ⚡ = direct from the DEX API (HL · dYdX · Lighter · Aster · GMX)</span></div>
+        <div class="panel-head"><i data-icn="globe"></i> Global OI <span class="sub">all exchanges · <i data-icn="bolt"></i> = direct from the DEX API (HL · dYdX · Lighter · Aster · GMX)</span></div>
         <div class="panel-body" id="goiBody"><div class="empty">Loading global open interest…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="longshort">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚖️ Long vs Short <span class="sub" id="lsHeadSub">top 500 wallets · on-chain</span></div>
+        <div class="panel-head"><i data-icn="scales"></i> Long vs Short <span class="sub" id="lsHeadSub">top 500 wallets · on-chain</span></div>
         <div class="panel-body" id="lsBody"><div class="empty">Scanning positioning…</div></div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="whales">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🐋 Whale Scanner <span class="sub" id="whalesSub">Hyperliquid wallets · live positions</span></div>
+        <div class="panel-head"><i data-icn="whale"></i> Whale Scanner <span class="sub" id="whalesSub">Hyperliquid wallets · live positions</span></div>
         <div class="panel-body" id="whalesOuter">
           <div class="scan-bar">
             <input class="scan-input" id="scanInput" placeholder="type a token (E → ETH, PUMP…) or paste a 0x wallet" spellcheck="false" autocomplete="off">
@@ -944,7 +947,7 @@
     </div>
     <div class="grid-stack-item" gs-id="alerts">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🔔 Custom Alerts <span class="sub" id="caSub">your rules · in-page + Telegram</span></div>
+        <div class="panel-head"><i data-icn="bell"></i> Custom Alerts <span class="sub" id="caSub">your rules · in-page + Telegram</span></div>
         <div class="panel-body" id="caBody">
           <div class="ca-tg">
             <div class="ca-tg-row">
@@ -983,7 +986,7 @@
     </div>
     <div class="grid-stack-item" gs-id="liqmap">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🧲 DEX Liq Heatmap <span class="sub" id="lmSub">forced flow by price level · live price</span></div>
+        <div class="panel-head"><i data-icn="magnet"></i> DEX Liq Heatmap <span class="sub" id="lmSub">forced flow by price level · live price</span></div>
         <div class="panel-body" id="lmOuter">
           <div class="scan-bar">
             <input class="scan-input" id="lmAdd" placeholder="add a token to map — e.g. AVAX, LINK, HYPE — press Enter" spellcheck="false">
@@ -996,7 +999,7 @@
     </div>
     <div class="grid-stack-item" gs-id="cexliq">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💥 Live Liquidations <span class="sub" id="cxSub" title="CEX: Binance, Bybit, OKX, BitMEX, Deribit · on-chain (blue): dYdX v4, Lighter, GMX, HL* (whale liqs detected from our own position book — HL has no public liq stream)">Binance · Bybit · OKX · BitMEX · Deribit + dYdX · Lighter · GMX · HL* <span style="color:var(--accent)">on-chain</span></span>
+        <div class="panel-head"><i data-icn="burst"></i> Live Liquidations <span class="sub" id="cxSub" title="CEX: Binance, Bybit, OKX, BitMEX, Deribit · on-chain (blue): dYdX v4, Lighter, GMX, HL* (whale liqs detected from our own position book — HL has no public liq stream)">Binance · Bybit · OKX · BitMEX · Deribit + dYdX · Lighter · GMX · HL* <span style="color:var(--accent)">on-chain</span></span>
           <span id="cxFlt" style="margin-left:auto;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">
             <button class="src-btn" data-cxf="ALL">ALL</button>
             <button class="src-btn" data-cxf="BTC">BTC</button>
@@ -1011,18 +1014,18 @@
     </div>
     <div class="grid-stack-item" gs-id="radar">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">⚡ Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
+        <div class="panel-head"><i data-icn="bolt"></i> Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
           <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
           <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:4px 7px;color:var(--muted)"></button></div>
         <div class="panel-body" id="rdOuter" style="position:relative">
-          <div class="scan-bar"><input class="scan-input" id="rdSearch" placeholder="🔎 search any token — see its score even outside the top 10" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="rdSearch" placeholder="search any token — see its score even outside the top 10" spellcheck="false"></div>
           <div id="rdBody"><div class="empty">Computing pressure scores…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="alertcenter">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🗂️ Alert Center <span class="sub">everything that fired · last 24h · this browser</span>
+        <div class="panel-head"><i data-icn="folder"></i> Alert Center <span class="sub">everything that fired · last 24h · this browser</span>
           <span style="margin-left:auto;display:inline-flex;gap:4px">
             <button class="src-btn ac-f src-on" data-acf="ALL">ALL</button>
             <button class="src-btn ac-f" data-acf="RADAR">Radar</button>
@@ -1036,16 +1039,16 @@
     </div>
     <div class="grid-stack-item" gs-id="funding">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">💸 Funding &amp; Basis <span class="sub" title="Funding normalized to %/HOUR (Binance/Bybit/OKX publish 8h rates — shown ÷8; HL is natively hourly). Positive = longs pay = down-fuel (red). Negative = shorts pay = up-fuel (green). Δ = biggest divergence across exchanges (amber ≥0.002%/h — cross-exchange squeeze fuel). Basis = HL perp mark vs Binance SPOT — premium (red) = longs crowded.">%/h by exchange + spot-perp basis · live</span></div>
+        <div class="panel-head"><i data-icn="cash"></i> Funding &amp; Basis <span class="sub" title="Funding normalized to %/HOUR (Binance/Bybit/OKX publish 8h rates — shown ÷8; HL is natively hourly). Positive = longs pay = down-fuel (red). Negative = shorts pay = up-fuel (green). Δ = biggest divergence across exchanges (amber ≥0.002%/h — cross-exchange squeeze fuel). Basis = HL perp mark vs Binance SPOT — premium (red) = longs crowded.">%/h by exchange + spot-perp basis · live</span></div>
         <div class="panel-body" id="fdOuter">
-          <div class="scan-bar"><input class="scan-input" id="fdAdd" placeholder="➕ add a token to the table — e.g. PEPE, then Enter" spellcheck="false"></div>
+          <div class="scan-bar"><input class="scan-input" id="fdAdd" placeholder="add a token to the table — e.g. PEPE, then Enter" spellcheck="false"></div>
           <div id="fdBody"><div class="empty">Loading funding rates…</div></div>
         </div>
       </div></div>
     </div>
     <div class="grid-stack-item" gs-id="lscrowd">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head">🥊 Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
+        <div class="panel-head"><i data-icn="vs"></i> Whales vs Crowd <span class="sub" id="lsxSub">HL on-chain vs Binance + Bybit · live</span></div>
         <div class="panel-body" id="lsxOuter">
           <div class="scan-bar">
             <input class="scan-input" id="lsxAdd" placeholder="add a token to compare — e.g. HYPE, PEPE — press Enter" spellcheck="false">
@@ -1076,6 +1079,53 @@
 </script>
 <script>
 "use strict";
+
+/* ---------------- ícones da casa (v129) ----------------
+   Emojis fora, SVG inline dentro: mesmo traço do logo (verde #19c94a, detalhe #d03b3b), a
+   pedido dele — "muda os emojis todos do site... para se parecer mais profissional". Nos sítios
+   onde só há texto (placeholders, tooltips, Telegram, logs) fica texto, que SVG lá não entra. */
+const ICN = {
+  search:  '<circle cx="10.5" cy="10.5" r="6.2"/><line x1="15.3" y1="15.3" x2="20.3" y2="20.3" stroke="#d03b3b"/>',
+  lock:    '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="#d03b3b"/><circle cx="12" cy="15.5" r="1.3" fill="#19c94a" stroke="none"/>',
+  unlock:  '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.7-1.5"/><circle cx="12" cy="15.5" r="1.3" fill="#19c94a" stroke="none"/>',
+  grid:    '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 14v5M14 16.5h5" stroke="#d03b3b"/>',
+  save:    '<path d="M5 5h11l3 3v11H5z"/><rect x="8.5" y="13" width="7" height="6"/><path d="M9.5 5v3.5h5V5" stroke="#d03b3b"/>',
+  prices:  '<circle cx="12" cy="12" r="8.3"/><path d="M12 7.2v9.6M14.7 9.2c-.5-.9-1.5-1.4-2.7-1.4-1.6 0-2.7.8-2.7 2s1.1 1.7 2.7 2c1.6.3 2.7 1 2.7 2.2s-1.1 2-2.7 2c-1.2 0-2.2-.5-2.7-1.4" stroke="#d03b3b"/>',
+  coin:    '<ellipse cx="12" cy="6.8" rx="7" ry="2.9"/><path d="M5 6.8v5.2c0 1.6 3.1 2.9 7 2.9s7-1.3 7-2.9V6.8"/><path d="M5 12v5.2c0 1.6 3.1 2.9 7 2.9s7-1.3 7-2.9V12" stroke="#d03b3b"/>',
+  gauge:   '<path d="M4 15.5a8 8 0 0 1 16 0"/><line x1="12" y1="15.5" x2="16.4" y2="10.8" stroke="#d03b3b"/><circle cx="12" cy="15.5" r="1.4" fill="#19c94a" stroke="none"/>',
+  flame:   '<path d="M12 3.5c1 3-3.7 4.7-3.7 8.8a5.7 5.7 0 0 0 11.4 0c0-4.3-5.7-5-7.7-8.8z"/><path d="M12 20.5a3 3 0 0 1-3-3c0-2 3-2.6 3-5 1.5 1.6 3 3 3 5a3 3 0 0 1-3 3z" stroke="#d03b3b"/>',
+  brain:   '<path d="M11 6a2.6 2.6 0 0 0-5 .9 2.7 2.7 0 0 0-1.6 4.3A2.9 2.9 0 0 0 6 16.4 2.9 2.9 0 0 0 11 17.8z"/><path d="M11 6v11.8M13 6a2.6 2.6 0 0 1 5 .9 2.7 2.7 0 0 1 1.6 4.3A2.9 2.9 0 0 1 18 16.4 2.9 2.9 0 0 1 13 17.8z" /><path d="M13 6v11.8" stroke="#d03b3b"/>',
+  bank:    '<path d="M4 9l8-5 8 5"/><path d="M5.2 9.5v7.5M9.7 9.5v7.5M14.3 9.5v7.5M18.8 9.5v7.5"/><path d="M3.5 20h17" stroke="#d03b3b"/>',
+  bolt:    '<path d="M13 3L6 13.5h5L10 21l8-11h-5.5z" fill="#19c94a" stroke="none"/>',
+  burst:   '<path d="M12 3l1.8 4.4 4.6-1.2-1.2 4.4L21 12l-3.8 1.4 1.2 4.4-4.6-1.2L12 21l-1.8-4.4-4.6 1.2 1.2-4.4L3 12l3.8-1.4-1.2-4.4 4.6 1.2z" stroke="#d03b3b"/><circle cx="12" cy="12" r="2" fill="#19c94a" stroke="none"/>',
+  globe:   '<circle cx="12" cy="12" r="8.3"/><ellipse cx="12" cy="12" rx="3.8" ry="8.3"/><path d="M3.9 12h16.2"/>',
+  scales:  '<path d="M12 4.5v15M7 19.5h10M6.2 6.5h11.6"/><path d="M6.2 6.5L4 12.2a2.6 2.6 0 0 0 4.4 0z"/><path d="M17.8 6.5L15.6 12.2a2.6 2.6 0 0 0 4.4 0z" stroke="#d03b3b"/>',
+  whale:   '<path d="M3.5 12.5c2 4.5 7.5 6.8 11.7 5 3-1.3 4.6-4 4.6-7.3 0-1.7.6-2.8 1.7-3.4-2.2-.2-3.8.5-4.8 2.1-2.7-2.6-9.5-1.6-13.2 3.6z"/><path d="M14.8 17.6c.4 1.4 1.4 2.4 2.9 2.7-.9-1.5-.8-2.8-.3-4" stroke="#d03b3b"/><circle cx="7.5" cy="12.6" r="0.9" fill="#19c94a" stroke="none"/>',
+  bell:    '<path d="M12 4a5.4 5.4 0 0 0-5.4 5.4c0 4-1.4 5.4-2.1 6.4h15c-.7-1-2.1-2.4-2.1-6.4A5.4 5.4 0 0 0 12 4z"/><path d="M10 19.2a2 2 0 0 0 4 0" stroke="#d03b3b"/>',
+  magnet:  '<path d="M5 4.5h4.5V12a2.5 2.5 0 0 0 5 0V4.5H19V12a7 7 0 0 1-14 0z"/><path d="M5 4.5h4.5V8H5zM14.5 4.5H19V8h-4.5z" stroke="#d03b3b"/>',
+  folder:  '<path d="M3.5 6.5A1.5 1.5 0 0 1 5 5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9v9a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 18z"/><path d="M3.5 11h17" stroke="#d03b3b"/>',
+  cash:    '<rect x="3" y="7" width="18" height="10" rx="1.5"/><circle cx="12" cy="12" r="2.6"/><path d="M6.4 10.2v3.6M17.6 10.2v3.6" stroke="#d03b3b"/>',
+  vs:      '<path d="M4 8h9M10.2 4.8L13.4 8l-3.2 3.2"/><path d="M20 16h-9M13.8 12.8L10.6 16l3.2 3.2" stroke="#d03b3b"/>',
+  star:    '<path d="M12 4l2.3 4.9 5.2.7-3.8 3.7.9 5.2L12 16l-4.6 2.5.9-5.2L4.5 9.6l5.2-.7z"/>',
+  block:   '<circle cx="12" cy="12" r="8.3" stroke="#d03b3b"/><line x1="6.3" y1="17.7" x2="17.7" y2="6.3" stroke="#d03b3b"/>',
+  plus:    '<path d="M12 5.5v13M5.5 12h13"/>',
+  chart:   '<path d="M4.5 19.5h15M4.5 19.5V5.5"/><path d="M7 15.5l3.4-4.3 2.9 2.3 4.5-5.5"/><path d="M14.9 8h2.9v2.9" stroke="#d03b3b"/>',
+  up:      '<path d="M12 19V6M6.5 11.5L12 6l5.5 5.5"/>',
+  down:    '<path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" stroke="#d03b3b"/>',
+  warn:    '<path d="M12 4.2L2.8 19.6h18.4z" stroke="#fab219"/><line x1="12" y1="10" x2="12" y2="14.4" stroke="#fab219"/><circle cx="12" cy="17" r="0.9" fill="#fab219" stroke="none"/>',
+  clock:   '<circle cx="12" cy="12" r="8.3"/><path d="M12 7.2v4.8l3.4 2" stroke="#fab219"/>',
+  siren:   '<path d="M7 16.5v-3.5a5 5 0 0 1 10 0v3.5"/><rect x="5" y="16.5" width="14" height="3.2" rx="1"/><path d="M12 3.2v2.2M5.4 5.2L7 6.8M18.6 5.2L17 6.8" stroke="#d03b3b"/>',
+  trophy:  '<path d="M8 4.5h8v5.3a4 4 0 0 1-8 0z"/><path d="M8 5.5H4.8a3.2 3.2 0 0 0 3.4 4M16 5.5h3.2a3.2 3.2 0 0 1-3.4 4"/><path d="M12 13.8v2.7M8.8 19.8h6.4M10.4 16.5h3.2v3.3h-3.2z" stroke="#d03b3b"/>',
+  bot:     '<rect x="5" y="8" width="14" height="10" rx="2"/><circle cx="9.5" cy="12.3" r="1.2" fill="#19c94a" stroke="none"/><circle cx="14.5" cy="12.3" r="1.2" fill="#19c94a" stroke="none"/><line x1="12" y1="8" x2="12" y2="4.6"/><path d="M9.3 15.4h5.4" stroke="#d03b3b"/>',
+  chain:   '<path d="M9.5 14.5l5-5"/><path d="M8 11l-2.5 2.5a3.5 3.5 0 0 0 5 5L13 16"/><path d="M16 13l2.5-2.5a3.5 3.5 0 0 0-5-5L11 8" stroke="#d03b3b"/>',
+  fresh:   '<path d="M11 4.5l1.5 4.7 4.7 1.5-4.7 1.5L11 16.9l-1.5-4.7-4.7-1.5 4.7-1.5z"/><path d="M18 14.8l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8z" stroke="#d03b3b"/>',
+  moneyin: '<circle cx="13.8" cy="13.8" r="6.4"/><path d="M13.8 10.6v6.4M15.9 12.2c-.4-.7-1.1-1-2.1-1-1.2 0-2 .5-2 1.4 0 1.9 4.2.9 4.2 2.8 0 .9-.9 1.4-2.1 1.4-1 0-1.7-.4-2.1-1"/><path d="M3.6 3.6l4.2 4.2M3.6 7.8V3.6h4.2" stroke="#d03b3b"/>',
+  sleep:   '<path d="M4.5 6.5h6l-6 7.5h6"/><path d="M13.5 10h5l-5 6.5h5" stroke="#d03b3b"/>'
+};
+function icn(n) {
+  return '<svg class="cmi" viewBox="0 0 24 24" fill="none" stroke="#19c94a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICN[n] || "") + "</svg>";
+}
+document.querySelectorAll("i[data-icn]").forEach(el => { el.outerHTML = icn(el.dataset.icn); });
 
 /* The two brand favicons (Polymarket, Kalshi) used to carry onerror="this.style.display='none'".
    An inline handler IS script as far as the CSP is concerned, and allowing inline script is exactly
@@ -1211,7 +1261,14 @@ const hiddenStore = {
 function panelTitle(id) {
   const el = document.querySelector('.grid-stack-item[gs-id="' + id + '"] .panel-head');
   if (!el) return id;
-  const t = (el.childNodes[0] && el.childNodes[0].textContent || "").trim();
+  let t = "";
+  for (const n of el.childNodes) {
+    if (n.nodeType === 1 && n.classList && n.classList.contains("sub")) break;
+    if (n.nodeType === 1 && n.classList && n.classList.contains("cmi")) continue;
+    t += n.textContent || "";
+    if (t.trim()) break;
+  }
+  t = t.trim();
   return t || id;
 }
 function hidePanel(id, persist) {
@@ -1249,15 +1306,15 @@ document.body.appendChild(indMenu);
 function indPaint() {
   const hidden = hiddenStore.load();
   const ids = [...document.querySelectorAll(".grid-stack-item")].map(el => el.getAttribute("gs-id"));
-  indMenu.innerHTML = '<div style="padding:8px 12px;border-bottom:1px solid var(--grid);color:var(--muted);font-size:10.5px">✓ = in your layout · ➕ = removed, click to add back</div>' +
+  indMenu.innerHTML = '<div style="padding:8px 12px;border-bottom:1px solid var(--grid);color:var(--muted);font-size:10.5px">✓ = in your layout · ' + icn("plus") + ' = removed, click to add back</div>' +
     ids.map(id => {
       const off = hidden.includes(id);
       return '<div class="ind-row" data-ind="' + id + '" title="' + (off ? "Add this indicator back to the layout" : "Remove this indicator from the layout") + '">' +
-        '<span class="ind-state">' + (off ? "➕" : "✓") + "</span>" +
+        '<span class="ind-state">' + (off ? icn("plus") : "✓") + "</span>" +
         "<span" + (off ? ' style="color:var(--muted)"' : "") + ">" + esc(panelTitle(id)) + "</span></div>";
     }).join("");
   const b = $("indBtn");
-  if (b) b.textContent = "🧩 Indicators" + (hidden.length ? " (" + hidden.length + " off)" : "");
+  if (b) b.innerHTML = icn("grid") + " Indicators" + (hidden.length ? " (" + hidden.length + " off)" : "");
 }
 indMenu.addEventListener("click", e => {
   const r = e.target.closest("[data-ind]"); if (!r) return;
@@ -1296,7 +1353,7 @@ function applyLock() {
   document.body.classList.toggle("layout-locked", layoutLocked);
   const b = $("lockBtn");
   if (b) {
-    b.textContent = layoutLocked ? "🔒" : "🔓";
+    b.innerHTML = layoutLocked ? icn("lock") : icn("unlock");
     b.title = layoutLocked ? "Layout LOCKED — panels can't be dragged, resized or removed. Click to unlock."
                            : "Layout unlocked — click to lock it so you don't move panels by accident.";
   }
@@ -1336,7 +1393,7 @@ $("saveLayout").addEventListener("click", e => {
     presetStore.save({layout: items, hidden: hiddenStore.load(), t: Date.now()});
     const b = $("saveLayout");
     b.textContent = "✓ saved!";
-    setTimeout(() => { b.textContent = "💾 Save layout"; }, 1600);
+    setTimeout(() => { b.innerHTML = icn("save") + " Save layout"; }, 1600);
   } catch (er) {}
 });
 
@@ -2557,7 +2614,7 @@ async function loadHyperliquid() {
       if (c && Array.isArray(c.rows) && c.rows.length) {
         hyperRows = c.rows;
         renderHyperRows();
-        body.insertAdjacentHTML("afterbegin", '<div class="stale-note">⚠ feed down — showing data from ' + timeAgo(c.t) + " · retrying</div>");
+        body.insertAdjacentHTML("afterbegin", '<div class="stale-note">' + icn("warn") + ' feed down — showing data from ' + timeAgo(c.t) + " · retrying</div>");
       } else setError(body, "OI feed unavailable right now — retrying automatically.");
     }
   }
@@ -2743,7 +2800,7 @@ async function loadLendLive() {
   if (rows.length) {
     const dep = rows.reduce((a, r) => a + r.dep, 0), bor = rows.reduce((a, r) => a + r.bor, 0);
     html += '<div class="liq-asset">' +
-      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">🏦 LENDING</span>' +
+      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">' + icn("bank") + ' LENDING</span>' +
       '<span class="liq-px">live · no snapshots</span>' +
       '<span class="liq-total">' + fmtBig(dep) + " supplied · " + fmtBig(bor) + " borrowed" +
       (failed ? " · " + failed + " source" + (failed > 1 ? "s" : "") + " unreachable" : "") + "</span></div>" +
@@ -2763,7 +2820,7 @@ async function loadLendLive() {
     const topSyms = Object.entries(bySym).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const top = it.slice().sort((a, b) => b.col - a.col).slice(0, 3);
     html += '<div class="liq-asset">' +
-      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">⛓ LIVE</span>' +
+      '<div class="liq-head"><span class="liq-sym" style="color:var(--up)">' + icn("chain") + ' LIVE</span>' +
       '<span class="liq-px">Morpho · real-time on-chain</span>' +
       '<span class="liq-total">' + it.length + " positions ≥ $50k · " + risk.scanned + " of " +
         risk.total + " scanned</span></div>" +
@@ -2787,7 +2844,7 @@ async function loadLendLive() {
 
   if (liq24 && liq24.n) {
     html += '<div class="liq-asset"><div class="liq-head" style="margin:0">' +
-      '<span class="liq-sym" style="font-size:12.5px">⚡ ' + liq24.n + " Euler liquidation" +
+      '<span class="liq-sym" style="font-size:12.5px">' + icn("bolt") + ' ' + liq24.n + " Euler liquidation" +
         (liq24.n > 1 ? "s" : "") + " executed · last 7d</span>" +
       '<span class="liq-total">' + fmtBig(liq24.usd) + " of debt repaid by liquidators</span></div></div>";
   }
@@ -2907,7 +2964,7 @@ async function loadLiquidations() {
       '<span class="liq-sym" style="font-size:12.5px">Σ ' + fmtBig(grand20) + " liquidatable within −20%</span>" +
       '<span class="liq-total">' + scanned + " assets · " + allProtos.size + " lenders · " + allChains.size + " chains · fresh data only</span></div></div>" +
       blocks.slice(0, 16).map(b => b.html).join("") +
-      (excludedStale.length ? '<div class="liq-asset"><div class="oi-note">⚠ hidden — snapshot too old to trust (already-liquidated positions would pollute it): ' +
+      (excludedStale.length ? '<div class="liq-asset"><div class="oi-note">' + icn("warn") + ' hidden — snapshot too old to trust (already-liquidated positions would pollute it): ' +
         esc(excludedStale.join(", ")) + ". These reappear automatically once DefiLlama refreshes them.</div></div>" : "");
     loadMorphoLive();
     markUpdated();
@@ -3274,14 +3331,14 @@ function renderWhaleRows(rows, note) {
             const ageTxt = r.ageDays == null ? null : r.ageDays >= 60 ? Math.round(r.ageDays / 30) + " months" : Math.max(1, Math.round(r.ageDays)) + " days";
             if (r.dormant) return '<span class="side-badge dormant" title="Dormant wallet waking up: this account was first funded ' +
               (ageTxt ? ageTxt + " ago" : "long ago") + ', but ~all of its lifetime trading volume happened in the last ' +
-              (r.fresh === "week" ? "7 days" : "month") + ' — an old wallet that sat idle and is suddenly opening size. Often informed money reactivating before news.">💤 DORMANT</span>';
+              (r.fresh === "week" ? "7 days" : "month") + ' — an old wallet that sat idle and is suddenly opening size. Often informed money reactivating before news.">' + icn("sleep") + ' DORMANT</span>';
             return '<span class="side-badge fresh" title="' + (r.fresh === "week"
               ? "Fresh wallet: genuinely new account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " — ~all of its lifetime trading volume happened in the last 7 days, opening size straight away. Classic footprint of informed money positioning before news."
               : "Recent wallet: young account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " with ~all of its lifetime volume within the last month — already running size.") +
-              '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "≤1mo") + "</span>";
+              '">' + icn("fresh") + ' ' + (r.fresh === "week" ? "FRESH WALLET" : "≤1mo") + "</span>";
           })() : "") +
           (r.inflow >= 250_000 ? '<span class="side-badge inflow" title="Fresh money on-chain: this wallet received ' + fmtBig(r.inflow) +
-            ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">💰 +' +
+            ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">' + icn("moneyin") + ' +' +
             fmtBig(r.inflow) + "</span>" : "") +
           '<span class="wrow-coin">' + esc(r.coin) + '</span>' +
           '<span class="wrow-val">' + fmtBig(r.value) + '</span>' +
@@ -4112,7 +4169,7 @@ const secAlertStore = {
 function renderSecChips() {
   const a = secAlertStore.get();
   $("secChips").innerHTML =
-    a.keywords.map(k => '<span class="chip chip-kw" data-kind="kw" data-val="' + esc(k) + '">🔎 ' + esc(k) + ' <span class="x">✕</span></span>').join("") +
+    a.keywords.map(k => '<span class="chip chip-kw" data-kind="kw" data-val="' + esc(k) + '">' + icn("search") + ' ' + esc(k) + ' <span class="x">✕</span></span>').join("") +
     a.ciks.map(c => '<span class="chip chip-cik" data-kind="cik" data-val="' + esc(c) + '">★ CIK ' + esc(c) + ' <span class="x">✕</span></span>').join("");
 }
 $("secChips").addEventListener("click", e => {
@@ -4148,7 +4205,7 @@ renderSecChips();
 /* ---- EDGAR full-text search across ALL filings (efts.sec.gov via CORS proxy) ---- */
 async function edgarFTS(phrase) {
   const box = $("secFtsBox");
-  box.innerHTML = '<div class="oi-note" style="padding:8px 14px">🔎 searching all SEC filings for “' + esc(phrase) + '”…</div>';
+  box.innerHTML = '<div class="oi-note" style="padding:8px 14px">' + icn("search") + ' searching all SEC filings for “' + esc(phrase) + '”…</div>';
   try {
     const q = "https://efts.sec.gov/LATEST/search-index?q=" + encodeURIComponent('"' + phrase + '"');
     const j = await fetchJSON("https://corsproxy.io/?url=" + encodeURIComponent(q), {timeout: 15000});
@@ -4168,7 +4225,7 @@ async function edgarFTS(phrase) {
         '<div class="sec-meta">' + esc(s.file_description || s.file_type || "") + " · " + esc(s.file_date || "") + "</div></a>";
     }).join("");
     box.innerHTML =
-      '<div class="oi-note" style="padding:8px 14px 2px;color:var(--accent)">🔎 “' + esc(phrase) + '” — ' + total.toLocaleString() +
+      '<div class="oi-note" style="padding:8px 14px 2px;color:var(--accent)">' + icn("search") + ' “' + esc(phrase) + '” — ' + total.toLocaleString() +
       ' filings mention this <button class="btn-ghost" id="secFtsClear" style="margin-left:6px;padding:1px 7px">✕ clear</button></div>' +
       rows;
     document.getElementById("secFtsClear").addEventListener("click", () => { box.innerHTML = ""; $("secFTS").value = ""; });
@@ -4414,7 +4471,7 @@ async function renderGlobalOI(rows, total, cachedAt) {
       '<div class="gx-row"><span class="gx-name"' +
         (e.live ? ' style="color:var(--up)" title="Real OI straight from the exchange’s own API' + (e.note ? " — " + esc(e.note) : "") + '"' : "") + '>' +
         (e.rank > 14 ? '<span class="gx-rank" title="ranked #' + e.rank + ' by size — pinned here because it is a perp DEX reporting its own OI">#' + e.rank + "</span> " : "") +
-        esc(e.name) + (e.live ? " ⚡" : "") + "</span>" +
+        esc(e.name) + (e.live ? " " + icn("bolt") : "") + "</span>" +
       '<div class="gx-bar"><div class="gx-bar-fill" style="width:' + Math.min(100, e.oi / rows[0].oi * 100).toFixed(1) + '%"></div></div>' +
       '<span class="gx-val">' + fmtBig(e.oi) + " · " + (e.oi / total * 100).toFixed(1) + "%</span></div>"
     ).join("");
@@ -4857,7 +4914,7 @@ let pmDragSlug = null, pmDropAt = 0;
 let pmFavOpen = false, pmFavCards = {t: 0, html: ""};
 function pmFavPaint() {
   const b = $("pmFavBtn");
-  if (b) b.textContent = "⭐ " + Object.keys(pmFavs.load()).length;
+  if (b) b.innerHTML = icn("star") + " " + Object.keys(pmFavs.load()).length;
 }
 /* Os favoritos são mercados vivos, não uma lista de nomes: vai-se buscar cada um à gamma pelo
    slug (num único pedido, o endpoint aceita slug repetido) e desenham-se os mesmos cartões do
@@ -4874,7 +4931,7 @@ async function pmFavOverlay() {
     $("pmOuter").appendChild(ov);
   }
   const head = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
-    '<b style="font-size:12px">⭐ Favourite markets (' + slugs.length + ')</b>' +
+    '<b style="font-size:12px">' + icn("star") + ' Favourite markets (' + slugs.length + ')</b>' +
     '<span style="color:var(--muted);font-size:10px">live odds, same as the panel</span>' +
     '<button class="btn-ghost" id="pmFavClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>';
   if (!slugs.length) {
@@ -4921,7 +4978,7 @@ let pmBlockedOpen = false;
 /* overlay list (opens over the panel via the 🚫 head button; closes on the same button or ✕) */
 function pmBlkPaint() {
   const b = $("pmBlkBtn");
-  if (b) b.textContent = "🚫 " + Object.keys(pmBlocked.load()).length;
+  if (b) b.innerHTML = icn("block") + " " + Object.keys(pmBlocked.load()).length;
 }
 function pmBlkOverlay() {
   let ov = $("pmBlkOverlay");
@@ -4934,12 +4991,12 @@ function pmBlkOverlay() {
   }
   const blkO = pmBlocked.load(), entries = Object.entries(blkO);
   ov.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
-    '<b style="font-size:12px">🚫 Blocked markets (' + entries.length + ')</b>' +
+    '<b style="font-size:12px">' + icn("block") + ' Blocked markets (' + entries.length + ')</b>' +
     '<span style="color:var(--muted);font-size:10px">these never fire alerts again</span>' +
     '<button class="btn-ghost" id="pmBlkClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>' +
     (entries.length ? entries.map(([slug, o]) =>
       '<div class="pm-blk-row"><button class="pm-unblock" data-unblock="' + esc(slug) + '" title="Unblock — this market can be suggested as an alert again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
-    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the 🚫 button on any alert</div>');
+    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the ' + icn("block") + ' button on any alert</div>');
 }
 (() => {
   const b = $("pmBlkBtn");
@@ -5190,11 +5247,11 @@ function trackOddsMoves(oddsNow) {
       : a.pct.toFixed(0) + "%";
     const volTxt = a.dvol != null && a.dvol > 0 ? " · vol +" + fmtBig(a.dvol) : "";
     return '<a class="bet-alert flash-red" href="https://polymarket.com/event/' + esc(a.slug) + '" target="_blank" rel="noopener">' +
-      '<div class="b1">📊 <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
+      '<div class="b1">' + icn("chart") + ' <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
       '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
       ' <span class="pm-outcome' + pmSideClass(a.label) + '">' + esc(a.label) + "</span>" +
       '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
-      '<button class="bet-x" data-blockslug="' + esc(a.slug) + '" data-blocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list below)">🚫</button>' +
+      '<button class="bet-x" data-blockslug="' + esc(a.slug) + '" data-blocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list below)">' + icn("block") + '</button>' +
       '<button class="bet-x" data-odds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
       '<div class="b2">' + esc(a.title) + "</div></a>";
   }).join("");
@@ -5223,7 +5280,7 @@ const kaBlocked = {
 let kaBlockedOpen = false;
 function kaBlkPaint() {
   const b = $("kaBlkBtn");
-  if (b) b.textContent = "🚫 " + Object.keys(kaBlocked.load()).length;
+  if (b) b.innerHTML = icn("block") + " " + Object.keys(kaBlocked.load()).length;
 }
 function kaBlkOverlay() {
   let ov = $("kaBlkOverlay");
@@ -5236,12 +5293,12 @@ function kaBlkOverlay() {
   }
   const blkO = kaBlocked.load(), entries = Object.entries(blkO);
   ov.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--grid)">' +
-    '<b style="font-size:12px">🚫 Blocked markets (' + entries.length + ')</b>' +
+    '<b style="font-size:12px">' + icn("block") + ' Blocked markets (' + entries.length + ')</b>' +
     '<span style="color:var(--muted);font-size:10px">these never fire alerts again</span>' +
     '<button class="btn-ghost" id="kaBlkClose" style="margin-left:auto;padding:2px 8px">✕ close</button></div>' +
     (entries.length ? entries.map(([slug, o]) =>
       '<div class="pm-blk-row"><button class="pm-unblock" data-kaunblock="' + esc(slug) + '" title="Unblock — this market can fire alerts again">UNBLOCK</button><span>' + esc(o.title || slug) + "</span></div>").join("")
-    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the 🚫 button on any alert</div>');
+    : '<div class="pm-blk-row" style="color:var(--muted)">nothing blocked — use the ' + icn("block") + ' button on any alert</div>');
 }
 (() => {
   const b = $("kaBlkBtn");
@@ -5342,11 +5399,11 @@ function kaTrackOddsMoves(oddsNow) {
     const move = a.from != null ? a.from.toFixed(0) + "% → " + a.pct.toFixed(0) + "%" : a.pct.toFixed(0) + "%";
     const volTxt = a.dvol != null && a.dvol > 0 ? " · vol +" + fmtBig(a.dvol) : "";
     return '<a class="bet-alert flash-red" href="' + kaLink(a) + '" target="_blank" rel="noopener">' +
-      '<div class="b1">📊 <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
+      '<div class="b1">' + icn("chart") + ' <span class="' + (up ? "chg-up" : "chg-down") + '">' + move + "</span>" +
       '<span class="wrow-meta" style="opacity:.85">(' + (up ? "+" : "") + a.delta.toFixed(0) + "pp/1h" + volTxt + ")</span>" +
       ' <span class="pm-outcome' + pmSideClass(a.label) + '">' + esc(a.label) + "</span>" +
       '<span class="wrow-meta" style="margin-left:auto" data-ts="' + a.t + '">' + timeAgo(a.t) + "</span>" +
-      '<button class="bet-x" data-kablockslug="' + esc(a.slug) + '" data-kablocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list)">🚫</button>' +
+      '<button class="bet-x" data-kablockslug="' + esc(a.slug) + '" data-kablocktitle="' + esc(a.title) + '" title="BLOCK this market — never alert on it again (manageable in the blocked list)">' + icn("block") + '</button>' +
       '<button class="bet-x" data-kaodds="' + esc(a.slug) + '" title="Dismiss">✕</button></div>' +
       '<div class="b2">' + esc(a.title) + "</div></a>";
   }).join("");
@@ -5587,7 +5644,7 @@ function kalshiCard(ev) {
   return '<a class="pm-item" style="display:block" href="' + link + '" target="_blank" rel="noopener">' +
     '<div class="pm-q"><span class="proto-badge" style="margin-right:6px">KALSHI</span>' + esc(ev.t) + "</div>" +
     '<div class="pm-row"><span class="pm-odds chg-up">' + pct.toFixed(0) + '%</span>' +
-    '<span class="pm-outcome' + pmSideClass(winner) + '">🏆 ' + esc(winner) + " leading</span>" +
+    '<span class="pm-outcome' + pmSideClass(winner) + '">' + icn("trophy") + ' ' + esc(winner) + " leading</span>" +
     '<div class="pm-bar"><div class="pm-bar-fill" style="width:' + Math.min(100, pct).toFixed(1) + '%;background:var(--up)"></div></div></div>' +
   "</a>";
 }
@@ -5613,11 +5670,11 @@ async function pmRemoteSearch(q) {
       : null;
     const kalAge = kal && kal.t ? timeAgo(kal.t) : null;
     box.innerHTML =
-      '<div class="oi-note" style="padding:6px 14px 2px">🔎 all of Polymarket — “' + esc(q) + "”</div>" +
+      '<div class="oi-note" style="padding:6px 14px 2px">' + icn("search") + ' all of Polymarket — “' + esc(q) + "”</div>" +
       (cards.length ? cards.join("") : '<div class="empty">Nothing on Polymarket for “' + esc(q) + "”.</div>") +
       (kalCards === null
         ? '<div class="oi-note" style="padding:6px 14px">Kalshi mirror not built yet — the repo bot creates it on its next run.</div>'
-        : '<div class="oi-note" style="padding:6px 14px 2px">🔎 Kalshi (mirrored ' + kalAge + " by the bot)</div>" +
+        : '<div class="oi-note" style="padding:6px 14px 2px">' + icn("search") + ' Kalshi (mirrored ' + kalAge + " by the bot)</div>" +
           (kalCards.length ? kalCards.join("") : '<div class="empty">Nothing on Kalshi for “' + esc(q) + "”.</div>"));
     pmLiveOdds();   /* re-price what just landed off the live book before it is even read */
   } catch (e) {
@@ -5685,10 +5742,10 @@ async function loadPolymarket() {
         const usd = (t.size || 0) * (t.price || 0) || t.size || 0;
         const link = t.eventSlug ? "https://polymarket.com/event/" + esc(t.eventSlug) : "https://polymarket.com";
         return '<a class="bet-alert flash-red" href="' + link + '" target="_blank" rel="noopener">' +
-          '<div class="b1">🚨 <span class="bet-amt">' + fmtBig(usd) + "</span> " + esc(t.side || "") +
+          '<div class="b1">' + icn("siren") + ' <span class="bet-amt">' + fmtBig(usd) + "</span> " + esc(t.side || "") +
           " “" + esc(t.outcome || "") + "”" +
           '<span class="wrow-meta" style="margin-left:auto" data-ts="' + (t.timestamp * 1000) + '">' + timeAgo(t.timestamp * 1000) + "</span>" +
-          '<button class="bet-x" data-blockslug="' + esc(t.eventSlug || t.title || "") + '" data-blocktitle="' + esc(t.title || "") + '" title="BLOCK this market — never alert on it again">🚫</button>' +
+          '<button class="bet-x" data-blockslug="' + esc(t.eventSlug || t.title || "") + '" data-blocktitle="' + esc(t.title || "") + '" title="BLOCK this market — never alert on it again">' + icn("block") + '</button>' +
           '<button class="bet-x" data-id="' + esc(pmAlertId(t)) + '" title="Dismiss this alert">✕</button></div>' +
           '<div class="b2">' + esc(t.title || "") + " · @ " + (t.price != null ? (t.price * 100).toFixed(0) + "¢" : "?") + "</div>" +
         "</a>";
@@ -5968,13 +6025,13 @@ function caLoad() {
 }
 function caSaveRules() { try { localStorage.setItem("cryptopulse-ca-rules", JSON.stringify(CA.rules)); } catch (e) {} }
 const CA_METRICS = {
-  whale_liq:     {label: "🐋 whale near liquidation", coin: "opt", two: true},
-  price_above:   {label: "📈 price above", coin: "req"},
-  price_below:   {label: "📉 price below", coin: "req"},
-  chg24_up:      {label: "📈 24h change above", coin: "req", pct: true},
-  chg24_dn:      {label: "📉 24h drop below", coin: "req", pct: true},
-  funding_above: {label: "💸 funding/h above", coin: "req", pct: true},
-  funding_below: {label: "💸 funding/h below", coin: "req", pct: true}
+  whale_liq:     {label: "whale near liquidation", coin: "opt", two: true},
+  price_above:   {label: "price above", coin: "req"},
+  price_below:   {label: "price below", coin: "req"},
+  chg24_up:      {label: "24h change above", coin: "req", pct: true},
+  chg24_dn:      {label: "24h drop below", coin: "req", pct: true},
+  funding_above: {label: "funding/h above", coin: "req", pct: true},
+  funding_below: {label: "funding/h below", coin: "req", pct: true}
 };
 /* one lookup for a coin's live price / 24h change / funding-per-hour */
 function coinData(coin) {
@@ -6253,10 +6310,10 @@ function renderLsCrowd() {
     let tag = "", note = "";
     if (whaleLong != null && crowdLong != null) {
       if (crowdLong && !whaleLong) {
-        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority LONG while whales are net SHORT. If price falls, crowd longs get liquidated — that forced selling fuels the drop (a move in the whales’ favor). The bigger the divergence, the more fuel.">⚠ squeeze fuel ↓</span>';
+        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority LONG while whales are net SHORT. If price falls, crowd longs get liquidated — that forced selling fuels the drop (a move in the whales’ favor). The bigger the divergence, the more fuel.">' + icn("warn") + ' squeeze fuel ↓</span>';
         note = "crowd long · whales short";
       } else if (!crowdLong && whaleLong) {
-        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority SHORT while whales are net LONG. If price rises, crowd shorts get liquidated — that forced buying fuels the rally (a move in the whales’ favor). The bigger the divergence, the more fuel.">⚠ squeeze fuel ↑</span>';
+        tag = '<span class="lsx-tag lsx-tag-div" title="Crowd is majority SHORT while whales are net LONG. If price rises, crowd shorts get liquidated — that forced buying fuels the rally (a move in the whales’ favor). The bigger the divergence, the more fuel.">' + icn("warn") + ' squeeze fuel ↑</span>';
         note = "crowd short · whales long";
       } else {
         tag = '<span class="lsx-tag lsx-tag-al" title="Whales and crowd lean the same way — no forced-flow conflict between smart money and retail on this coin.">aligned</span>';
@@ -6648,7 +6705,7 @@ function renderLiqmap() {
   const above = rows.filter(r => r.p >= 0).sort((a, b) => b.p - a.p);
   const below = rows.filter(r => r.p < 0).sort((a, b) => b.p - a.p);
   body.innerHTML = legend +
-    '<div class="lm-sum"><b>' + esc(coin) + "</b> <span style='color:var(--accent)' title='Mouse wheel over the chart: scroll up = zoom in, scroll down = zoom out'>±" + (R < 15 ? R.toFixed(1) : Math.round(R)) + "% 🔍</span>" +
+    '<div class="lm-sum"><b>' + esc(coin) + "</b> <span style='color:var(--accent)' title='Mouse wheel over the chart: scroll up = zoom in, scroll down = zoom out'>±" + (R < 15 ? R.toFixed(1) : Math.round(R)) + "% " + icn("search") + "</span>" +
       " · sell-cascade fuel −" + (R < 15 ? R.toFixed(1) : Math.round(R)) + "%: <b style='color:var(--down)'>" + fmtBig(sumSell) + "</b>" +
       " · squeeze fuel above: <b style='color:var(--up)'>" + fmtBig(sumBuy) + "</b>" +
       " · magnet: <b style='color:var(--warn)'>" + fpx(px * (1 + magnet.p / 100)) + "–" + fpx(px * (1 + (magnet.p + ST) / 100)) + " (" + fmtBig(magnet.tot) + ")</b>" +
@@ -7167,7 +7224,7 @@ function renderCx() {
   const gD = cxSumsGlobal(86_400_000, want), gW = cxSumsGlobal(7 * 86_400_000, want);
   const d1 = gD || cxSums(86_400_000, want), w1 = gW || cxSums(7 * 86_400_000, want);
   const gAge = g => g && g.age > 3.5 * 3600_000 ? " — ⏳ bot data " + Math.round(g.age / 3600_000) + "h old (GitHub skipped runs), most recent hours missing from the total" : "";
-  const gMark = g => g && g.age > 3.5 * 3600_000 ? "⏳" : "";
+  const gMark = g => g && g.age > 3.5 * 3600_000 ? icn("clock") : "";
   const dTip = gD ? "Last 24h — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)" + gAge(gD)
                   : "Last 24h — accumulates while the dashboard is open";
   const wTip = gW ? "Last 7 days — MARKET-WIDE totals (majors across 25+ exchanges via the bot's Coinalyze feed, 24/7)" + gAge(gW)
@@ -7181,9 +7238,9 @@ function renderCx() {
     ' <span class="side-badge side-short" title="shorts liquidated (forced buys)">SHORT</span> <b style="color:var(--down)" title="shorts liquidated (forced buys)">' + fmtBig(o.S) + "</b></span>";
   const stats = '<div class="cx-stats">' +
     (want ? '<span style="color:var(--accent);font-weight:700">' + esc(want) + " only</span>" : "") +
-    pair("1h" + (gH ? " 🌐" : ""), h1u, hTip) +
-    pair("1D" + (gD ? " 🌐" + gMark(gD) : ""), d1, dTip) +
-    pair("1W" + (gW ? " 🌐" + gMark(gW) : ""), w1, wTip) +
+    pair("1h" + (gH ? " " + icn("globe") : ""), h1u, hTip) +
+    pair("1D" + (gD ? " " + icn("globe") + gMark(gD) : ""), d1, dTip) +
+    pair("1W" + (gW ? " " + icn("globe") + gMark(gW) : ""), w1, wTip) +
     '<span title="Liquidations in the last 60 seconds — a spike here IS the cascade">60s: <b' + (v60 >= 2_000_000 ? ' style="color:var(--warn)"' : "") + ">" + n60 + " · " + fmtBig(v60) + "</b></span>" +
     "</div>";
   const nConn = Object.values(cxConnected).filter(Boolean).length;
@@ -7389,7 +7446,7 @@ function renderRadar() {
     const st = rdAlState[r.coin] || (rdAlState[r.coin] = {lvl: 0, muted: 0, lastT: {}});
     if (r.eff > st.lvl) {
       const nm = r.lvl >= 3 ? (r.down ? "!! SHORT CASCADE" : "!! LONG CASCADE") : (r.burst && r.lvl < 2) ? "⚡ BURST" : r.eff >= 2 ? "red alert ≥61" : "yellow alert ≥50";
-      alLog("radar", r.coin + " " + r.score + "/100 " + (r.down ? "🔻 SHORT" : "🔺 LONG") + " — " + nm);
+      alLog("radar", r.coin + " " + r.score + "/100 " + (r.down ? "SHORT" : "LONG") + " — " + nm);
       if (r.eff > st.muted) rdSound(r.eff, r.coin);
     }
     if (r.eff < st.muted) st.muted = 0; /* dropped below the silenced level → re-arm the sound */
@@ -7416,9 +7473,9 @@ function renderRadar() {
     const col = r.lvl >= 2 ? "var(--down)" : r.lvl >= 1 ? "var(--warn)" : r.score >= 45 ? "var(--warn)" : "var(--accent)";
     return '<div class="rd-row' + (r.eff ? " al" + r.eff : "") + '" data-coin="' + esc(r.coin) + '" title="Score ' + r.score + '/100 — W ' + r.parts[0] + '/40 liq walls · F ' + r.parts[1] + '/20 funding · V ' + r.parts[2] + '/25 liq velocity · OI ' + r.parts[3] + '/15 24h momentum' + (r.lvl ? " — click to silence the sound (keeps flashing)" : "") + '">' +
       '<div class="rd-top"><span class="rd-rank">' + r.rank + '</span><a class="rd-coin" href="https://www.tradingview.com/chart/?symbol=BINANCE%3A' + esc(r.coin.replace(/^k/, "1000")) + 'USDT.P" target="_blank" rel="noopener" title="Open the ' + esc(r.coin) + ' chart on TradingView">' + esc(r.coin) + "</a>" +
-      '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '" title="' + (r.down ? "SHORT setup — the dominant fuel points DOWN (longs at risk of liquidation)" : "LONG setup — the dominant fuel points UP (shorts at risk of liquidation)") + '">' + (r.down ? "🔻 SHORT" : "🔺 LONG") + "</span>" +
+      '<span class="rd-dir" style="color:' + (r.down ? "var(--down)" : "var(--up)") + '" title="' + (r.down ? "SHORT setup — the dominant fuel points DOWN (longs at risk of liquidation)" : "LONG setup — the dominant fuel points UP (shorts at risk of liquidation)") + '">' + (r.down ? icn("down") + " SHORT" : icn("up") + " LONG") + "</span>" +
       (r.lvl >= 3 ? '<span class="rd-bang' + (r.down ? "" : " up") + '">!! ' + (r.down ? "SHORT" : "LONG") + " CASCADE</span>"
-        : r.burst ? '<span class="rd-burst" title="Heavy forced flow happening RIGHT NOW — liquidation velocity spiked. Not (yet) a full cascade: the total score is below 75.">⚡ BURST</span>' : "") +
+        : r.burst ? '<span class="rd-burst" title="Heavy forced flow happening RIGHT NOW — liquidation velocity spiked. Not (yet) a full cascade: the total score is below 75.">' + icn("bolt") + ' BURST</span>' : "") +
       '<span class="rd-bar"><i style="width:' + Math.min(100, r.score) + '%;background:' + col + '"></i></span>' +
       rdSparkSVG(r.coin) +
       '<span class="rd-score" style="color:' + col + '">' + r.score + "</span></div>" +
@@ -7448,7 +7505,7 @@ function rdCardPaint() {
   ov.innerHTML =
     '<div class="rd-cd-head"><b style="font-size:15px">' + esc(r.coin) + '</b>' +
     '<span style="font-variant-numeric:tabular-nums;font-weight:800">' + fmtPrice(px) + "</span>" +
-    (r.down ? '<span style="color:var(--down);font-weight:800">🔻 SHORT</span>' : '<span style="color:var(--up);font-weight:800">🔺 LONG</span>') +
+    (r.down ? '<span style="color:var(--down);font-weight:800">' + icn("down") + ' SHORT</span>' : '<span style="color:var(--up);font-weight:800">' + icn("up") + ' LONG</span>') +
     '<button class="btn-ghost" id="rdCardX" style="margin-left:auto;padding:2px 8px">✕</button></div>' +
     '<div class="rd-cd-row"><span>Score</span><b style="font-size:13px">' + r.score + '</b><span class="rd-cd-sub">W ' + r.parts[0] + "/40 · F " + r.parts[1] + "/20 · V " + r.parts[2] + "/25 · OI " + r.parts[3] + "/15</span></div>" +
     '<div class="rd-cd-row"><span>Walls below</span>' + wallTxt(w.below, w.nbPct != null && w.nbPct < 0 ? w.nbUsd : 0, w.nbPct != null && w.nbPct < 0 ? w.nbPct : null) + '<span class="rd-cd-sub">longs’ liq levels −5%…0</span></div>' +
@@ -7584,7 +7641,7 @@ function renderAC() {
   }
   body.innerHTML = a.slice(0, 120).map(e =>
     '<div class="ac-row"><span class="when">' + new Date(e.t).toLocaleTimeString("en-GB") + "</span>" +
-    '<span class="ac-k ac-' + e.k + '" title="' + (e.bot ? "caught by the 24/7 bot (works with your PC off)" : "caught by this browser") + '">' + (e.bot ? "🤖 " : "") + (AC_LABEL[e.k] || String(e.k || "").toUpperCase()) + "</span>" +
+    '<span class="ac-k ac-' + e.k + '" title="' + (e.bot ? "caught by the 24/7 bot (works with your PC off)" : "caught by this browser") + '">' + (e.bot ? icn("bot") + " " : "") + (AC_LABEL[e.k] || String(e.k || "").toUpperCase()) + "</span>" +
     '<span class="ac-x">' + esc(e.x) + "</span></div>").join("");
 }
 document.querySelectorAll(".ac-f").forEach(b => {
