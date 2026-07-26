@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Hp37JGV4+dsTpLD7tWPdBrroU8SGu6rxbJpKNAOs5t0='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-GybjdKoaANVrC/BoTnahjLdRyjYjTaOQT7Rtigvgq/Q='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -24,7 +24,11 @@ body { font-family:'Inter', -apple-system, "Segoe UI", Roboto, sans-serif; }
 .crumb { color:var(--muted); font-size:11px; }
 .tabs, .modes { display:flex; gap:5px; }
 .tb { background:var(--surface-2); border:1px solid var(--border); border-radius:7px; color:var(--muted);
-  font:700 11px/1 inherit; font-family:inherit; padding:6px 11px; cursor:pointer; letter-spacing:.03em; }
+  font-weight:700; font-size:11px; line-height:1; font-family:'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  padding:6px 11px; cursor:pointer; letter-spacing:.03em; }
+.exb { padding:5px 7px; display:inline-flex; align-items:center; }
+.exb img { width:15px; height:15px; display:block; border-radius:3px; }
+.exb.on img { filter:none; } .exb:not(.on) img { filter:grayscale(1) opacity(.55); }
 .tb:hover { color:var(--ink); }
 .tb.on { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 1px rgba(57,135,229,.35); }
 .stats { margin-left:auto; display:flex; gap:14px; font-variant-numeric:tabular-nums; font-size:11.5px; color:var(--ink-2); flex-wrap:wrap; }
@@ -50,7 +54,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </head>
 <body>
 <header>
-  <a class="logo" href="./" title="Voltar ao dashboard"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg><span class="wordmark">Cryptomacho</span></a>
+  <a class="logo" href="./" title="Back to the dashboard"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg><span class="wordmark">Cryptomacho</span></a>
   <span class="crumb">Order Book</span>
   <span class="tabs" id="coinTabs"></span>
   <span class="modes" id="viewBtns">
@@ -85,7 +89,7 @@ footer b { color:var(--ink-2); font-weight:600; }
   <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
 </main>
 <footer>
-  <span><b>DOM</b>: Binance 5000 níveis (spot) · Bybit 500 (tecto da API pública) · OKX 5000 · HL ~20 agregados ao group · <b>roda do rato = subir/descer no book</b>, clique volta ao mid</span>
+  <span><b>DOM depth</b>: Coinbase FULL book · Binance 5000 (spot) · OKX 5000 (perp) · Bybit 500 (public API cap, perp) · Kraken 500 · HL ~20 grouped (perp) · <b>mouse wheel = scroll the book</b>, click = snap back to mid</span>
   <span><b>live</b>: Binance + Bybit + OKX + Hyperliquid via WebSocket, sampled every 5 s in your browser</span>
   <span><b>history 48H</b>: OKX + Hyperliquid, 10-min frames collected 24/7 (Binance/Bybit block the collector's IPs — said, not hidden)</span>
   <span id="histNote"></span>
@@ -99,11 +103,12 @@ footer b { color:var(--ink-2); font-weight:600; }
 /* step = história do coletor (10 min) · lstep = LIVE no browser, ~5× mais fino para a
    resolução vertical ser tipo TapeSurf (o custo é só memória local, e é pouca) */
 const COINS = {
-  BTC:  { step: 5,    lstep: 1,     bn: "btcusdt",  by: "BTCUSDT",  ok: "BTC-USDT-SWAP",  hl: "BTC" },
-  ETH:  { step: 0.2,  lstep: 0.05,  bn: "ethusdt",  by: "ETHUSDT",  ok: "ETH-USDT-SWAP",  hl: "ETH" },
-  SOL:  { step: 0.05, lstep: 0.01,  bn: "solusdt",  by: "SOLUSDT",  ok: "SOL-USDT-SWAP",  hl: "SOL" },
-  HYPE: { step: 0.02, lstep: 0.005, bn: "hypeusdt", by: "HYPEUSDT", ok: "HYPE-USDT-SWAP", hl: "HYPE" }
+  BTC:  { step: 5,    lstep: 1,     bn: "btcusdt",  bns: "BTCUSDT", by: "BTCUSDT",  ok: "BTC-USDT-SWAP",  hl: "BTC",  cb: "BTC-USD",  kr: "XBTUSD" },
+  ETH:  { step: 0.2,  lstep: 0.05,  bn: "ethusdt",  bns: "ETHUSDT", by: "ETHUSDT",  ok: "ETH-USDT-SWAP",  hl: "ETH",  cb: "ETH-USD",  kr: "ETHUSD" },
+  SOL:  { step: 0.05, lstep: 0.01,  bn: "solusdt",  bns: "SOLUSDT", by: "SOLUSDT",  ok: "SOL-USDT-SWAP",  hl: "SOL",  cb: "SOL-USD",  kr: "SOLUSD" },
+  HYPE: { step: 0.02, lstep: 0.005, bn: "hypeusdt", bns: null,      by: "HYPEUSDT", ok: "HYPE-USDT-SWAP", hl: "HYPE", cb: "HYPE-USD", kr: "HYPEUSD" }
 };
+/* bn = símbolo do stream de FUTUROS (WS, heatmap) · bns = símbolo SPOT REST (null = par não existe) */
 let coin = (() => { try { return localStorage.getItem("cryptomacho-book-coin") || "BTC"; } catch (e) { return "BTC"; } })();
 if (!COINS[coin]) coin = "BTC";
 let mode = "live";
@@ -303,7 +308,7 @@ function draw() {
   const cols = live ? liveCols : (hist && hist.coins && hist.coins[coin] || []);
   if (!cols.length) {
     cx.fillStyle = "#6b7688"; cx.font = "13px sans-serif"; cx.textAlign = "center";
-    cx.fillText(live ? "A ligar aos feeds — o heatmap começa a fluir em segundos…"
+    cx.fillText(live ? "Connecting to the feeds — the heatmap starts flowing in seconds…"
       : "History is building — the collector writes a frame every 10 minutes, 24/7.", W / 2, H / 2);
     return;
   }
@@ -435,12 +440,26 @@ function paintDom() {
 }
 
 /* ---------- DOM ladder (vista tipo tapesurf, cores da casa) ---------- */
-const EX_META = { BN: {name: "Binance", pair: c => c + "/USDT (spot)"}, BY: {name: "Bybit", pair: c => c + "/USDT"},
-                  OKX: {name: "OKX", pair: c => c + "/USDT"}, HL: {name: "Hyperliquid", pair: c => c + "/USD"} };
+const EX_META = {
+  BN:  { name: "Binance",     dom: "binance.com",     pair: c => c + "/USDT · spot" },
+  BY:  { name: "Bybit",       dom: "bybit.com",       pair: c => c + "/USDT · perp" },
+  OKX: { name: "OKX",         dom: "okx.com",         pair: c => c + "/USDT · perp" },
+  HL:  { name: "Hyperliquid", dom: "hyperliquid.xyz", pair: c => c + "/USD · perp" },
+  CB:  { name: "Coinbase",    dom: "coinbase.com",    pair: c => c + "/USD · spot" },
+  KR:  { name: "Kraken",      dom: "kraken.com",      pair: c => c + "/USD · spot" }
+};
+function exSym(cfg, k) { return { BN: cfg.bns, BY: cfg.by, OKX: cfg.ok, HL: cfg.hl, CB: cfg.cb, KR: cfg.kr }[k]; }
+const exImgs = {};
+Object.keys(EX_META).forEach(k => {
+  const im = new Image();
+  im.src = "https://www.google.com/s2/favicons?domain=" + EX_META[k].dom + "&sz=64";
+  exImgs[k] = im;
+});
 const GROUPS = { BTC: [1, 5, 10, 25, 50], ETH: [0.1, 0.5, 1, 2], SOL: [0.01, 0.05, 0.1, 0.5], HYPE: [0.005, 0.02, 0.05, 0.1] };
 let view = (() => { try { return localStorage.getItem("cryptomacho-book-view") || "dom"; } catch (e) { return "dom"; } })();
 let domMode = (() => { try { return localStorage.getItem("cryptomacho-book-dmode") || "single"; } catch (e) { return "single"; } })();
-let exSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-ex")) || { BN: 1, BY: 1, OKX: 1, HL: 1 }; } catch (e) { return { BN: 1, BY: 1, OKX: 1, HL: 1 }; } })();
+let exSel = (() => { const d = { BN: 1, BY: 1, OKX: 1, HL: 1, CB: 1, KR: 1 };
+  try { const j = JSON.parse(localStorage.getItem("cryptomacho-book-ex")); return j ? Object.assign(d, j) : d; } catch (e) { return d; } })();
 let grpSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-grp")) || {}; } catch (e) { return {}; } })();
 function grpOf() { const g = GROUPS[coin]; const v = grpSel[coin]; return g.indexOf(v) >= 0 ? v : g[2] || g[g.length - 1]; }
 const deep = {};              /* src -> {bids, asks, t} — qty em MOEDA */
@@ -486,9 +505,20 @@ function pollDeep() {
   const cfg = COINS[coin];
   /* Binance spot REST aceita limit=5000 (peso 250 ⇒ 1 pedido/4 s respeita os 6000/min; o
      easing do canvas disfarça a cadência). Era 1000 — foi ISTO que deixava a coluna vazia longe do mid. */
-  if (exSel.BN) pollOne("BN", 4000, async () => {
-    const j = await (await tfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=5000", null, 8000)).json();
+  if (exSel.BN && cfg.bns) pollOne("BN", 4000, async () => {
+    const j = await (await tfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.bns + "&limit=5000", null, 8000)).json();
     return { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]) };
+  });
+  /* Coinbase Exchange: level=2 devolve o book INTEIRO (18k+ níveis no BTC) — é assim que o
+     tapesurf "vai para baixo". Payload grande ⇒ 1 pedido/5 s. */
+  if (exSel.CB && cfg.cb) pollOne("CB", 5000, async () => {
+    const j = await (await tfetch("https://api.exchange.coinbase.com/products/" + cfg.cb + "/book?level=2", null, 9000)).json();
+    return { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]) };
+  });
+  if (exSel.KR && cfg.kr) pollOne("KR", 2000, async () => {
+    const j = await (await tfetch("https://api.kraken.com/0/public/Depth?pair=" + cfg.kr + "&count=500", null, 8000)).json();
+    const key = Object.keys(j.result || {})[0]; const d = j.result[key];
+    return { bids: d.bids.map(x => [+x[0], +x[1]]), asks: d.asks.map(x => [+x[0], +x[1]]) };
   });
   /* Bybit: 500 níveis/lado É o tecto da API pública (o site deles usa o book interno completo).
      Fica dito no ecrã quando a janela pede mais do que isso — regra da casa: nada escondido. */
@@ -509,6 +539,7 @@ function pollDeep() {
     const lv = j.levels; return { bids: lv[0].map(x => [+x.px, +x.sz]), asks: lv[1].map(x => [+x.px, +x.sz]) };
   });
 }
+const gbCache = {};           /* tag -> {t, g, gb} — reagrupa só quando chegam dados novos ou muda o group */
 function groupBook(bk, g) {
   const b = new Map(), a = new Map();
   bk.bids.forEach(([p, q]) => { const k = Math.floor(p / g) * g; b.set(+k.toFixed(8), (b.get(+k.toFixed(8)) || 0) + q); });
@@ -550,19 +581,33 @@ function drawCol(c, x0, cw, H, g, now, fl) {
   const age = c.t ? now - c.t : Infinity;
   const okAge = age < 12000;
   dcx.textBaseline = "middle";
+  let hx = x0 + pad + 2;
+  const im = exImgs[c.tag];
+  if (im && im.complete && im.naturalWidth) { try { dcx.drawImage(im, hx, HDR / 2 - 8, 16, 16); hx += 21; } catch (e) {} }
   dcx.textAlign = "left"; dcx.font = "600 12px " + MONO; dcx.fillStyle = "#e8ecf3";
-  dcx.fillText(c.name, x0 + pad + 2, HDR / 2);
-  const nw = dcx.measureText(c.name).width;
+  dcx.fillText(c.name, hx, HDR / 2);
+  const nw = hx - (x0 + pad + 2) + dcx.measureText(c.name).width;
   dcx.font = "400 10px " + MONO; dcx.fillStyle = "#6b7688";
-  dcx.fillText(c.pair, x0 + pad + 10 + nw, HDR / 2 + 1);
+  /* o par só se escreve se couber sem atropelar a idade no canto direito */
+  if (x0 + pad + 10 + nw + dcx.measureText(c.pair).width < x0 + cw - 62) dcx.fillText(c.pair, x0 + pad + 10 + nw, HDR / 2 + 1);
   dcx.textAlign = "right";
   dcx.fillStyle = age < 4000 ? "#19c94a" : okAge ? "#fab219" : "#d03b3b";
-  dcx.fillText(c.t ? fmtAge(age) : "sem dados", x0 + cw - pad, HDR / 2 + 1);
+  dcx.fillText(c.t ? fmtAge(age) : "no data", x0 + cw - pad, HDR / 2 + 1);
   dcx.fillStyle = "#1c2230"; dcx.fillRect(x0, HDR - 1, cw, 1);
-  const gb = c.bk ? groupBook(c.bk, g) : null;
+  let gb = null;
+  if (c.bk) {
+    const ck = gbCache[c.tag];
+    if (ck && ck.t === c.t && ck.g === g && ck.coin === coin) gb = ck.gb;
+    else { gb = groupBook(c.bk, g); gbCache[c.tag] = { t: c.t, g, coin, gb }; }
+  }
+  if (c.np) {
+    dcx.textAlign = "center"; dcx.fillStyle = "#6b7688"; dcx.font = "11px " + MONO;
+    dcx.fillText(coin + " is not listed on " + c.name, x0 + cw / 2, H / 2);
+    return;
+  }
   if (!gb || !gb.mid) {
     dcx.textAlign = "center"; dcx.fillStyle = "#6b7688"; dcx.font = "11px " + MONO;
-    dcx.fillText("a ligar a " + c.name + "…", x0 + cw / 2, H / 2);
+    dcx.fillText("connecting to " + c.name + "…", x0 + cw / 2, H / 2);
     return;
   }
   const mid = gb.mid;
@@ -651,8 +696,8 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     const bkHi = c.bk.asks[c.bk.asks.length - 1][0], bkLo = c.bk.bids[c.bk.bids.length - 1][0];
     if (bkHi < topP || bkLo > botP) {
       dcx.textAlign = "center"; dcx.font = "500 8.5px " + MONO; dcx.fillStyle = "#6b7688";
-      dcx.fillText("fim do book público: " + bkLo.toFixed(pxDec) + " – " + bkHi.toFixed(pxDec) +
-        (c.tag === "BY" ? " (500 níveis/lado = tecto da API)" : ""), x0 + cw / 2, H - 7);
+      dcx.fillText("public book ends: " + bkLo.toFixed(pxDec) + " – " + bkHi.toFixed(pxDec) +
+        (c.tag === "BY" ? " (500 levels/side = public API cap)" : ""), x0 + cw / 2, H - 7);
     }
   }
   /* linha do mid: preço, spread e direcção do último movimento */
@@ -674,13 +719,13 @@ function drawCol(c, x0, cw, H, g, now, fl) {
     /* tapa o sprd/seta para o aviso não se atropelar com eles */
     dcx.fillStyle = "#161b25"; dcx.fillRect(x0 + cw * 0.34, my + 1, cw * 0.66 - 1, MIDH - 2);
     dcx.textAlign = "right"; dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
-    dcx.fillText((domOff > 0 ? "↑ " : "↓ ") + Math.abs(domOff) + " buckets do mid · clique = voltar", x0 + cw - pad, my + MIDH / 2 + 0.5);
+    dcx.fillText((domOff > 0 ? "↑ " : "↓ ") + Math.abs(domOff) + " buckets from mid · click = snap back", x0 + cw - pad, my + MIDH / 2 + 0.5);
   }
   /* dados velhos NÃO desaparecem (era isso que "quebrava" as colunas): escurecem e dizem a idade */
   if (!okAge) {
     dcx.fillStyle = "rgba(11,14,19,0.55)"; dcx.fillRect(x0 + 1, HDR, cw - 2, H - HDR);
     dcx.textAlign = "center"; dcx.font = "600 10px " + MONO; dcx.fillStyle = "#fab219";
-    dcx.fillText("última leitura há " + fmtAge(age) + " — a tentar de novo", x0 + cw / 2, HDR + 14);
+    dcx.fillText("last read " + fmtAge(age) + " ago — retrying", x0 + cw / 2, HDR + 14);
   }
   if (disp.size > used.size * 2 + 32) { for (const k of disp.keys()) if (!used.has(k)) disp.delete(k); }
 }
@@ -698,7 +743,7 @@ function drawDom() {
   const sel = Object.keys(EX_META).filter(k => exSel[k]);
   if (!sel.length) {
     dcx.fillStyle = "#6b7688"; dcx.font = "12px " + MONO; dcx.textAlign = "center"; dcx.textBaseline = "middle";
-    dcx.fillText("seleciona pelo menos uma exchange nos botões lá em cima", W / 2, H / 2);
+    dcx.fillText("select at least one exchange in the buttons above", W / 2, H / 2);
     return;
   }
   /* flashes: prints agressores dos últimos 700 ms iluminam a linha do seu bucket */
@@ -716,10 +761,12 @@ function drawDom() {
     const merged = { bids: [], asks: [] };
     on.forEach(k => { merged.bids.push(...deep[k].bids); merged.asks.push(...deep[k].asks); });
     merged.bids.sort((x, y) => y[0] - x[0]); merged.asks.sort((x, y) => x[0] - y[0]);
-    colList = [{ tag: "AGG", name: "AGGREGATED", pair: (on.join("+") || "a ligar…") + " · " + coin,
+    colList = [{ tag: "AGG", name: "AGGREGATED", pair: (on.join("+") || "connecting…") + " · " + coin,
       bk: merged.bids.length ? merged : null, t: on.length ? Math.max.apply(null, on.map(k => deep[k].t)) : 0 }];
   } else {
-    colList = sel.map(k => ({ tag: k, name: EX_META[k].name, pair: EX_META[k].pair(coin),
+    const cfg2 = COINS[coin];
+    colList = sel.map(k => ({ tag: k, name: EX_META[k].name, np: !exSym(cfg2, k),
+      pair: exSym(cfg2, k) ? EX_META[k].pair(coin) : "—",
       bk: deep[k] && deep[k].bids.length ? deep[k] : null, t: deep[k] ? deep[k].t : 0 }));
   }
   const cw = W / colList.length;
@@ -734,7 +781,8 @@ function paintCtl() {
   document.getElementById("grpBtns").innerHTML = GROUPS[coin].map(g =>
     '<button class="tb' + (g === grpOf() ? " on" : "") + '" data-grp="' + g + '">' + g + "</button>").join("");
   document.getElementById("exBtns").innerHTML = Object.keys(EX_META).map(k =>
-    '<button class="tb' + (exSel[k] ? " on" : "") + '" data-ex="' + k + '" title="' + EX_META[k].name + '">' + k + "</button>").join("");
+    '<button class="tb exb' + (exSel[k] ? " on" : "") + '" data-ex="' + k + '" title="' + EX_META[k].name + (exSel[k] ? " — on" : " — off") + '">' +
+    '<img src="https://www.google.com/s2/favicons?domain=' + EX_META[k].dom + '&sz=64" alt="' + k + '">' + "</button>").join("");
   dcv.style.display = view === "dom" ? "block" : "none";
   cv.style.display = view === "dom" ? "none" : "block";
 }
