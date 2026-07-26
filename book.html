@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-DI3032h7nzXm91svSCyPXmti9Yoe1wMVuaM8tPDEiHM='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-6DiDjxns6Zngr1WI7HiBAjp1StAQ9h0sAL4Qd1CZE2Q='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -57,6 +57,9 @@ footer b { color:var(--ink-2); font-weight:600; }
   <a class="logo" href="./" title="Back to the dashboard"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg><span class="wordmark">Cryptomacho</span></a>
   <span class="crumb">Order Book</span>
   <span class="tabs" id="coinTabs"></span>
+  <input id="addCoin" placeholder="+ token" spellcheck="false" autocomplete="off"
+    title="Add ANY token listed on the connected exchanges — type the symbol (DOGE, PEPE, WIF…) and press Enter. Symbols are guessed per venue; venues that don't list it say so honestly. Right-click a custom tab to remove it. History starts from the moment you add it."
+    style="width:66px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;color:var(--ink);font:700 11px 'Inter',-apple-system,sans-serif;padding:6px 8px">
   <span class="modes" id="viewBtns">
     <button class="tb" data-view="dom" title="Multi-exchange depth ladder — per-venue price levels, sizes, cumulative profile and ±0.3% totals">DOM</button>
     <button class="tb" data-view="heat" title="Price×time liquidity heatmap">HEATMAP</button>
@@ -128,6 +131,8 @@ const COINS = {
 };
 /* bn = stream de FUTUROS (WS, heatmap) · bns/bnp = Binance spot/perp REST · bys = Bybit spot ·
    oks = OKX spot · null = par não existe; pares que a API recuse ficam marcados em deepNo */
+let customCoins = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-custom")) || {}; } catch (e) { return {}; } })();
+Object.entries(customCoins).forEach(([c, cfg]) => { COINS[c] = cfg; });
 let coin = (() => { try { return localStorage.getItem("cryptomacho-book-coin") || "BTC"; } catch (e) { return "BTC"; } })();
 if (!COINS[coin]) coin = "BTC";
 let mode = "live";
@@ -358,6 +363,7 @@ function heat(v, max) {
     Math.round(a[1][1] + (b[1][1] - a[1][1]) * k) + "," +
     Math.round(a[1][2] + (b[1][2] - a[1][2]) * k) + ")";
 }
+let hmView = null;            /* geometria do último draw() — é o que o hover usa para inverter */
 let viewSpan = 300_000;       /* janela LIVE: 1m/5m/15m */
 let zoomHalf = null;          /* meio-alcance Y (preço); null = automático */
 let yCenter = null;           /* centro Y suavizado — segue o mid sem saltos */
@@ -500,6 +506,7 @@ function draw() {
     cx.fillStyle = "#12a33a"; cx.fillRect(TW, y - 8, AXIS_W, 15);
     cx.fillStyle = "#fff"; cx.fillText(fmtPx(lastPx), TW + 5, y + 3);
   }
+  hmView = { t0, span, now, pLo, pHi, TW, TH, st, cols, live, maxV };
   /* legenda do heat: barra da paleta + escala em USD do pico visível */
   const lgW = 130, lgX = TW - lgW - 12, lgY = 8;
   cx.fillStyle = "rgba(5,7,11,0.75)"; cx.fillRect(lgX - 8, lgY - 5, lgW + 16, 40);
@@ -532,6 +539,43 @@ function draw() {
     }
   }
 }
+/* hover: célula debaixo do cursor → preço do nível + liquidez em USD naquele instante */
+const hmTip = document.createElement("div");
+hmTip.style.cssText = "position:fixed;display:none;z-index:40;background:rgba(10,13,19,0.95);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font:600 10px 'IBM Plex Mono',monospace;color:var(--ink);pointer-events:none;white-space:nowrap";
+document.body.appendChild(hmTip);
+cv.addEventListener("mousemove", e => {
+  if (!hmView || view === "dom") { hmTip.style.display = "none"; return; }
+  const r = cv.getBoundingClientRect();
+  const mx = e.clientX - r.left, myy = e.clientY - r.top;
+  const v = hmView;
+  if (mx > v.TW || myy > v.TH) { hmTip.style.display = "none"; return; }
+  const t = v.now - (v.TW - mx) / v.TW * v.span;
+  const p = v.pLo + (1 - myy / v.TH) * (v.pHi - v.pLo);
+  const kk = Math.round(p / v.st);
+  let best = null;
+  for (let i = v.cols.length - 1; i >= 0; i--) {
+    const c = v.cols[i];
+    if (Math.abs(c.t - t) < 1500) { best = c; break; }
+    if (c.t < t - 1500) break;
+  }
+  let usd = null, src = "session";
+  if (best) usd = (best.b[kk] || 0) + (best.a[kk] || 0);
+  else if (hist && hist.coins && hist.coins[coin]) {
+    const hstep = (hist.step && hist.step[coin]) || v.st;
+    const hf = hist.coins[coin];
+    for (let i = hf.length - 1; i >= 0; i--) {
+      const f = hf[i];
+      if (f.t <= t && t < f.t + 900_000) { const hk = Math.round(p / hstep); usd = (f.b[hk] || 0) + (f.a[hk] || 0); src = "collector"; break; }
+      if (f.t + 900_000 < t) break;
+    }
+  }
+  if (usd == null) { hmTip.style.display = "none"; return; }
+  hmTip.textContent = fmtPx(kk * v.st) + " · " + fmtBig(usd) + " resting · " + src;
+  hmTip.style.left = (e.clientX + 14) + "px";
+  hmTip.style.top = (e.clientY + 14) + "px";
+  hmTip.style.display = "block";
+});
+cv.addEventListener("mouseleave", () => { hmTip.style.display = "none"; });
 cv.addEventListener("wheel", e => {
   e.preventDefault();
   const cfg = COINS[coin];
@@ -639,6 +683,7 @@ Object.keys(EX_META).forEach(k => {
   exImgs[k] = im;
 });
 const GROUPS = { BTC: [1, 5, 10, 25, 50], ETH: [0.1, 0.5, 1, 2], SOL: [0.01, 0.05, 0.1, 0.5], HYPE: [0.005, 0.02, 0.05, 0.1] };
+Object.entries(customCoins).forEach(([c, cfg]) => { if (cfg.grps) GROUPS[c] = cfg.grps; });
 let view = (() => { try { return localStorage.getItem("cryptomacho-book-view") || "dom"; } catch (e) { return "dom"; } })();
 let domMode = (() => { try { return localStorage.getItem("cryptomacho-book-dmode") || "single"; } catch (e) { return "single"; } })();
 let exSel = (() => { const d = { BN: 1, BY: 1, OKX: 1, HL: 1, CB: 1, KR: 1 };
@@ -1101,21 +1146,68 @@ function paintCtl() {
 /* ---------- UI ---------- */
 function paintTabs() {
   $("coinTabs").innerHTML = Object.keys(COINS).map(c =>
-    '<button class="tb' + (c === coin ? " on" : "") + '" data-coin="' + c + '">' + c + "</button>").join("");
+    '<button class="tb' + (c === coin ? " on" : "") + '" data-coin="' + c + '"' +
+    (COINS[c].custom ? ' title="Custom token — right-click to remove"' : "") + '>' + c + "</button>").join("");
 }
+function switchCoin(nc) {
+  if (!COINS[nc] || nc === coin) return;
+  const prevCoin = coin;
+  coin = nc;
+  try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
+  sessStash(prevCoin);
+  sessRestore(coin);
+  zoomHalf = null; yCenter = null; domOff = 0;
+  Object.keys(deep).forEach(k => delete deep[k]);
+  paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();
+}
+/* qualquer token: preço vem de um ticker público (Bybit→OKX), os steps derivam do preço,
+   os símbolos por venue são deduzidos — quem não listar o par di-lo no ecrã (deepNo) */
+async function addCustomCoin(sym) {
+  let px = 0;
+  try { const j = await (await tfetch("https://api.bybit.com/v5/market/tickers?category=linear&symbol=" + sym + "USDT")).json();
+    if (!j.retCode && j.result && j.result.list && j.result.list[0]) px = +j.result.list[0].lastPrice; } catch (e) {}
+  if (!(px > 0)) { try { const j = await (await tfetch("https://api.bybit.com/v5/market/tickers?category=spot&symbol=" + sym + "USDT")).json();
+    if (!j.retCode && j.result && j.result.list && j.result.list[0]) px = +j.result.list[0].lastPrice; } catch (e) {} }
+  if (!(px > 0)) { try { const j = await (await tfetch("https://www.okx.com/api/v5/market/ticker?instId=" + sym + "-USDT")).json();
+    if (j.data && j.data[0]) px = +j.data[0].last; } catch (e) {} }
+  if (!(px > 0)) return "not found";
+  const nice = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const m = v / p; return +(((m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p).toPrecision(2)); };
+  const lstep = nice(px * 2e-5), step = nice(lstep * 5);
+  const grps = [...new Set([nice(lstep), nice(lstep * 5), nice(lstep * 10), nice(lstep * 25), nice(lstep * 50)])];
+  const cfg = { step, lstep, grps, custom: 1,
+    bn: sym.toLowerCase() + "usdt", bns: sym + "USDT", bnp: sym + "USDT", by: sym + "USDT", bys: sym + "USDT",
+    ok: sym + "-USDT-SWAP", oks: sym + "-USDT", hl: sym, cb: sym + "-USD", kr: sym + "USD" };
+  COINS[sym] = cfg; GROUPS[sym] = grps; customCoins[sym] = cfg;
+  try { localStorage.setItem("cryptomacho-book-custom", JSON.stringify(customCoins)); } catch (e) {}
+  return "";
+}
+(() => {
+  const inp = $("addCoin"); if (!inp) return;
+  ["pointerdown", "mousedown", "click", "keydown"].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation()));
+  inp.addEventListener("keydown", async e => {
+    if (e.key !== "Enter") return;
+    const sym = (inp.value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!sym) return;
+    inp.disabled = true;
+    const err = COINS[sym] ? "" : await addCustomCoin(sym);
+    inp.disabled = false;
+    if (err) { inp.value = ""; inp.placeholder = sym + " not found"; setTimeout(() => { inp.placeholder = "+ token"; }, 2600); return; }
+    inp.value = "";
+    switchCoin(sym);
+  });
+})();
+document.getElementById("coinTabs").addEventListener("contextmenu", e => {
+  const c = e.target.closest("[data-coin]"); if (!c) return;
+  const sym = c.dataset.coin;
+  if (!customCoins[sym]) return;
+  e.preventDefault();
+  delete customCoins[sym]; delete COINS[sym]; delete GROUPS[sym];
+  try { localStorage.setItem("cryptomacho-book-custom", JSON.stringify(customCoins)); } catch (er) {}
+  if (coin === sym) switchCoin("BTC"); else paintTabs();
+});
 document.addEventListener("click", e => {
   const c = e.target.closest("[data-coin]");
-  if (c) {
-    const prevCoin = coin;
-    coin = c.dataset.coin;
-    try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
-    sessStash(prevCoin);
-    sessRestore(coin);
-    zoomHalf = null; yCenter = null; domOff = 0;
-    Object.keys(deep).forEach(k => delete deep[k]);
-    paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();
-    return;
-  }
+  if (c) { switchCoin(c.dataset.coin); return; }
   const m = e.target.closest("[data-mode]");
   if (m) {
     mode = m.dataset.mode;
