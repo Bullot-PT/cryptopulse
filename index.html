@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-4FOaK1dEwVAl7z7tShkQrZqutNrH8uhwQYZPMDKHrds=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-Kv/vGz9Y9bn0S5U4OFlmvfC+6R8UXu8Tqbl0JklEskM=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -3231,7 +3231,7 @@ function renderWhaleRows(rows, note) {
             return '<span class="side-badge fresh" title="' + (r.fresh === "week"
               ? "Fresh wallet: genuinely new account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " — ~all of its lifetime trading volume happened in the last 7 days, opening size straight away. Classic footprint of informed money positioning before news."
               : "Recent wallet: young account" + (ageTxt ? " (first funded " + ageTxt + " ago)" : "") + " with ~all of its lifetime volume within the last month — already running size.") +
-              '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "1M") + "</span>";
+              '">🆕 ' + (r.fresh === "week" ? "FRESH WALLET" : "≤1mo WALLET") + "</span>";
           })() : "") +
           (r.inflow >= 250_000 ? '<span class="side-badge inflow" title="Fresh money on-chain: this wallet received ' + fmtBig(r.inflow) +
             ' of USDC in the last 48h (bridge deposits + transfers in from other wallets, read from the Hyperliquid ledger). New ammo arriving while running size is a classic pre-move footprint.">💰 +' +
@@ -4354,9 +4354,10 @@ async function renderGlobalOI(rows, total, cachedAt) {
   body.innerHTML =
     '<div class="goi-hero"><div class="oi-head" style="margin:0">' +
       '<span class="goi-total">' + fmtBig(total) + "</span>" +
-      '<span style="margin-left:auto" class="oi-side">1H</span>' +
-      '<input type="range" id="goiSlider" min="0" max="2" step="1" value="' + (goiView === "7d" ? 2 : goiView === "1h" ? 0 : 1) + '" title="Slide: 1H · 1D · 7D">' +
-      '<span class="oi-side">7D</span></div>' +
+      '<span style="margin-left:auto"></span>' +
+      '<button class="src-btn goi-btn' + (goiView === "1h" ? " src-on" : "") + '" data-goiv="1h">1H</button>' +
+      '<button class="src-btn goi-btn' + (goiView === "1d" ? " src-on" : "") + '" data-goiv="1d">1D</button>' +
+      '<button class="src-btn goi-btn' + (goiView === "7d" ? " src-on" : "") + '" data-goiv="7d">1W</button></div>' +
     '<div class="goi-sub">open interest across ' + rows.length + " derivatives exchanges · " + (goiView === "1h" ? "last hour" : goiView === "1d" ? "today" : "last 7 days") +
       (goiSkip ? ' · <span style="color:var(--warn)" title="Isolated one-sample spikes that disagree with BOTH neighbours by >15% while the neighbours agree with each other — collection glitches (partial or double-counted sums), not market. They are dropped from the line and counted here.">' + goiSkip + " bad sample" + (goiSkip > 1 ? "s" : "") + " ignored</span>" : "") +
       (cachedAt ? ' · <span style="color:var(--warn)">cached ' + timeAgo(cachedAt) + " · refreshing…</span>" : "") + "</div>" +
@@ -4370,13 +4371,11 @@ async function renderGlobalOI(rows, total, cachedAt) {
       '<div class="gx-bar"><div class="gx-bar-fill" style="width:' + Math.min(100, e.oi / rows[0].oi * 100).toFixed(1) + '%"></div></div>' +
       '<span class="gx-val">' + fmtBig(e.oi) + " · " + (e.oi / total * 100).toFixed(1) + "%</span></div>"
     ).join("");
-  const sl = document.getElementById("goiSlider");
-  if (sl) sl.addEventListener("input", async () => {
-    goiView = sl.value === "0" ? "1h" : sl.value === "1" ? "1d" : "7d";
+  body.querySelectorAll(".goi-btn").forEach(b => b.addEventListener("click", async () => {
+    goiView = b.dataset.goiv;
     try { localStorage.setItem("cryptopulse-goi-view", goiView); } catch (er) {}
-    const gx = rows;
-    await renderGlobalOI(gx, total);
-  });
+    await renderGlobalOI(rows, total);
+  }));
 }
 
 /* ---------------- fear & greed (alternative.me) ---------------- */
