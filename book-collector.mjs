@@ -17,6 +17,11 @@ const COINS = {
 };
 const LIVE_KEY = "book-live.json";
 const WINDOW_MS = 48 * 3600_000;
+/* book-fine.json: frames AO MINUTO das últimas 4h — é o que faz o heatmap ficar quase
+   contínuo mesmo com o PC dele desligado (pedido 26-jul). ~1.35KB/frame ⇒ doc ≈ 1.3MB.
+   O book-live.json continua igual (10 min, 48h) e o arquivo diário também. */
+const FINE_KEY = "book-fine.json";
+const FINE_MS = 4 * 3600_000;
 
 const ACC = process.env.CF_ACCOUNT_ID, TOK = process.env.CF_API_TOKEN, NS = process.env.CF_KV_NAMESPACE_ID;
 if (!ACC || !TOK || !NS) { console.error("faltam secrets CF_*"); process.exit(1); }
@@ -124,7 +129,33 @@ function utcDay(ts) {
   return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, "0") + String(d.getUTCDate()).padStart(2, "0");
 }
 
-async function pass() {
+async function pass(grid10) {
+  /* frames buscados UMA vez por passe e usados nos dois docs */
+  const frames = {};
+  for (const [coin, cfg] of Object.entries(COINS)) {
+    const f = await frameFor(coin, cfg);
+    frames[coin] = f;
+    if (f) console.log(coin + ": frame ok (" + f.src.join("+") + ", px " + f.px + ", " +
+      Object.keys(f.b).length + "b/" + Object.keys(f.a).length + "a bins)" + (grid10 ? " [10m]" : ""));
+  }
+
+  /* FINO — todos os passes (grelha de 1 min), janela rolante de 4h */
+  const fine = await kvGet(FINE_KEY);
+  if (fine !== undefined) {
+    const fdoc = fine && fine.v === 1 ? fine : { v: 1, step: {}, coins: {} };
+    const nowF = Date.now();
+    for (const [coin, cfg] of Object.entries(COINS)) {
+      if (fdoc.step[coin] !== undefined && fdoc.step[coin] !== cfg.step) fdoc.coins[coin] = [];
+      fdoc.step[coin] = cfg.step; fdoc.coins[coin] = fdoc.coins[coin] || [];
+      if (frames[coin]) fdoc.coins[coin].push(frames[coin]);
+      fdoc.coins[coin] = fdoc.coins[coin].filter(x => x.t > nowF - FINE_MS);
+    }
+    fdoc.t = nowF;
+    await kvPut(FINE_KEY, fdoc);
+  } else console.log("KV fine ilegível — salto o doc fino neste passe");
+
+  /* GROSSO (48h @10 min) + arquivo diário — só nos passes da grelha de 10 min, como sempre */
+  if (!grid10) return;
   const live = await kvGet(LIVE_KEY);
   if (live === undefined) { console.log("KV ilegível — salto esta passagem para não esmagar dados"); return; }
   const doc = live && live.v === 1 ? live : { v: 1, step: {}, coins: {} };
@@ -137,25 +168,21 @@ async function pass() {
 
   const now = Date.now();
   for (const [coin, cfg] of Object.entries(COINS)) {
-    const f = await frameFor(coin, cfg);
-    if (f) {
-      doc.coins[coin].push(f);
-      console.log(coin + ": frame ok (" + f.src.join("+") + ", px " + f.px + ", " +
-        Object.keys(f.b).length + "b/" + Object.keys(f.a).length + "a bins)");
-    }
+    const f = frames[coin];
+    if (f) doc.coins[coin].push(f);
     /* arquivar o dia que fechou ANTES de aparar a janela — senão perdem-se frames */
     const gone = doc.coins[coin].filter(x => x.t <= now - WINDOW_MS);
     doc.coins[coin] = doc.coins[coin].filter(x => x.t > now - WINDOW_MS);
     if (gone.length) {
       const byDay = {};
       gone.forEach(x => { (byDay[utcDay(x.t)] = byDay[utcDay(x.t)] || []).push(x); });
-      for (const [day, frames] of Object.entries(byDay)) {
+      for (const [day, frames2] of Object.entries(byDay)) {
         const key = "book-arch-" + day + ".json";
         const arch = await kvGet(key);
         if (arch === undefined) continue;         /* KV com soluços: tenta na próxima janela */
         const adoc = arch && arch.v === 1 ? arch : { v: 1, step: {}, coins: {} };
         adoc.step[coin] = cfg.step;
-        (adoc.coins[coin] = adoc.coins[coin] || []).push(...frames);
+        (adoc.coins[coin] = adoc.coins[coin] || []).push(...frames2);
         await kvPut(key, adoc);
       }
     }
@@ -166,14 +193,15 @@ async function pass() {
 
 const mode = process.argv[2] || "loop";
 if (mode === "once") {
-  await pass();
+  await pass(true);
 } else {
   const END = Date.now() + 55 * 60_000;
   while (Date.now() < END) {
-    try { await pass(); } catch (e) { console.error("passagem rebentou: " + (e && e.message)); }
+    const minute = Math.round(Date.now() / 60_000);
+    try { await pass(minute % 10 === 0); } catch (e) { console.error("passagem rebentou: " + (e && e.message)); }
     const now = Date.now();
     if (now >= END) break;
-    const gap = 600_000 - (now % 600_000);        /* grelha de 10 min alinhada à época */
+    const gap = 60_000 - (now % 60_000);          /* grelha de 1 min alinhada à época */
     await new Promise(r => setTimeout(r, Math.min(gap, END - now)));
   }
 }
