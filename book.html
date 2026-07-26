@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-3Qyo1A8h851O7hka/ZJmErfTKEKzG9nQoUPfgr1hOTY='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-yyzkk+QLqd7rC/kvfCKTipAKe3y+WPewZ7zHZ/ElB0M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
 :root {
   --bg:#0b0e13; --surface:#11151d; --surface-2:#161b25; --border:#232a37; --grid:#1c2230;
@@ -45,41 +45,13 @@ canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 footer { flex:0 0 auto; padding:5px 14px; border-top:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:10px; display:flex; gap:14px; flex-wrap:wrap; }
 footer b { color:var(--ink-2); font-weight:600; }
 #histNote { color:var(--warn); }
-#domView { position:absolute; inset:0; display:none; overflow:hidden; background:#07090d;
-  font:11px/1 ui-monospace, "Cascadia Mono", Consolas, monospace; }
-#domView.on { display:flex; }
-.dcol { flex:1 1 0; min-width:0; border-right:1px solid #151b26; display:flex; flex-direction:column; }
-.dcol-h { flex:0 0 auto; display:flex; align-items:center; gap:7px; padding:7px 10px; border-bottom:1px solid #151b26;
-  font:700 11.5px/1 -apple-system,'Segoe UI',Roboto,sans-serif; color:var(--ink); background:#0b0e14; }
-.dcol-h .exdot { width:8px; height:8px; border-radius:50%; background:var(--logo); }
-.dcol-h .pair { color:var(--muted); font-weight:600; }
-.dcol-b { flex:1 1 auto; position:relative; overflow:hidden; }
-.drow { position:relative; display:flex; align-items:center; height:12px; padding:0 8px; font-size:10px; }
-.drow .cum { position:absolute; top:0; bottom:0; right:0; opacity:.13; }
-.drow.a .cum { background:var(--down); }
-.drow.b .cum { background:var(--logo); }
-.drow .cumline { position:absolute; top:0; bottom:0; width:0; border-left:1.5px solid; }
-.drow.a .cumline { border-color:rgba(240,110,80,.85); }
-.drow.b .cumline { border-color:rgba(25,201,74,.85); }
-.drow .p { width:62px; color:#93a0b4; z-index:1; }
-.drow.a .p.hot { color:#ffb4a6; } .drow.b .p.hot { color:#a9f5c0; }
-.drow .q { min-width:52px; padding:1.5px 4px; border-radius:2px; z-index:1; color:var(--ink); }
-.drow .q:empty { visibility:hidden; }
-.dmid { display:flex; align-items:center; gap:8px; height:19px; padding:0 8px; border-top:1px solid #2c3648; border-bottom:1px solid #2c3648;
-  background:#0d1420; color:#fff; font-weight:700; font-size:10.5px; }
-.dmid .mp { color:var(--logo); font-size:12px; }
-.dmid .sp { color:var(--muted); font-weight:400; }
-.dmid .dv.up { color:var(--logo); } .dmid .dv.dn { color:var(--down); }
-.dmark { position:relative; }
-.dmark::after { content:""; position:absolute; left:0; right:0; top:0; border-top:1px solid rgba(255,255,255,.35); }
-.dmark .mk { position:absolute; right:8px; top:-6px; font-size:10px; color:#e8ecf3; background:#07090d; padding:0 4px; z-index:2; }
 @media (max-width: 760px) { #dom { display:none; } .stats { display:none; } }
 </style>
 </head>
 <body>
 <header>
   <a class="logo" href="./" title="Voltar ao dashboard"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg><span class="wordmark">Cryptomacho</span></a>
-  <span class="crumb">📖 Order Book</span>
+  <span class="crumb">Order Book</span>
   <span class="tabs" id="coinTabs"></span>
   <span class="modes" id="viewBtns">
     <button class="tb" data-view="dom" title="Multi-exchange depth ladder — per-venue price levels, sizes, cumulative profile and ±0.3% totals">DOM</button>
@@ -109,7 +81,7 @@ footer b { color:var(--ink-2); font-weight:600; }
   </span>
 </header>
 <main>
-  <div id="wrap"><canvas id="cv"></canvas><div id="domView"></div></div>
+  <div id="wrap"><canvas id="cv"></canvas><canvas id="dcv" style="display:none"></canvas></div>
   <div id="dom"><div class="dom-h">Aggregated book</div><div id="domBody"></div></div>
 </main>
 <footer>
@@ -303,8 +275,10 @@ function sizeCanvas() {
   const d = window.devicePixelRatio || 1;
   cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
   cx.setTransform(d, 0, 0, d, 0, 0);
+  dcv.width = Math.round(r.width * d); dcv.height = Math.round(r.height * d);
+  dcx.setTransform(d, 0, 0, d, 0, 0);
 }
-window.addEventListener("resize", () => { sizeCanvas(); draw(); });
+window.addEventListener("resize", () => { sizeCanvas(); if (view === "dom") drawDom(); else draw(); });
 /* rampa contínua preto→azul-escuro→azul→ciano→amarelo→branco (estilo bookmap/tapesurf) */
 function heat(v, max) {
   const x = Math.pow(Math.min(1, v / max), 0.42);
@@ -468,25 +442,41 @@ let domMode = (() => { try { return localStorage.getItem("cryptomacho-book-dmode
 let exSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-ex")) || { BN: 1, BY: 1, OKX: 1, HL: 1 }; } catch (e) { return { BN: 1, BY: 1, OKX: 1, HL: 1 }; } })();
 let grpSel = (() => { try { return JSON.parse(localStorage.getItem("cryptomacho-book-grp")) || {}; } catch (e) { return {}; } })();
 function grpOf() { const g = GROUPS[coin]; const v = grpSel[coin]; return g.indexOf(v) >= 0 ? v : g[2] || g[g.length - 1]; }
-const deep = {};              /* src -> {bids:[[px,qty]], asks:[[px,qty]], t} — qty em MOEDA */
-let deepBusy = false;
-async function pollDeep() {
-  if (view !== "dom" || deepBusy || document.visibilityState === "hidden") return;
-  deepBusy = true;
-  const cfg = COINS[coin], me = coin;
-  const jobs = [];
-  if (exSel.BN) jobs.push(fetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=1000")
-    .then(r => r.json()).then(j => { if (me === coin && j.bids) deep.BN = { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
-  if (exSel.BY) jobs.push(fetch("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=" + cfg.by + "&limit=500")
-    .then(r => r.json()).then(j => { const d = j.result; if (me === coin && d && d.b) deep.BY = { bids: d.b.map(x => [+x[0], +x[1]]), asks: d.a.map(x => [+x[0], +x[1]]), t: Date.now() }; }).catch(() => {}));
-  if (exSel.OKX) jobs.push(fetch("https://www.okx.com/api/v5/market/books-full?instId=" + cfg.ok + "&sz=2000")
-    .then(r => r.json()).then(j => { const d = j.data && j.data[0]; if (me === coin && d) deep.OKX = { bids: d.bids.map(x => [+x[0], +x[1] * okxCt]), asks: d.asks.map(x => [+x[0], +x[1] * okxCt]), t: Date.now() }; }).catch(() => {}));
-  if (exSel.HL) jobs.push(fetch("https://api.hyperliquid.xyz/info", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "l2Book", coin: cfg.hl, nSigFigs: 5 }) })
-    .then(r => r.json()).then(j => { const lv = j.levels; if (me === coin && lv) deep.HL = { bids: lv[0].map(x => [+x.px, +x.sz]), asks: lv[1].map(x => [+x.px, +x.sz]), t: Date.now() }; }).catch(() => {}));
-  await Promise.allSettled(jobs);
-  deepBusy = false;
-  if (view === "dom") renderDom();
+const deep = {};              /* src -> {bids, asks, t} — qty em MOEDA */
+const deepBusySrc = {};       /* busy POR FONTE: um fetch pendurado não bloqueia os outros */
+function tfetch(url, opts, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms || 4000);
+  return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).finally(() => clearTimeout(t));
+}
+async function pollOne(tag, fn) {
+  if (deepBusySrc[tag]) return;
+  deepBusySrc[tag] = true;
+  const me = coin;
+  try { const bk = await fn(); if (me === coin && bk && bk.bids && bk.bids.length) deep[tag] = { bids: bk.bids, asks: bk.asks, t: Date.now() }; }
+  catch (e) {}
+  deepBusySrc[tag] = false;
+}
+function pollDeep() {
+  if (view !== "dom" || document.visibilityState === "hidden") return;
+  const cfg = COINS[coin];
+  if (exSel.BN) pollOne("BN", async () => {
+    const j = await (await tfetch("https://data-api.binance.vision/api/v3/depth?symbol=" + cfg.by + "&limit=1000")).json();
+    return { bids: j.bids.map(x => [+x[0], +x[1]]), asks: j.asks.map(x => [+x[0], +x[1]]) };
+  });
+  if (exSel.BY) pollOne("BY", async () => {
+    const j = await (await tfetch("https://api.bybit.com/v5/market/orderbook?category=linear&symbol=" + cfg.by + "&limit=500")).json();
+    const d = j.result; return { bids: d.b.map(x => [+x[0], +x[1]]), asks: d.a.map(x => [+x[0], +x[1]]) };
+  });
+  if (exSel.OKX) pollOne("OKX", async () => {
+    const j = await (await tfetch("https://www.okx.com/api/v5/market/books-full?instId=" + cfg.ok + "&sz=2000")).json();
+    const d = j.data && j.data[0]; return { bids: d.bids.map(x => [+x[0], +x[1] * okxCt]), asks: d.asks.map(x => [+x[0], +x[1] * okxCt]) };
+  });
+  if (exSel.HL) pollOne("HL", async () => {
+    const j = await (await tfetch("https://api.hyperliquid.xyz/info", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "l2Book", coin: cfg.hl, nSigFigs: 5 }) })).json();
+    const lv = j.levels; return { bids: lv[0].map(x => [+x.px, +x.sz]), asks: lv[1].map(x => [+x.px, +x.sz]) };
+  });
 }
 function groupBook(bk, g) {
   const b = new Map(), a = new Map();
@@ -514,70 +504,162 @@ function cellBg(side, x) {
    números mudam dentro delas. */
 const domAnchor = {};
 const domPrevMid = {};
-function domColHTML(tag, gb, g) {
-  const mid = gb.mid; if (!mid) return "";
-  const span = mid * 0.0045;
-  const akey = coin + "|" + tag + "|" + g;
-  let anchor = domAnchor[akey];
-  if (!anchor || Math.abs(mid - anchor) > span * 0.25) { anchor = mid; domAnchor[akey] = anchor; }
-  const hi = Math.ceil((anchor + span) / g) * g, lo = Math.floor((anchor - span) / g) * g;
-  let maxQ = 0;
-  gb.a.forEach((q, p) => { if (p >= lo && p <= hi && q > maxQ) maxQ = q; });
-  gb.b.forEach((q, p) => { if (p >= lo && p <= hi && q > maxQ) maxQ = q; });
-  if (!maxQ) maxQ = 1;
-  const cum = new Map();
-  let cA = 0;
-  for (let p = Math.ceil(mid / g) * g; p <= hi + g / 2; p += g) { const k = +p.toFixed(8); cA += gb.a.get(k) || 0; cum.set(k, cA); }
-  let cB = 0;
-  for (let p = Math.floor(mid / g) * g; p >= lo - g / 2; p -= g) { const k = +p.toFixed(8); cB += gb.b.get(k) || 0; cum.set(k, cB); }
-  const maxC = Math.max(cA, cB, 1e-9);
-  const mkUp = mid * 1.003, mkDn = mid * 0.997;
-  const pxDec = g < 0.02 ? 3 : g < 1 ? 2 : 0;
-  const prev = domPrevMid[akey]; domPrevMid[akey] = mid;
-  const dv = prev ? mid - prev : 0;
-  const spread = gb.ba && gb.bb ? gb.ba - gb.bb : 0;
-  let html = "";
-  const row = (side, k) => {
-    const q = (side === "a" ? gb.a.get(k) : gb.b.get(k)) || 0;
-    const c = cum.get(k) || 0;
-    const x = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
-    const isMk = side === "a" ? (k - g < mkUp && k >= mkUp) : (k > mkDn && k - g <= mkDn);
-    return '<div class="drow ' + side + (isMk ? " dmark" : "") + '">' +
-      (isMk ? '<span class="mk">' + fmtQ(c) + "&nbsp;0.3%</span>" : "") +
-      '<span class="cum" style="width:' + (c / maxC * 60).toFixed(1) + '%"></span>' +
-      '<span class="cumline" style="right:' + (c / maxC * 60).toFixed(1) + '%"></span>' +
-      '<span class="p' + (x > 0.55 ? " hot" : "") + '">' + k.toFixed(pxDec) + "</span>" +
-      '<span class="q" style="background:' + cellBg(side, x) + '">' + fmtQ(q) + "</span></div>";
-  };
-  for (let p = hi; p >= mid; p -= g) html += row("a", +p.toFixed(8));
-  html += '<div class="dmid"><span class="mp">' + mid.toFixed(pxDec === 0 ? 1 : pxDec + 1) + "</span>" +
-    (spread > 0 ? '<span class="sp">' + spread.toFixed(pxDec === 0 ? 1 : pxDec + 1) + "</span>" : "") +
-    (dv ? '<span class="dv ' + (dv > 0 ? "up" : "dn") + '">' + (dv > 0 ? "▲" : "▼") + " " + Math.abs(dv).toFixed(1) + "</span>" : "") + "</div>";
-  for (let p = Math.floor(mid / g) * g; p >= lo; p -= g) html += row("b", +p.toFixed(8));
-  return html;
-}
-function renderDom() {
-  const el = document.getElementById("domView");
-  if (!el || view !== "dom") return;
-  const g = grpOf();
-  const sel = Object.keys(EX_META).filter(k => exSel[k] && deep[k] && Date.now() - deep[k].t < 20000);
-  let html = "";
-  if (domMode === "agg") {
-    const merged = { bids: [], asks: [] };
-    sel.forEach(k => { merged.bids.push(...deep[k].bids); merged.asks.push(...deep[k].asks); });
-    merged.bids.sort((x, y) => y[0] - x[0]); merged.asks.sort((x, y) => x[0] - y[0]);
-    if (merged.bids.length) {
-      html = '<div class="dcol"><div class="dcol-h"><span class="exdot"></span>AGGREGATED <span class="pair">' +
-        sel.join(" + ") + " · " + esc2(coin) + '</span></div><div class="dcol-b">' + domColHTML("AGG", groupBook(merged, g), g) + "</div></div>";
-    }
-  } else {
-    html = sel.map(k => '<div class="dcol"><div class="dcol-h"><span class="exdot"></span>' + EX_META[k].name +
-      ' <span class="pair">' + EX_META[k].pair(coin) + '</span></div><div class="dcol-b">' +
-      domColHTML(k, groupBook(deep[k], g), g) + "</div></div>").join("");
+/* ---------- ladder em CANVAS (arquitectura tapesurf: um canvas, zero mutações de DOM) ----------
+   Provado no site deles a 26-jul: o widget do book é UM canvas com 0 mutações de DOM em 3 s.
+   É por isso que flui — nada de innerHTML a cada segundo. Aqui é igual: ~30 fps, valores com
+   easing (disp += (alvo−disp)·0.3 por frame), grelha ancorada com histerese de 1 bucket. */
+const dcv = $("dcv"), dcx = dcv.getContext("2d");
+const MONO = "'IBM Plex Mono', monospace";
+const domDisp = {};           /* akey -> Map(lado+preço -> quantidade EXIBIDA, a perseguir o alvo) */
+function fmtAge(ms) { return ms < 9500 ? (ms / 1000).toFixed(1) + "s" : ms < 90000 ? Math.round(ms / 1000) + "s" : Math.round(ms / 60000) + "m"; }
+function drawCol(c, x0, cw, H, g, now, fl) {
+  const HDR = 30, MIDH = 24, ROWH = 17, pad = 8;
+  if (x0 > 0) { dcx.fillStyle = "#1c2230"; dcx.fillRect(x0, 0, 1, H); }
+  const age = c.t ? now - c.t : Infinity;
+  const okAge = age < 12000;
+  dcx.textBaseline = "middle";
+  dcx.textAlign = "left"; dcx.font = "600 12px " + MONO; dcx.fillStyle = "#e8ecf3";
+  dcx.fillText(c.name, x0 + pad + 2, HDR / 2);
+  const nw = dcx.measureText(c.name).width;
+  dcx.font = "400 10px " + MONO; dcx.fillStyle = "#6b7688";
+  dcx.fillText(c.pair, x0 + pad + 10 + nw, HDR / 2 + 1);
+  dcx.textAlign = "right";
+  dcx.fillStyle = age < 4000 ? "#19c94a" : okAge ? "#fab219" : "#d03b3b";
+  dcx.fillText(c.t ? fmtAge(age) : "sem dados", x0 + cw - pad, HDR / 2 + 1);
+  dcx.fillStyle = "#1c2230"; dcx.fillRect(x0, HDR - 1, cw, 1);
+  const gb = c.bk ? groupBook(c.bk, g) : null;
+  if (!gb || !gb.mid) {
+    dcx.textAlign = "center"; dcx.fillStyle = "#6b7688"; dcx.font = "11px " + MONO;
+    dcx.fillText("a ligar a " + c.name + "…", x0 + cw / 2, H / 2);
+    return;
   }
-  el.innerHTML = html || '<div style="margin:auto;color:var(--muted);font-family:sans-serif">A carregar os livros das exchanges seleccionadas…</div>';
+  const mid = gb.mid;
+  const akey = coin + "|" + c.tag + "|" + g;
+  const nSide = Math.max(4, Math.floor((H - HDR - MIDH) / 2 / ROWH));
+  /* âncora com histerese: a grelha tolera o mid a passear 1 bucket antes de deslizar —
+     é isto que mantém as linhas quietas em vez de recentrar a cada tick */
+  const ideal = +(Math.floor(mid / g) * g).toFixed(8);
+  let bh = domAnchor[akey];
+  if (bh == null || Math.abs(ideal - bh) > g * 1.001) { bh = ideal; domAnchor[akey] = bh; }
+  const askP = [], bidP = [];
+  for (let r = 1; r <= nSide; r++) askP.push(+(bh + r * g).toFixed(8));
+  for (let r = 0; r < nSide; r++) bidP.push(+(bh - r * g).toFixed(8));
+  let maxQ = 0;
+  askP.forEach(p => { const q = gb.a.get(p) || 0; if (q > maxQ) maxQ = q; });
+  bidP.forEach(p => { const q = gb.b.get(p) || 0; if (q > maxQ) maxQ = q; });
+  if (!maxQ) maxQ = 1;
+  const cumA = new Map(); let ca = 0;
+  askP.forEach(p => { ca += gb.a.get(p) || 0; cumA.set(p, ca); });
+  const cumB = new Map(); let cb = 0;
+  bidP.forEach(p => { cb += gb.b.get(p) || 0; cumB.set(p, cb); });
+  const maxC = Math.max(ca, cb, 1e-9);
+  const mkUp = mid * 1.003, mkDn = mid * 0.997;
+  const pxDec = g < 0.02 ? 3 : g < 1 ? 2 : g < 5 ? 1 : 0;
+  let disp = domDisp[akey]; if (!disp) disp = domDisp[akey] = new Map();
+  const used = new Set();
+  const ease = (key, tgt) => {
+    let v = disp.get(key); if (v == null) v = tgt;
+    v += (tgt - v) * 0.3;
+    disp.set(key, v); used.add(key);
+    return v;
+  };
+  const priceR = x0 + cw * 0.47, qx0 = x0 + cw * 0.51, qw = x0 + cw - pad - qx0;
+  const row = (side, p, y) => {
+    const tgt = (side === "a" ? gb.a.get(p) : gb.b.get(p)) || 0;
+    const q = ease(side + p, tgt);
+    const xx = q > 0 ? Math.pow(q / maxQ, 0.5) : 0;
+    const cum = (side === "a" ? cumA.get(p) : cumB.get(p)) || 0;
+    /* perfil cumulativo (sombra + linha), atrás do preço */
+    const cwid = cum / maxC * (cw * 0.42);
+    if (cwid > 0.5) {
+      dcx.fillStyle = side === "a" ? "rgba(208,59,59,0.07)" : "rgba(25,201,74,0.07)";
+      dcx.fillRect(x0 + 1, y, cwid, ROWH);
+      dcx.fillStyle = side === "a" ? "rgba(208,59,59,0.55)" : "rgba(25,201,74,0.55)";
+      dcx.fillRect(x0 + 1 + cwid, y + 1, 1, ROWH - 2);
+    }
+    const bg = cellBg(side, xx);
+    if (bg) { dcx.fillStyle = bg; dcx.fillRect(qx0, y + 1, qw, ROWH - 2); }
+    dcx.textAlign = "right"; dcx.font = "500 10.5px " + MONO;
+    dcx.fillStyle = xx > 0.7 ? "#0b0e13" : "#e8ecf3";
+    const qs = fmtQ(q);
+    if (qs) dcx.fillText(qs, qx0 + qw - 4, y + ROWH / 2 + 0.5);
+    dcx.font = (xx > 0.55 ? "700 " : "400 ") + "11px " + MONO;
+    dcx.fillStyle = xx > 0.55 ? "#ffffff" : side === "a" ? "#d03b3b" : "#19c94a";
+    dcx.fillText(p.toFixed(pxDec), priceR, y + ROWH / 2 + 0.5);
+    const isMk = side === "a" ? (p - g < mkUp && p >= mkUp) : (p > mkDn && p - g <= mkDn);
+    if (isMk) {
+      dcx.fillStyle = "rgba(250,178,25,0.85)";
+      dcx.fillRect(x0 + 1, side === "a" ? y : y + ROWH - 1, cw - 2, 1);
+      dcx.textAlign = "left"; dcx.font = "600 9px " + MONO; dcx.fillStyle = "#fab219";
+      dcx.fillText("0.3% " + fmtQ(cum), x0 + pad, side === "a" ? y + 5 : y + ROWH - 5);
+    }
+    const f = fl.get(p);
+    if (f) {
+      dcx.fillStyle = (f.buy ? "rgba(25,201,74," : "rgba(208,59,59,") + (0.26 * f.i).toFixed(2) + ")";
+      dcx.fillRect(x0 + 1, y, cw - 2, ROWH);
+    }
+  };
+  for (let r = 0; r < nSide; r++) row("a", askP[nSide - 1 - r], HDR + r * ROWH);
+  const my = HDR + nSide * ROWH;
+  for (let r = 0; r < nSide; r++) row("b", bidP[r], my + MIDH + r * ROWH);
+  /* linha do mid: preço, spread e direcção do último movimento */
+  const pm = domPrevMid[akey] || { m: mid, dir: 0 };
+  if (mid > pm.m + 1e-9) pm.dir = 1; else if (mid < pm.m - 1e-9) pm.dir = -1;
+  pm.m = mid; domPrevMid[akey] = pm;
+  dcx.fillStyle = "#161b25"; dcx.fillRect(x0 + 1, my, cw - 2, MIDH);
+  dcx.fillStyle = "#232a37"; dcx.fillRect(x0 + 1, my, cw - 2, 1); dcx.fillRect(x0 + 1, my + MIDH - 1, cw - 2, 1);
+  dcx.textAlign = "left"; dcx.font = "700 13px " + MONO; dcx.fillStyle = "#e8ecf3";
+  dcx.fillText(mid.toFixed(pxDec === 0 ? 1 : pxDec + 1), x0 + pad + 2, my + MIDH / 2 + 0.5);
+  const spread = gb.ba && gb.bb ? gb.ba - gb.bb : 0;
+  dcx.textAlign = "right"; dcx.font = "400 10px " + MONO; dcx.fillStyle = "#6b7688";
+  if (spread > 0) dcx.fillText("sprd " + spread.toFixed(pxDec === 0 ? 1 : pxDec + 2), x0 + cw - pad, my + MIDH / 2 + 0.5);
+  if (pm.dir) {
+    dcx.fillStyle = pm.dir > 0 ? "#19c94a" : "#d03b3b"; dcx.font = "700 11px " + MONO;
+    dcx.fillText(pm.dir > 0 ? "▲" : "▼", x0 + cw - pad - (spread > 0 ? 62 : 0), my + MIDH / 2 + 0.5);
+  }
+  /* dados velhos NÃO desaparecem (era isso que "quebrava" as colunas): escurecem e dizem a idade */
+  if (!okAge) {
+    dcx.fillStyle = "rgba(11,14,19,0.55)"; dcx.fillRect(x0 + 1, HDR, cw - 2, H - HDR);
+    dcx.textAlign = "center"; dcx.font = "600 10px " + MONO; dcx.fillStyle = "#fab219";
+    dcx.fillText("última leitura há " + fmtAge(age) + " — a tentar de novo", x0 + cw / 2, HDR + 14);
+  }
+  if (disp.size > used.size * 2 + 32) { for (const k of disp.keys()) if (!used.has(k)) disp.delete(k); }
 }
-const esc2 = x => String(x).replace(/[&<>"']/g, "");
+function drawDom() {
+  const W = dcv.clientWidth, H = dcv.clientHeight;
+  if (!W || !H) return;
+  dcx.fillStyle = "#0b0e13"; dcx.fillRect(0, 0, W, H);
+  const g = grpOf(), now = Date.now();
+  const sel = Object.keys(EX_META).filter(k => exSel[k]);
+  if (!sel.length) {
+    dcx.fillStyle = "#6b7688"; dcx.font = "12px " + MONO; dcx.textAlign = "center"; dcx.textBaseline = "middle";
+    dcx.fillText("seleciona pelo menos uma exchange nos botões lá em cima", W / 2, H / 2);
+    return;
+  }
+  /* flashes: prints agressores dos últimos 700 ms iluminam a linha do seu bucket */
+  const fl = new Map();
+  for (let i = trades.length - 1; i >= 0; i--) {
+    const tr = trades[i], ag = now - tr.t; if (ag > 700) break;
+    const p = +(Math.floor(tr.px / g) * g).toFixed(8), it = 1 - ag / 700;
+    const cur = fl.get(p); if (!cur || it > cur.i) fl.set(p, { i: it, buy: tr.buy });
+  }
+  let colList;
+  if (domMode === "agg") {
+    /* só entram fontes frescas (<12 s): uma exchange parada sai da soma — e vê-se no cabeçalho,
+       porque a lista mostra só quem está dentro. Nada de misturar um book de há 30 s com um vivo. */
+    const on = sel.filter(k => deep[k] && now - deep[k].t < 12000);
+    const merged = { bids: [], asks: [] };
+    on.forEach(k => { merged.bids.push(...deep[k].bids); merged.asks.push(...deep[k].asks); });
+    merged.bids.sort((x, y) => y[0] - x[0]); merged.asks.sort((x, y) => x[0] - y[0]);
+    colList = [{ tag: "AGG", name: "AGGREGATED", pair: (on.join("+") || "a ligar…") + " · " + coin,
+      bk: merged.bids.length ? merged : null, t: on.length ? Math.max.apply(null, on.map(k => deep[k].t)) : 0 }];
+  } else {
+    colList = sel.map(k => ({ tag: k, name: EX_META[k].name, pair: EX_META[k].pair(coin),
+      bk: deep[k] && deep[k].bids.length ? deep[k] : null, t: deep[k] ? deep[k].t : 0 }));
+  }
+  const cw = W / colList.length;
+  colList.forEach((c, i) => drawCol(c, i * cw, cw, H, g, now, fl));
+}
 function paintCtl() {
   document.querySelectorAll("[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === view));
   document.getElementById("domCtl").style.display = view === "dom" ? "inline-flex" : "none";
@@ -588,7 +670,7 @@ function paintCtl() {
     '<button class="tb' + (g === grpOf() ? " on" : "") + '" data-grp="' + g + '">' + g + "</button>").join("");
   document.getElementById("exBtns").innerHTML = Object.keys(EX_META).map(k =>
     '<button class="tb' + (exSel[k] ? " on" : "") + '" data-ex="' + k + '" title="' + EX_META[k].name + '">' + k + "</button>").join("");
-  document.getElementById("domView").classList.toggle("on", view === "dom");
+  dcv.style.display = view === "dom" ? "block" : "none";
   cv.style.display = view === "dom" ? "none" : "block";
 }
 
@@ -630,10 +712,10 @@ document.addEventListener("click", e => {
     paintCtl(); if (view === "dom") pollDeep(); else draw(); return; }
   const dm = e.target.closest("[data-dmode]");
   if (dm) { domMode = dm.dataset.dmode; try { localStorage.setItem("cryptomacho-book-dmode", domMode); } catch (er) {}
-    paintCtl(); renderDom(); return; }
+    paintCtl(); drawDom(); return; }
   const gr = e.target.closest("[data-grp]");
   if (gr) { grpSel[coin] = +gr.dataset.grp; try { localStorage.setItem("cryptomacho-book-grp", JSON.stringify(grpSel)); } catch (er) {}
-    paintCtl(); renderDom(); return; }
+    paintCtl(); drawDom(); return; }
   const ex = e.target.closest("[data-ex]");
   if (ex) { exSel[ex.dataset.ex] = exSel[ex.dataset.ex] ? 0 : 1; try { localStorage.setItem("cryptomacho-book-ex", JSON.stringify(exSel)); } catch (er) {}
     paintCtl(); pollDeep(); return; }
@@ -650,9 +732,10 @@ loadHist();
 setInterval(loadHist, 5 * 60_000);
 setInterval(sampleCol, 1000);
 setInterval(() => { if (document.visibilityState !== "hidden") paintDom(); }, 1000);
-/* repintura fluida ~10 fps — é isto que faz o heatmap ESCORRER em vez de saltar */
-setInterval(() => { if (document.visibilityState !== "hidden") draw(); }, 100);
-document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "hidden") { paintDom(); draw(); } });
+/* repintura fluida — heatmap a 10 fps; a ladder corre a ~30 fps com easing, como o tapesurf */
+setInterval(() => { if (document.visibilityState !== "hidden" && view !== "dom") draw(); }, 100);
+setInterval(() => { if (document.visibilityState !== "hidden" && view === "dom") drawDom(); }, 33);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState !== "hidden") { paintDom(); if (view === "dom") drawDom(); else draw(); } });
 </script>
 </body>
 </html>
