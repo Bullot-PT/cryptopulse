@@ -1,0 +1,55 @@
+name: Book depth collector (orderbook heatmap history)
+on:
+  schedule:
+    # Como nos outros coletores: o GitHub deita fora a maioria destes fires; a corrente abaixo
+    # é o que garante continuidade. O cron é só a rede de segurança.
+    - cron: '4,14,24,34,44,54 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  # actions: write permite ao passo da corrente despachar a sucessora (workflow_dispatch é uma
+  # das duas excepções à regra de que eventos do GITHUB_TOKEN não arrancam workflows).
+  actions: write
+concurrency:
+  group: book-collect
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Queue the next run (chain)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          WF=book-collector.yml
+          SINCE=$(date -u -d '15 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+          RECENT=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WF}/runs?per_page=30" \
+            --jq "[.workflow_runs[] | select(.run_started_at > \"${SINCE}\")] | length" 2>/dev/null || echo 0)
+          echo "runs deste workflow desde ${SINCE}: ${RECENT}"
+          if [ "${RECENT:-0}" -ge 4 ]; then
+            echo "disjuntor disparado — não despacho sucessora"
+            exit 0
+          fi
+          # -R obrigatório: este passo corre antes do checkout, sem .git na pasta
+          if gh workflow run "$WF" --ref main -R "${GITHUB_REPOSITORY}"; then
+            echo "sucessora em fila"
+          else
+            echo "não consegui despachar — o cron fica como rede"
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (sha fixo)
+        with:
+          node-version: '22'
+      - name: Sample depth every 10 minutes for one hour
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          set -u
+          # Este coletor NÃO faz commits: os frames vão só para o Workers KV (book-live.json
+          # com 48h rolantes + book-arch-YYYYMMDD.json). Um commit de MBs a cada 10 min
+          # incharia o histórico do git para sempre — o KV não tem esse problema.
+          node book-collector.mjs loop || echo "coletor saiu com erro — a corrente continua"
