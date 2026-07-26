@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-6DiDjxns6Zngr1WI7HiBAjp1StAQ9h0sAL4Qd1CZE2Q='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-6sL8nX9Zef2Xi7KXiZ9K+W8G7u6Kft3Pfkz5UeDsWUA='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -384,7 +384,9 @@ function draw() {
   const now = live ? Date.now() : cols[cols.length - 1].t;
   const span = live ? viewSpan : Math.max(3600_000, now - cols[0].t + 600_000);
   const t0 = now - span;
-  const sampleMs = live ? 1000 : 600_000;
+  /* base 1 min: a história mistura frames de 10 min e de 1 min (book-fine) — cada um
+     pinta a sua largura real e estica até ao seguinte (tecto 15 min, já em maxStretch) */
+  const sampleMs = live ? 1000 : 60_000;
   const colW = Math.max(1, TW * sampleMs / span);
   /* centro Y: mid suavizado (EMA) para a vista seguir o preço sem tremer */
   const lastPx = (cols[cols.length - 1].px) || (yCenter || 0);
