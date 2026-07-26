@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-oD7QTqLs2mKz4MoKPHmOVmxZItstzIYo4c94k0BSZ9M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-E0Yt4m9+KQpsllJejml+Of0vK+dT0JltzvGpYfFx4Vs='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -420,14 +420,21 @@ function draw() {
       cx.textAlign = "left"; cx.fillText("▸ this session (1s)", histEdgeX + 4, 12);
     }
   }
-  /* células — cada bin no seu preço exacto, coluna na sua posição exacta no tempo */
+  /* células — cada bin no seu preço exacto, coluna na sua posição exacta no tempo.
+     GAP-STRETCH (pedido dele, riscas resolvidas): cada coluna estica até à seguinte — o book
+     em descanso É o último estado real conhecido — mas só até 60 s; buracos maiores (PC
+     desligado, tab morto) ficam PRETOS: gap honesto, não se inventa nada. */
+  const maxStretch = live ? TW * 60_000 / span : Infinity;
+  let nextX = TW;
   for (let i = cols.length - 1; i >= 0; i--) {
     const c = cols[i]; if (c.t < t0) break;
     const x = TW - (now - c.t) / span * TW - colW;
+    const wPaint = Math.min(Math.max(colW, nextX - x), Math.max(colW, maxStretch)) + 0.5;
     for (const k in c.b) { const p = k * st; if (p < pLo || p > pHi) continue;
-      const col = heat(c.b[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, colW + 0.5, rowH + 0.4); } }
+      const col = heat(c.b[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, wPaint, rowH + 0.4); } }
     for (const k in c.a) { const p = k * st; if (p < pLo || p > pHi) continue;
-      const col = heat(c.a[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, colW + 0.5, rowH + 0.4); } }
+      const col = heat(c.a[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, wPaint, rowH + 0.4); } }
+    nextX = x;
   }
   /* linha do preço por cima do heat */
   cx.strokeStyle = "#ffffff"; cx.lineWidth = 1.2; cx.beginPath();
@@ -1157,7 +1164,17 @@ setInterval(sessSave, 10_000);
 window.addEventListener("beforeunload", sessSave);
 loadHist();
 setInterval(loadHist, 5 * 60_000);
-setInterval(sampleCol, 1000);
+/* amostragem no Web Worker: o setInterval da PÁGINA é estrangulado a 1/min com o tab em
+   segundo plano — era isso que deixava o heatmap às riscas (1 coluna por minuto escondido,
+   denso só depois de voltares ao tab). O timer num Worker não é estrangulado e os WebSockets
+   continuam a entregar em background ⇒ colunas de 1 s SEMPRE, mesmo com o tab escondido.
+   Mesma cura do ticker do index (v130). Fallback: sem Worker, volta ao setInterval. */
+(() => {
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob(["setInterval(function(){postMessage(1)},1000)"], { type: "text/javascript" })));
+    w.onmessage = () => sampleCol();
+  } catch (e) { setInterval(sampleCol, 1000); }
+})();
 setInterval(() => { if (document.visibilityState !== "hidden") paintDom(); }, 1000);
 /* repintura fluida — heatmap a 10 fps; a ladder corre a ~30 fps com easing, como o tapesurf */
 setInterval(() => { if (document.visibilityState !== "hidden" && view !== "dom") draw(); }, 100);
