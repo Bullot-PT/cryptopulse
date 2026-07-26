@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-bjeLW8k1Pd8LDS04XNiVdXZ7SJ27/3/DhVe0Lqbblu8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-gzvhgZqDueudot8WNxUcNP7Yqf9P4/zLLpiYb5YKrc8=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -1014,7 +1014,7 @@
     </div>
     <div class="grid-stack-item" gs-id="radar">
       <div class="grid-stack-item-content"><div class="panel">
-        <div class="panel-head"><i data-icn="bolt"></i> Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls within ±5% of price (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
+        <div class="panel-head"><i data-icn="bolt"></i> Cascade Radar <span class="sub" id="rdSub" title="Pressure score 0-100 per coin — W: liquidation walls near price — full weight within ±4%, tapering to 0 at ±6.5% (all DEX position books, normalized by the coin's OI) · F: extreme funding (who pays to hold = squeeze fuel) · V: market-wide liquidation velocity, last 15 min · OI: 24h open-interest momentum. The arrow points to the side with the dominant fuel. Hover a row for the component breakdown. ALERTS: ≥50 yellow + chime · ≥61 red + klaxon · V≥15 = ⚡ BURST (heavy forced flow right now, klaxon) · ≥75 CASCADE (SHORT = price threatening down, LONG = threatening up) + voice. Click a flashing row to silence its sound (keeps flashing).">where the next forced move is most likely · 0-100 · live</span>
           <input type="range" id="rdVol" min="0" max="100" step="5" title="Radar alert volume — release to preview" style="width:72px;height:4px;accent-color:var(--accent);cursor:pointer;margin-left:auto">
           <button class="btn-ghost" id="rdSound" title="Radar alert sounds" style="padding:4px 7px;color:var(--muted)"></button></div>
         <div class="panel-body" id="rdOuter" style="position:relative">
@@ -7310,7 +7310,9 @@ setInterval(() => { if (cxDirty) { cxDirty = false; renderCx(); } }, 600);
 setInterval(renderCx, 5000); /* keep the 1h/60s counters ticking even without new events */
 
 /* ---------------- Cascade Radar — pressure score per coin, all real live inputs ----------------
-   W (0-40): liq walls within ±5% of price across ALL DEX books, normalized by the coin's OI.
+   W (0-40): liq walls near price across ALL DEX books, normalized by the coin's OI. Full weight
+   within ±4%, linear taper to 0 at ±6.5% — a wall parked exactly on a hard ±5% edge used to
+   flip the score by 40 points on a single tick (kPEPE 68→27, 26-jul).
    F (0-20): |funding| — extreme funding = crowded side paying to stay in.
    V (0-25): liquidation velocity last 15 min (market-wide 🌐 via Coinalyze minute mirror; live feed as fallback).
    OI (0-15): 24h open-interest momentum from our own oi-history samples. */
@@ -7391,8 +7393,11 @@ function renderRadar() {
       const w = walls[coin] || (walls[coin] = {below: 0, above: 0, nbUsd: 0, nbPct: null, naUsd: 0, naPct: null});
       Object.entries(b.bins).forEach(([idx, v]) => {
         const rel = ((+idx) * b.step - live) / live;
-        if (rel <= -0.0005 && rel >= -0.05) { w.below += v[0] || 0; if ((v[0] || 0) > w.nbUsd) { w.nbUsd = v[0]; w.nbPct = rel * 100; } }
-        else if (rel >= 0.0005 && rel <= 0.05) { w.above += v[1] || 0; if ((v[1] || 0) > w.naUsd) { w.naUsd = v[1]; w.naPct = rel * 100; } }
+        const ar = Math.abs(rel);
+        if (ar < 0.0005 || ar > 0.065) return;
+        const wt = ar <= 0.04 ? 1 : (0.065 - ar) / 0.025;   /* taper: 1 até 4%, 0 a 6.5% */
+        if (rel < 0) { w.below += (v[0] || 0) * wt; if ((v[0] || 0) > w.nbUsd) { w.nbUsd = v[0] || 0; w.nbPct = rel * 100; } }
+        else { w.above += (v[1] || 0) * wt; if ((v[1] || 0) > w.naUsd) { w.naUsd = v[1] || 0; w.naPct = rel * 100; } }
       });
     });
   };

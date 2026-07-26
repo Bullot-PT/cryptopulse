@@ -1156,8 +1156,13 @@ try {
       if (!b || !b.bins || !b.step) return;
       Object.entries(b.bins).forEach(([idx, v]) => {
         const rel = ((+idx) * b.step - px) / px;
-        if (rel <= -0.0005 && rel >= -0.05) { below += v[0] || 0; if ((v[0] || 0) > big) { big = v[0]; bigPct = rel * 100; } }
-        else if (rel >= 0.0005 && rel <= 0.05) { above += v[1] || 0; if ((v[1] || 0) > big) { big = v[1]; bigPct = rel * 100; } }
+        const ar = Math.abs(rel);
+        if (ar < 0.0005 || ar > 0.065) return;
+        // taper na fronteira: peso 1 ate 4%, recta ate 0 a 6.5%. Uma wall MESMO nos 5% fazia o
+        // score ligar/desligar 40 pontos com um tick (kPEPE 68 no Telegram vs 27 no site, 26-jul).
+        const wt = ar <= 0.04 ? 1 : (0.065 - ar) / 0.025;
+        if (rel < 0) { below += (v[0] || 0) * wt; if ((v[0] || 0) > big) { big = v[0]; bigPct = rel * 100; } }
+        else { above += (v[1] || 0) * wt; if ((v[1] || 0) > big) { big = v[1]; bigPct = rel * 100; } }
       });
     });
     const v = velR[coin] || velR[coin.replace(/^k/, '')] || { L: 0, S: 0 };
@@ -1198,7 +1203,7 @@ try {
       const head = lvl >= 3 ? '\ud83d\udea8 *' + (r.down ? 'SHORT' : 'LONG') + ' CASCADE \u2014 ' + r.coin + ' ' + r.score + '/100*'
         : (burst && r.score < 61 ? '\u26a1 *LIQ BURST \u2014 ' + r.coin + ' ' + r.score + '/100*' : '\u26a0\ufe0f *Cascade Radar \u2014 ' + r.coin + ' ' + r.score + '/100*');
       queue.push(head + ' ' + (r.down ? '\ud83d\udd3b SHORT' : '\ud83d\udd3a LONG') +
-        '\n' + fmtBig(r.wall) + ' in liq walls \u00b15%' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
+        '\n' + fmtBig(r.wall) + ' in liq walls \u00b14-6.5% tapered' + (r.bigPct != null ? ' (biggest ' + fmtBig(r.big) + ' at ' + r.bigPct.toFixed(1) + '%)' : '') +
         '\nliqs 15m ' + fmtBig(r.liq15) + ' \u00b7 funding ' + (r.fund * 100).toFixed(4) + '%/h \u00b7 OI 24h ' + (r.dOi > 0 ? '+' : '') + r.dOi.toFixed(1) + '%' +
         '\nW' + r.w + ' F' + r.f + ' V' + r.vv + ' OI' + r.m);
     }
