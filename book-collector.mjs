@@ -6,11 +6,14 @@
    entraram (src). Sem estimativas, sem interpolação. Bins ABSOLUTOS por preço (step fixo por
    moeda) para as colunas do heatmap alinharem entre frames. Valores em USD, arredondados. */
 
+/* steps afinados ao alcance REAL dos books (medido no 1º frame, 26-jul: os ~400 níveis do
+   REST cobrem só ~±0,3-3% do preço — o heatmap é a fita de liquidez perto do preço, como no
+   TapeSurf; steps grossos esmagavam o BTC em 2 colunas). */
 const COINS = {
-  BTC:  { step: 50,   bn: "BTCUSDT",  ok: "BTC-USDT-SWAP",  by: "BTCUSDT",  hl: "BTC" },
-  ETH:  { step: 2,    bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
-  SOL:  { step: 0.1,  bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
-  HYPE: { step: 0.05, bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" }
+  BTC:  { step: 5,    bn: "BTCUSDT",  ok: "BTC-USDT-SWAP",  by: "BTCUSDT",  hl: "BTC" },
+  ETH:  { step: 0.2,  bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
+  SOL:  { step: 0.05, bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
+  HYPE: { step: 0.02, bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" }
 };
 const LIVE_KEY = "book-live.json";
 const WINDOW_MS = 48 * 3600_000;
@@ -70,7 +73,7 @@ async function srcBybit(sym) {
 async function srcHl(coin) {
   const j = await jfetch("https://api.hyperliquid.xyz/info", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "l2Book", coin })
+    body: JSON.stringify({ type: "l2Book", coin, nSigFigs: 5 })
   });
   const lv = j.levels; if (!lv) throw new Error("hl vazio");
   return { bids: lv[0].map(x => [+x.px, +x.px * +x.sz]), asks: lv[1].map(x => [+x.px, +x.px * +x.sz]) };
@@ -118,7 +121,12 @@ async function pass() {
   const live = await kvGet(LIVE_KEY);
   if (live === undefined) { console.log("KV ilegível — salto esta passagem para não esmagar dados"); return; }
   const doc = live && live.v === 1 ? live : { v: 1, step: {}, coins: {} };
-  Object.entries(COINS).forEach(([c, cfg]) => { doc.step[c] = cfg.step; doc.coins[c] = doc.coins[c] || []; });
+  Object.entries(COINS).forEach(([c, cfg]) => {
+    /* mudança de step invalida os bins antigos (idx é preço/step) — recomeça essa moeda em vez
+       de misturar escalas. Só dói nas primeiras horas de vida do coletor. */
+    if (doc.step[c] !== undefined && doc.step[c] !== cfg.step) doc.coins[c] = [];
+    doc.step[c] = cfg.step; doc.coins[c] = doc.coins[c] || [];
+  });
 
   const now = Date.now();
   for (const [coin, cfg] of Object.entries(COINS)) {
