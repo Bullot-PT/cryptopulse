@@ -54,10 +54,32 @@ jobs:
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       - name: Scan Lighter every 5 minutes for one hour
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
         run: |
           set -u
           git config user.name "oi-collector-bot"
           git config user.email "actions@users.noreply.github.com"
+
+          kv_put() {
+            # Espelha ficheiros de data/ no Workers KV (o Worker em cryptomacho.io/data/* serve
+            # do KV com ~20s de cache no edge, em vez dos 300s+ do raw/Pages). Best-effort:
+            # nunca falha o job — sem namespace ou com a API em baixo, o site continua a ler o
+            # fallback do GitHub como sempre.
+            [ -n "${CF_KV_NAMESPACE_ID:-}" ] || { echo "kv: sem namespace configurado, salto"; return 0; }
+            for p in "$@"; do
+              case "$p" in data/*) ;; *) continue ;; esac
+              [ -f "$p" ] || continue
+              k="${p#data/}"
+              code=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE_ID}/values/${k}" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" --data-binary @"$p" || echo 000)
+              echo "kv put ${k}: HTTP ${code}"
+            done
+            return 0
+          }
 
           END=$(( $(date +%s) + 3300 ))
           while : ; do
@@ -83,6 +105,7 @@ jobs:
                 git commit -m "Lighter book [skip ci]" >/dev/null || true
                 sleep $((i * 3))
               done
+              kv_put data/liq-book-lighter.json
             fi
             NOW=$(date +%s)
             if [ "$NOW" -ge "$END" ]; then break; fi

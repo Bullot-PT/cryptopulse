@@ -54,12 +54,34 @@ jobs:
         # Mesmo que a recolha rebente a meio, o contador de créditos tem de ser gravado: créditos
         # gastos são gastos, e perder a conta é a única falha aqui que não se desfaz.
         if: always()
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
         run: |
           set -u
           FILES="data/nansen-labels.json data/nansen-names.json data/nansen-budget.json data/nansen-perps.json data/nansen-sm.json"
           EXIST=""
           for f in $FILES; do [ -f "$f" ] && EXIST="$EXIST $f"; done
           if [ -z "$EXIST" ]; then echo "nada gerado"; exit 0; fi
+          kv_put() {
+            # Espelha ficheiros de data/ no Workers KV (o Worker em cryptomacho.io/data/* serve
+            # do KV com ~20s de cache no edge, em vez dos 300s+ do raw/Pages). Best-effort:
+            # nunca falha o job — sem namespace ou com a API em baixo, o site continua a ler o
+            # fallback do GitHub como sempre.
+            [ -n "${CF_KV_NAMESPACE_ID:-}" ] || { echo "kv: sem namespace configurado, salto"; return 0; }
+            for p in "$@"; do
+              case "$p" in data/*) ;; *) continue ;; esac
+              [ -f "$p" ] || continue
+              k="${p#data/}"
+              code=$(curl -sS -o /dev/null -w "%{http_code}" -X PUT \
+                "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE_ID}/values/${k}" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" --data-binary @"$p" || echo 000)
+              echo "kv put ${k}: HTTP ${code}"
+            done
+            return 0
+          }
+          kv_put $EXIST
           git config user.name "oi-collector-bot"
           git config user.email "actions@users.noreply.github.com"
           git add $EXIST
