@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-NsmoQ4Wo/8oisMCN+YMWTWhYAAwdzwLjt+HjR+ctY9U='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-7bllA92U50YIuMkVRrl9UCMU7b2epuF2NGpJ+z+zjRQ='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -97,6 +97,9 @@ footer b { color:var(--ink-2); font-weight:600; }
     <button class="tb on" data-mode="live" title="Session heatmap: 5-second columns built LIVE in your browser from Binance + Bybit + OKX + Hyperliquid WebSockets. Starts when you open the page.">LIVE</button>
     <button class="tb" data-mode="hist" title="Collector history: 1-min frames (last 4h) + 10-min frames (rolling 48h), sampled 24/7 by the repo bot even with your PC off. Grows forever from 26-jul-2026 onward.">48H</button>
   </span>
+  <span class="modes">
+    <button class="tb" id="candBtn" data-candles="1" title="Real OHLC candles over the heatmap — Binance spot klines, interval picked by window (1s/1m/5m). Venues without a spot pair fall back to Bybit perp 1-minute klines (said on screen). Real data only: if the API has nothing, nothing is drawn.">CANDLES</button>
+  </span>
   <span class="stats">
     <span title="Aggregated mid price (best bid/ask across connected venues)">mid <b id="stPx">—</b></span>
     <span title="USD resting within ±0.5% of mid, all connected venues">±0.5% <b id="stNear">—</b></span>
@@ -117,7 +120,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v10: velas OHLC reais (Binance spot 1s/1m/5m, fallback Bybit perp) por cima do heat, toggle CANDLES; v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -445,6 +448,40 @@ function heat(v, max) {
     Math.round(a[1][1] + (b[1][1] - a[1][1]) * k) + "," +
     Math.round(a[1][2] + (b[1][2] - a[1][2]) * k) + ")";
 }
+/* ---------- v10: velas OHLC reais ---------- */
+let showCandles = (() => { try { return localStorage.getItem("cryptomacho-book-candles") === "1"; } catch (e) { return false; } })();
+let candles = { key: "", arr: [], fetchedAt: 0, iv: 0, note: "" };
+function candleInterval(spanMs, hasSpot) {
+  /* o mais fino possível mantendo ≤~900 velas; sem spot (Bybit) o mínimo real é 1m */
+  if (hasSpot && spanMs <= 900_000) return 1000;
+  if (spanMs <= 54_000_000) return 60_000;
+  return 300_000;
+}
+async function loadCandles() {
+  const cfg = COINS[coin], forCoin = coin;
+  const spanMs = mode === "live" ? viewSpan : 48 * 3600_000;
+  const iv = candleInterval(spanMs, !!cfg.bns);
+  const key = forCoin + ":" + iv;
+  const now = Date.now();
+  if (now - candles.fetchedAt < (candles.key === key ? 15_000 : 5_000)) return;
+  candles.fetchedAt = now;                    /* trava já — o draw corre a 10 fps */
+  try {
+    let arr = [], note = "";
+    if (cfg.bns) {
+      const ivStr = iv === 1000 ? "1s" : iv === 60_000 ? "1m" : "5m";
+      const j = await (await tfetch("https://data-api.binance.vision/api/v3/klines?symbol=" + cfg.bns + "&interval=" + ivStr + "&limit=1000", null, 9000)).json();
+      arr = j.map(k => ({ t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+      note = "Binance spot " + ivStr;
+    } else {
+      const ivStr = iv === 60_000 ? "1" : "5";
+      const j = await (await tfetch("https://api.bybit.com/v5/market/kline?category=linear&symbol=" + cfg.by + "&interval=" + ivStr + "&limit=1000", null, 9000)).json();
+      const L = (j.result && j.result.list) || [];
+      arr = L.map(k => ({ t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] })).reverse();
+      note = "Bybit perp " + ivStr + "m (no spot pair — 1s unavailable)";
+    }
+    if (forCoin === coin && arr.length) { candles.key = key; candles.arr = arr; candles.iv = iv; candles.note = note; }
+  } catch (e) { /* API em baixo = sem velas; não se inventa nada */ }
+}
 let hmView = null;            /* geometria do último draw() — é o que o hover usa para inverter */
 let viewSpan = 300_000;       /* janela LIVE: 1m/5m/15m (shift-wheel estica/comprime 30 s–48 h) */
 let histStretch = 1;          /* v8: zoom horizontal no modo history */
@@ -674,6 +711,34 @@ function draw() {
         cx.fillText(fmtBig(tr.usd).replace("$", ""), x, yOf(tr.px) + 3);
         cx.textAlign = "left";
       }
+    }
+  }
+  /* v10: velas OHLC reais por cima do heat (toggle CANDLES) */
+  if (showCandles) {
+    loadCandles();
+    if (candles.arr.length && candles.key.indexOf(coin + ":") === 0) {
+      const civ = candles.iv;
+      const cw = Math.max(1, civ / span * TW);
+      const bw = Math.max(1, cw * 0.66);
+      cx.lineWidth = 1;
+      for (let ci = candles.arr.length - 1; ci >= 0; ci--) {
+        const k = candles.arr[ci];
+        if (k.t + civ < t0) break;
+        const x = TW - (now - k.t) / span * TW;
+        if (x > TW) continue;
+        if (k.h < pLo || k.l > pHi) continue;
+        const up = k.c >= k.o;
+        const yH = yOf(Math.min(k.h, pHi)), yL = yOf(Math.max(k.l, pLo));
+        const yO = yOf(k.o), yC = yOf(k.c);
+        cx.strokeStyle = up ? "rgba(25,201,74,0.9)" : "rgba(225,60,60,0.9)";
+        cx.beginPath(); cx.moveTo(x + cw / 2, yH); cx.lineTo(x + cw / 2, yL); cx.stroke();
+        const bt = Math.min(yO, yC), bh = Math.max(1, Math.abs(yO - yC));
+        cx.fillStyle = up ? "rgba(25,201,74,0.45)" : "rgba(225,60,60,0.45)";
+        cx.fillRect(x + (cw - bw) / 2, bt, bw, bh);
+        cx.strokeRect(x + (cw - bw) / 2, bt, bw, bh);
+      }
+      cx.fillStyle = "#8f9aac"; cx.font = "8.5px 'IBM Plex Mono', monospace"; cx.textAlign = "left";
+      cx.fillText("candles: " + candles.note, 4, TH - 4);
     }
   }
   /* eixo Y + etiqueta do último preço */
@@ -1435,6 +1500,12 @@ document.addEventListener("click", e => {
   if (mk2) { mktSel[mk2.dataset.mkt] = mktSel[mk2.dataset.mkt] ? 0 : 1;
     try { localStorage.setItem("cryptomacho-book-mkt", JSON.stringify(mktSel)); } catch (er) {}
     paintCtl(); pollDeep(); drawDom(); return; }
+  const cd = e.target.closest("[data-candles]");
+  if (cd) { showCandles = !showCandles;
+    try { localStorage.setItem("cryptomacho-book-candles", showCandles ? "1" : "0"); } catch (er) {}
+    cd.classList.toggle("on", showCandles);
+    if (showCandles) { candles.fetchedAt = 0; }
+    if (view !== "dom") draw(); return; }
   const pl = e.target.closest("[data-pal]");
   if (pl) { heatPal = pl.dataset.pal;
     try { localStorage.setItem("cryptomacho-book-pal", heatPal); } catch (er) {}
@@ -1468,6 +1539,7 @@ idbInit();
   }
 })();
 paintTabs(); paintCtl(); sizeCanvas();
+try { document.getElementById("candBtn").classList.toggle("on", showCandles); } catch (e) {}
 fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); });
 setInterval(pollDeep, 1000);
 setInterval(sessSave, 10_000);
