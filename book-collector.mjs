@@ -13,7 +13,8 @@ const COINS = {
   BTC:  { step: 5,    bn: "BTCUSDT",  ok: "BTC-USDT-SWAP",  by: "BTCUSDT",  hl: "BTC" },
   ETH:  { step: 0.2,  bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
   SOL:  { step: 0.05, bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
-  HYPE: { step: 0.02, bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" }
+  HYPE: { step: 0.02, bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" },
+  DOGE: { step: 0.00005, bn: "DOGEUSDT", ok: "DOGE-USDT-SWAP", by: "DOGEUSDT", hl: "DOGE" }
 };
 const LIVE_KEY = "book-live.json";
 const WINDOW_MS = 48 * 3600_000;

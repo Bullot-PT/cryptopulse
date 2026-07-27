@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-HNcz1oB0hgDv+45QP7/LYl5kWPRvgYIeLQPUv4Rld6M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Led0B8V0J6u6ePmTCeR0WU7zDv7ydISEQInTsOxPEhA='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -117,7 +117,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -512,8 +512,17 @@ function draw() {
       const fEnd = (i + 1 < hf.length && hf[i + 1]) ? Math.min(hf[i + 1].t, f.t + 900_000) : f.t + 900_000;
       while (jj >= 0 && cols[jj].t >= fEnd) jj--;
       const x = TW - (now - f.t) / span * TW;
-      if (jj >= 0 && cols[jj].t >= f.t) { nextHX = x; continue; }
-      const wClip = Math.min(Math.max(0.5, nextHX - x), hCap);
+      let capX = nextHX;
+      if (jj >= 0 && cols[jj].t >= f.t) {
+        /* v8b: a sessão começa DENTRO do intervalo deste frame — pinta o coletor ATÉ ela começar,
+           em vez de saltar o frame inteiro (era o buraco preto entre história e live ao abrir). */
+        let k = jj;
+        while (k - 1 >= 0 && cols[k - 1].t >= f.t) k--;
+        capX = Math.min(nextHX, TW - (now - cols[k].t) / span * TW);
+        jj = k - 1;
+        if (capX - x < 0.5) { nextHX = x; continue; }
+      }
+      const wClip = Math.min(Math.max(0.5, capX - x), hCap);
       nextHX = x;
       const hRowH = Math.max(1, hstep / (pHi - pLo) * TH);
       for (const k in f.b) { const p = k * hstep; if (p < pLo || p > pHi) continue;
