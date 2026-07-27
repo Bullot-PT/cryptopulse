@@ -16,7 +16,7 @@ const COINS = {
   ETH:  { step: 0.2,  lstep: 0.05,    bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
   SOL:  { step: 0.05, lstep: 0.01,    bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
   HYPE: { step: 0.02, lstep: 0.005,   bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" },
-  DOGE: { step: 0.00005, lstep: 0.00001, bn: "DOGEUSDT", ok: "DOGE-USDT-SWAP", by: "DOGEUSDT", hl: "DOGE" }
+  DOGE: { step: 0.00005, lstep: 0.000001, bn: "DOGEUSDT", ok: "DOGE-USDT-SWAP", by: "DOGEUSDT", hl: "DOGE" }
 };
 const LIVE_KEY = "book-live.json";
 const WINDOW_MS = 48 * 3600_000;
