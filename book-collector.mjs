@@ -1,5 +1,7 @@
 /* book-collector.mjs — snapshots do orderbook agregado (Binance spot+perp + OKX + Hyperliquid + Bybit)
-   para o heatmap de liquidez (v129-vps: modo daemon p/ systemd na VPS + fonte BNP via fapi + SQLite local opcional; v128: Frames de 10 em 10 minutos, guardados no Workers KV:
+   para o heatmap de liquidez (v130: camada hires — frames de 15 s ao lstep do browser, ±0,6% do mid, 45 min por moeda em
+   data/book-hires-<COIN>.json, publicados de 2 em 2 min só no modo daemon (VPS);
+   v129-vps: modo daemon p/ systemd na VPS + fonte BNP via fapi + SQLite local opcional; v128: Frames de 10 em 10 minutos, guardados no Workers KV:
      book-live.json           — janela rolante de 48h (o que a página lê por defeito)
      book-arch-YYYYMMDD.json  — arquivo do dia anterior, escrito uma vez por dia
    REGRAS: só dados reais — uma exchange que falhe fica FORA do frame e o frame diz quais
@@ -10,11 +12,11 @@
    REST cobrem só ~±0,3-3% do preço — o heatmap é a fita de liquidez perto do preço, como no
    TapeSurf; steps grossos esmagavam o BTC em 2 colunas). */
 const COINS = {
-  BTC:  { step: 5,    bn: "BTCUSDT",  ok: "BTC-USDT-SWAP",  by: "BTCUSDT",  hl: "BTC" },
-  ETH:  { step: 0.2,  bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
-  SOL:  { step: 0.05, bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
-  HYPE: { step: 0.02, bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" },
-  DOGE: { step: 0.00005, bn: "DOGEUSDT", ok: "DOGE-USDT-SWAP", by: "DOGEUSDT", hl: "DOGE" }
+  BTC:  { step: 5,    lstep: 1,       bn: "BTCUSDT",  ok: "BTC-USDT-SWAP",  by: "BTCUSDT",  hl: "BTC" },
+  ETH:  { step: 0.2,  lstep: 0.05,    bn: "ETHUSDT",  ok: "ETH-USDT-SWAP",  by: "ETHUSDT",  hl: "ETH" },
+  SOL:  { step: 0.05, lstep: 0.01,    bn: "SOLUSDT",  ok: "SOL-USDT-SWAP",  by: "SOLUSDT",  hl: "SOL" },
+  HYPE: { step: 0.02, lstep: 0.005,   bn: "HYPEUSDT", ok: "HYPE-USDT-SWAP", by: "HYPEUSDT", hl: "HYPE" },
+  DOGE: { step: 0.00005, lstep: 0.00001, bn: "DOGEUSDT", ok: "DOGE-USDT-SWAP", by: "DOGEUSDT", hl: "DOGE" }
 };
 const LIVE_KEY = "book-live.json";
 const WINDOW_MS = 48 * 3600_000;
@@ -23,6 +25,11 @@ const WINDOW_MS = 48 * 3600_000;
    O book-live.json continua igual (10 min, 48h) e o arquivo diário também. */
 const FINE_KEY = "book-fine.json";
 const FINE_MS = 4 * 3600_000;
+/* v130 HIRES: a "sessão do browser" gravada pelo servidor — 15 s ao lstep, só perto do preço.
+   45 min chegam: em janelas maiores o browser usa os frames de 1 min (fine) que já existem. */
+const HIRES_MS = 45 * 60_000;
+const HIRES_TRIM = 0.006;              /* guarda bins a ±0,6% do mid — o alcance útil do heatmap */
+const HIRES_CAP_BYTES = 8_000_000;     /* tecto do doc por moeda (KV aceita 25MB; 8MB já é muito) */
 
 const ACC = process.env.CF_ACCOUNT_ID, TOK = process.env.CF_API_TOKEN, NS = process.env.CF_KV_NAMESPACE_ID;
 if (!ACC || !TOK || !NS) { console.error("faltam secrets CF_*"); process.exit(1); }
@@ -152,6 +159,72 @@ async function frameFor(coin, cfg) {
   return out;
 }
 
+/* ---------- v130: hires (só no modo daemon / VPS) ---------- */
+const hiresRing = {};                  /* coin -> frames {t,px,src,b,a} ao lstep */
+let hiresPubMin = -1;
+async function hiresFrameFor(coin, cfg) {
+  const st = cfg.lstep;
+  const out = { t: Date.now(), b: {}, a: {}, src: [] };
+  const srcs = [
+    ["BN", () => srcBinance(cfg.bn)],
+    ["BNP", () => srcBinancePerp(cfg.bn)],
+    ["OKX", () => srcOkx(cfg.ok)],
+    ["BY", () => srcBybit(cfg.by)],
+    ["HL", () => srcHl(cfg.hl)]
+  ];
+  const res = await Promise.allSettled(srcs.map(([, fn]) => fn()));
+  let bestBid = 0, bestAsk = Infinity;
+  res.forEach((r, i) => {
+    if (r.status !== "fulfilled") return;
+    const bk = r.value;
+    if (!bk || !bk.bids.length || !bk.asks.length) return;
+    bestBid = Math.max(bestBid, bk.bids[0][0]);
+    bestAsk = Math.min(bestAsk, bk.asks[0][0]);
+    for (const [px, usd] of bk.bids) { const ix = Math.round(px / st); out.b[ix] = (out.b[ix] || 0) + usd; }
+    for (const [px, usd] of bk.asks) { const ix = Math.round(px / st); out.a[ix] = (out.a[ix] || 0) + usd; }
+    out.src.push(srcs[i][0]);
+  });
+  if (!out.src.length) return null;               /* nenhuma fonte = sem frame, gap honesto */
+  out.px = isFinite(bestAsk) && bestBid > 0 ? +((bestBid + bestAsk) / 2).toFixed(6) : null;
+  if (out.px) {
+    const lo = out.px * (1 - HIRES_TRIM), hi = out.px * (1 + HIRES_TRIM);
+    for (const k of Object.keys(out.b)) { const p = k * st; if (p < lo || p > hi) delete out.b[k]; else out.b[k] = Math.round(out.b[k]); }
+    for (const k of Object.keys(out.a)) { const p = k * st; if (p < lo || p > hi) delete out.a[k]; else out.a[k] = Math.round(out.a[k]); }
+  } else {
+    for (const k of Object.keys(out.b)) out.b[k] = Math.round(out.b[k]);
+    for (const k of Object.keys(out.a)) out.a[k] = Math.round(out.a[k]);
+  }
+  return out;
+}
+async function hiresTick() {
+  await Promise.all(Object.entries(COINS).map(async ([coin, cfg]) => {
+    let f = null;
+    try { f = await hiresFrameFor(coin, cfg); } catch (e) { console.log("hires " + coin + " falhou: " + (e && e.message)); }
+    if (!f) return;
+    const ring = hiresRing[coin] = hiresRing[coin] || [];
+    ring.push(f);
+    const cut = Date.now() - HIRES_MS;
+    while (ring.length && ring[0].t < cut) ring.shift();
+  }));
+}
+async function hiresPublish() {
+  for (const [coin, cfg] of Object.entries(COINS)) {
+    const ring = hiresRing[coin] || [];
+    if (!ring.length) continue;
+    let frames = ring.slice();
+    let body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames });
+    while (body.length > HIRES_CAP_BYTES && frames.length > 20) {
+      frames = frames.slice(Math.ceil(frames.length * 0.15));
+      body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames });
+      console.log("hires " + coin + ": doc acima do tecto — cortei os mais antigos, ficam " + frames.length + " frames");
+    }
+    try {
+      const r = await fetch(KV + "book-hires-" + coin + ".json", { method: "PUT", headers: { Authorization: "Bearer " + TOK }, body });
+      console.log("kv put book-hires-" + coin + ".json: HTTP " + r.status + " (" + body.length + " bytes, " + frames.length + " frames)");
+    } catch (e) { console.log("kv put book-hires-" + coin + ".json falhou: " + (e && e.message)); }
+  }
+}
+
 function utcDay(ts) {
   const d = new Date(ts);
   return d.getUTCFullYear() + String(d.getUTCMonth() + 1).padStart(2, "0") + String(d.getUTCDate()).padStart(2, "0");
@@ -224,14 +297,30 @@ const mode = process.argv[2] || "loop";
 if (mode === "once") {
   await pass(true);
 } else if (mode === "daemon") {
-  /* v129-vps: serviço systemd — corre para sempre, alinhado à grelha de 1 min; o systemd
-     reinicia se rebentar (Restart=always). */
-  for (;;) {
-    const minute = Math.round(Date.now() / 60_000);
-    try { await pass(minute % 10 === 0); } catch (e) { console.error("passagem rebentou: " + (e && e.message)); }
-    const gap = 60_000 - (Date.now() % 60_000);
-    await new Promise(r => setTimeout(r, gap));
-  }
+  /* v130: serviço systemd com DOIS relógios — o passe de 1 min de sempre e o tick hires de
+     15 s (publicado de 2 em 2 min). Correm em paralelo; o systemd reinicia se rebentar. */
+  const passLoop = (async () => {
+    for (;;) {
+      const minute = Math.round(Date.now() / 60_000);
+      try { await pass(minute % 10 === 0); } catch (e) { console.error("passagem rebentou: " + (e && e.message)); }
+      const gap = 60_000 - (Date.now() % 60_000);
+      await new Promise(r => setTimeout(r, gap));
+    }
+  })();
+  const hiresLoop = (async () => {
+    for (;;) {
+      try { await hiresTick(); } catch (e) { console.error("hires tick rebentou: " + (e && e.message)); }
+      const now = Date.now();
+      const minute = Math.floor(now / 60_000);
+      if (minute % 2 === 0 && now % 60_000 < 25_000 && minute !== hiresPubMin) {
+        hiresPubMin = minute;
+        try { await hiresPublish(); } catch (e) { console.error("hires publish rebentou: " + (e && e.message)); }
+      }
+      const gap = 15_000 - (Date.now() % 15_000);
+      await new Promise(r => setTimeout(r, gap));
+    }
+  })();
+  await Promise.all([passLoop, hiresLoop]);
 } else {
   const END = Date.now() + 55 * 60_000;
   while (Date.now() < END) {
