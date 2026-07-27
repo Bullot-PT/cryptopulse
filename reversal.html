@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Y7pRmVqNq5K6Ts/+8bYaJLXqKbZbeLJnexrkVMHM5Ck='; connect-src 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-VoImuQhoKlBT7znRp71z6jiTVDMxZQ9tU+IFzZ1OhLc='; connect-src 'self'; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -42,8 +42,9 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
 </head>
 <body>
 <header>
-  <div class="logo" title="Cryptomacho" style="width:28px;height:28px;display:flex"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg></div>
-  <b>Cryptomacho</b><span class="crumb">Early Reversal Radar</span><span class="beta">BETA</span>
+  <a href="index.html" title="Back to the Cryptomacho dashboard" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit">
+  <div class="logo" style="width:28px;height:28px;display:flex"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg></div>
+  <b>Cryptomacho</b></a><span class="crumb">Early Reversal Radar</span><span class="beta">BETA</span>
   <a class="nav" href="index.html">← dashboard</a>
   <a class="nav" href="book.html">order book</a>
   <span id="status">loading…</span>
@@ -56,7 +57,7 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
     <table id="tbl"><thead><tr>
       <th>coin</th><th>OI</th><th>Δ15m</th><th>Δ1h</th><th>Δ24h</th><th>OI · last 6h</th>
     </tr></thead><tbody id="tb"></tbody></table>
-    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times in London time, UTC in brackets. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Stage 2 (server-side): funding/walls arming gate + Telegram alerts from the VPS.</div>
+    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times in London time, UTC in brackets. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Backtest 27-jul (27 events, 4.7 days, Binance prices — small sample, indicative): 59% moved ≥2% within 2h vs 17% baseline; +OI bursts hit 86% and tend to CONTINUE the move in progress (64%); −OI unwinds tend to REVERSE it (67%). Stage 2 (server-side): funding/walls arming gate + explicit LONG/SHORT direction from live price trend + Telegram alerts from the VPS. Not financial advice — the signal flags the pattern, the trade is yours.</div>
   </section>
   <section class="panel">
     <h2>TRIGGER EVENTS — last days <span class="r" id="evn"></span></h2>
@@ -147,7 +148,10 @@ function render() {
   const box = $("evs"); box.innerHTML = "";
   evs.slice(0, 40).forEach(e => {
     const d = document.createElement("div"); d.className = "ev";
-    d.innerHTML = "<span class='t'>" + hhmm(e.t) + "</span> · <b>" + e.c + "</b> <span class='" + cls(e.ch) + "'>" + pct(e.ch) + " OI / 15m</span> · " + fmt$(e.oi);
+    const dir = e.ch > 0
+      ? "<span style='color:#19c94a;font-weight:700'>+OI · continuation of the move in progress</span>"
+      : "<span style='color:#fab219;font-weight:700'>−OI unwind · possible reversal</span>";
+    d.innerHTML = "<span class='t'>" + hhmm(e.t) + "</span> · <b>" + e.c + "</b> <span class='" + cls(e.ch) + "'>" + pct(e.ch) + " OI / 15m</span> · " + fmt$(e.oi) + "<br>" + dir;
     box.appendChild(d);
   });
   if (!evs.length) box.innerHTML = "<div class='note'>No trigger events in the stored window.</div>";
