@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-VoImuQhoKlBT7znRp71z6jiTVDMxZQ9tU+IFzZ1OhLc='; connect-src 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-6bA2h4aZjZnybtjZuc6u+ADM/le7GkWbDOXe17B2rf0='; connect-src 'self'; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -57,7 +57,7 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
     <table id="tbl"><thead><tr>
       <th>coin</th><th>OI</th><th>Δ15m</th><th>Δ1h</th><th>Δ24h</th><th>OI · last 6h</th>
     </tr></thead><tbody id="tb"></tbody></table>
-    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times in London time, UTC in brackets. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Backtest 27-jul (27 events, 4.7 days, Binance prices — small sample, indicative): 59% moved ≥2% within 2h vs 17% baseline; +OI bursts hit 86% and tend to CONTINUE the move in progress (64%); −OI unwinds tend to REVERSE it (67%). Stage 2 (server-side): funding/walls arming gate + explicit LONG/SHORT direction from live price trend + Telegram alerts from the VPS. Not financial advice — the signal flags the pattern, the trade is yours.</div>
+    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times as DD/MM HH:MM in UTC+1 (London); the value in brackets ending in Z is the same moment in plain UTC (Z = Zulu/UTC). Each event line reads: date/time · coin · how much open interest changed in 15 minutes · total open interest of that coin at the time · what the setup means. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Backtest 27-jul (27 events, 4.7 days, Binance prices — small sample, indicative): 59% moved ≥2% within 2h vs 17% baseline; +OI bursts hit 86% and tend to CONTINUE the move in progress (64%); −OI unwinds tend to REVERSE it (67%). Stage 2 (server-side): funding/walls arming gate + explicit LONG/SHORT direction from live price trend + Telegram alerts from the VPS. Not financial advice — the signal flags the pattern, the trade is yours.</div>
   </section>
   <section class="panel">
     <h2>TRIGGER EVENTS — last days <span class="r" id="evn"></span></h2>
@@ -71,11 +71,12 @@ let hist = null;
 const fmt$ = v => v >= 1e9 ? "$" + (v/1e9).toFixed(2) + "B" : v >= 1e6 ? "$" + (v/1e6).toFixed(1) + "M" : "$" + Math.round(v/1e3) + "k";
 const pct = v => (v > 0 ? "+" : "") + (v*100).toFixed(1) + "%";
 const cls = v => Math.abs(v) < 0.005 ? "fl" : v > 0 ? "up" : "dn";
-const fmtLDN = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+const fmtLDN = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
 const hhmm = t => {
   const d = new Date(t);
   const p = fmtLDN.formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
-  return p.day + " " + p.hour + ":" + p.minute + " LDN <span style='opacity:.55'>(" + String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0") + "Z)</span>";
+  const offH = ((+p.hour - d.getUTCHours()) + 24) % 24;   /* Londres: UTC+1 no verão, UTC+0 no inverno */
+  return p.day + "/" + p.month + " " + p.hour + ":" + p.minute + " UTC+" + offH + " <span style='opacity:.55'>(" + String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0") + "Z)</span>";
 };
 function series(c) { return hist.samples.map(s => [s.t, s.coins[c]]).filter(x => x[1]); }
 function delta(arr, ms) {
