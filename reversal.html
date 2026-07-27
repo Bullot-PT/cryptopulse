@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-n0775zj+KeEaw4uT1r8qfzDHP5OEQw1gVpEi1mev8aI='; connect-src 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Y7pRmVqNq5K6Ts/+8bYaJLXqKbZbeLJnexrkVMHM5Ck='; connect-src 'self'; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -26,9 +26,10 @@ th { text-align:right; color:var(--dim); font-size:10.5px; font-weight:600; padd
 th:first-child, td:first-child { text-align:left; }
 td { padding:6px 10px; border-bottom:1px solid #11151d; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:12px; }
 td.coin { font-family:'Inter',sans-serif; font-weight:700; }
-tr.trig td { background:rgba(250,178,25,0.07); }
-tr.trig td.coin::after { content:"⚡ TRIGGER"; color:var(--warn); font-size:9.5px; font-weight:800; margin-left:8px; letter-spacing:.5px; }
-tr.watch td.coin::after { content:"WATCH"; color:var(--mut); font-size:9.5px; font-weight:700; margin-left:8px; letter-spacing:.5px; }
+tr.trig td { background:rgba(208,59,59,0.12); }
+tr.trig td.coin::after { content:"⚡ TRIGGER"; color:#ff6b6b; font-size:9.5px; font-weight:800; margin-left:8px; letter-spacing:.5px; }
+tr.watch td { background:rgba(250,178,25,0.07); }
+tr.watch td.coin::after { content:"WATCH"; color:var(--warn); font-size:9.5px; font-weight:700; margin-left:8px; letter-spacing:.5px; }
 .up { color:var(--accent); } .dn { color:#ff6b6b; } .fl { color:var(--dim); }
 canvas.sp { vertical-align:middle; }
 select { background:var(--surface-2); color:var(--ink); border:1px solid var(--border); border-radius:6px; padding:3px 6px; font:600 11px 'Inter',sans-serif; }
@@ -41,7 +42,8 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
 </head>
 <body>
 <header>
-  <b>CRYPTOMACHO</b><span class="crumb">Early Reversal Radar</span><span class="beta">BETA</span>
+  <div class="logo" title="Cryptomacho" style="width:28px;height:28px;display:flex"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="32" cy="32" r="27" fill="none" stroke="#12a33a" stroke-width="3.4"/><circle cx="32" cy="32" r="16.5" fill="none" stroke="#12a33a" stroke-width="1.3" opacity="0.35"/><path d="M32 32 L32 5 A27 27 0 0 1 55.4 18.5 Z" fill="#19c94a" opacity="0.22"/><line x1="32" y1="32" x2="55.4" y2="18.5" stroke="#19c94a" stroke-width="2.1" stroke-linecap="round" opacity="0.7"/><path d="M17 43.5 L17 22 L32 38 L47 22 L47 43.5" fill="none" stroke="#19c94a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="44.5" r="3.6" fill="#d03b3b"/></svg></div>
+  <b>Cryptomacho</b><span class="crumb">Early Reversal Radar</span><span class="beta">BETA</span>
   <a class="nav" href="index.html">← dashboard</a>
   <a class="nav" href="book.html">order book</a>
   <span id="status">loading…</span>
@@ -54,7 +56,7 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
     <table id="tbl"><thead><tr>
       <th>coin</th><th>OI</th><th>Δ15m</th><th>Δ1h</th><th>Δ24h</th><th>OI · last 6h</th>
     </tr></thead><tbody id="tb"></tbody></table>
-    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. ⚡ TRIGGER = |Δ15m| ≥ 5% with OI above the floor · WATCH = ≥ 3.5%. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Stage 2 (server-side): funding/walls arming gate + Telegram alerts from the VPS.</div>
+    <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times in London time, UTC in brackets. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Stage 2 (server-side): funding/walls arming gate + Telegram alerts from the VPS.</div>
   </section>
   <section class="panel">
     <h2>TRIGGER EVENTS — last days <span class="r" id="evn"></span></h2>
@@ -68,7 +70,12 @@ let hist = null;
 const fmt$ = v => v >= 1e9 ? "$" + (v/1e9).toFixed(2) + "B" : v >= 1e6 ? "$" + (v/1e6).toFixed(1) + "M" : "$" + Math.round(v/1e3) + "k";
 const pct = v => (v > 0 ? "+" : "") + (v*100).toFixed(1) + "%";
 const cls = v => Math.abs(v) < 0.005 ? "fl" : v > 0 ? "up" : "dn";
-const hhmm = t => { const d = new Date(t); return String(d.getUTCDate()).padStart(2,"0") + " " + String(d.getUTCHours()).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0") + "Z"; };
+const fmtLDN = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+const hhmm = t => {
+  const d = new Date(t);
+  const p = fmtLDN.formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
+  return p.day + " " + p.hour + ":" + p.minute + " LDN <span style='opacity:.55'>(" + String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0") + "Z)</span>";
+};
 function series(c) { return hist.samples.map(s => [s.t, s.coins[c]]).filter(x => x[1]); }
 function delta(arr, ms) {
   if (!arr.length) return null;
