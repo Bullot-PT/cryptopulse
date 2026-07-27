@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-Led0B8V0J6u6ePmTCeR0WU7zDv7ydISEQInTsOxPEhA='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-VdSoPgqFjKH3NuD+oHyQUY/AMfRI+jz7o/P8kmMWgOk='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -117,7 +117,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -360,6 +360,7 @@ function sampleCol() {
 
 /* ---------- história do coletor ---------- */
 async function loadHist() {
+  loadHires();                                        /* v9: camada do servidor em paralelo */
   try {
     const r = await fetch("data/book-live.json?b=" + Math.floor(Date.now() / 300000), { cache: "no-store" });
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -382,9 +383,25 @@ async function loadHist() {
       }
     } catch (e) {}
     const f = hist && hist.coins && hist.coins[coin] || [];
-    $("histNote").textContent = f.length ? "history: " + f.length + " frames stored (1-min last 4h · 10-min to 48h · grows 24/7)" : "history: building — the collector writes 1-min frames, 24/7";
+    $("histNote").textContent = f.length ? "history: " + f.length + " frames (15s server layer ~45m · 1-min 4h · 10-min 48h · 24/7)" : "history: building — the collector writes 1-min frames, 24/7";
   } catch (e) { $("histNote").textContent = "history: not reachable right now"; }
   if (mode === "hist") draw();
+}
+/* v9: hires do servidor — a VPS grava "a sessão" por nós 24/7 (frames de 15 s ao lstep,
+   ±0,6% do mid, últimos 45 min, doc por moeda escrito de 2 em 2 min). Sem doc (moeda custom
+   fora da lista do coletor) a página segue sem a camada — nada parte. */
+let hires = null, hiresCoin = null;
+async function loadHires() {
+  const want = coin;
+  try {
+    const r = await fetch("data/book-hires-" + want + ".json?b=" + Math.floor(Date.now() / 120000), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    if (j && j.v === 1 && j.frames && j.frames.length && want === coin) {
+      hires = j; hiresCoin = want;
+      if (mode === "live") draw();
+    }
+  } catch (e) {}
 }
 
 /* ---------- desenho ---------- */
@@ -441,7 +458,8 @@ function draw() {
   const st = live ? cfg.lstep : (hist && hist.step && hist.step[coin]) || cfg.step;
   const cols = live ? liveCols : (hist && hist.coins && hist.coins[coin] || []);
   const histAvail = live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length;
-  if (!cols.length && !histAvail) {
+  const hiresOk = live && hires && hiresCoin === coin && hires.frames && hires.frames.length;
+  if (!cols.length && !histAvail && !hiresOk) {
     cx.fillStyle = "#6b7688"; cx.font = "13px sans-serif"; cx.textAlign = "center";
     cx.fillText(live ? "Connecting to the feeds — the heatmap starts flowing in seconds…"
       : "History is building — the collector writes a frame every 10 minutes, 24/7.", W / 2, H / 2);
@@ -456,7 +474,7 @@ function draw() {
   const sampleMs = live ? 1000 : 60_000;
   const colW = Math.max(1, TW * sampleMs / span);
   /* centro Y: mid suavizado (EMA) para a vista seguir o preço sem tremer */
-  const lastPx = (cols.length && cols[cols.length - 1].px) || (histAvail && hist.coins[coin][hist.coins[coin].length - 1].px) || (yCenter || 0);
+  const lastPx = (cols.length && cols[cols.length - 1].px) || (histAvail && hist.coins[coin][hist.coins[coin].length - 1].px) || (hiresOk && hires.frames[hires.frames.length - 1].px) || (yCenter || 0);
   if (lastPx > 0) yCenter = yCenter == null ? lastPx : yCenter + (lastPx - yCenter) * 0.15;
   /* por defeito a vista ABRAÇA o book real (±~0.06%) — o wheel afasta se quiseres contexto */
   let half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0006, st * 28) : Math.max(lastPx * 0.02, st * 24));
@@ -467,6 +485,8 @@ function draw() {
     for (let i = cols.length - 1; i >= 0; i -= stpA) { const c = cols[i]; if (c.t < t0) break; if (c.px) { if (c.px < pMin) pMin = c.px; if (c.px > pMax) pMax = c.px; } }
     if (hist && hist.coins && hist.coins[coin]) { const hfA = hist.coins[coin];
       for (let i = hfA.length - 1; i >= 0; i--) { const f = hfA[i]; if (!f) continue; if (f.t < t0) break; if (f.px) { if (f.px < pMin) pMin = f.px; if (f.px > pMax) pMax = f.px; } } }
+    if (hiresOk) { const hfA2 = hires.frames;
+      for (let i = hfA2.length - 1; i >= 0; i--) { const f = hfA2[i]; if (!f) continue; if (f.t < t0) break; if (f.px) { if (f.px < pMin) pMin = f.px; if (f.px > pMax) pMax = f.px; } } }
     const cen = yCenter || lastPx;
     if (isFinite(pMin) && pMax >= pMin) half = Math.max(half, cen - pMin + st * 8, pMax - cen + st * 8);
   }
@@ -485,12 +505,24 @@ function draw() {
     /* o pico de cor tem de contar TAMBÉM com a história cosida — senão a esquerda satura */
     const firstLive0 = cols.length ? cols[0].t : now;
     const hstep0 = (hist.step && hist.step[coin]) || cfg.step;
+    const rD0 = st / hstep0;   /* v9: bins grossos guardam mais USD só por serem largos — compara-se densidade */
     const hf0 = hist.coins[coin];
     for (let i = hf0.length - 1; i >= 0; i--) {
       const f = hf0[i]; if (!f || f.t > now) continue;
       if (f.t < t0 - 600_000) break;
-      for (const k in f.b) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.b[k] > maxV) maxV = f.b[k]; }
-      for (const k in f.a) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.a[k] > maxV) maxV = f.a[k]; }
+      for (const k in f.b) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.b[k] * rD0 > maxV) maxV = f.b[k] * rD0; }
+      for (const k in f.a) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.a[k] * rD0 > maxV) maxV = f.a[k] * rD0; }
+    }
+  }
+  if (hiresOk) {
+    /* v9: a camada hires também conta para o pico da cor (já vem ao lstep; rDh cobre custom) */
+    const hstH = hires.step || st, rDh = st / hstH;
+    const hfH0 = hires.frames;
+    const stpH = Math.max(1, Math.floor(span / 15_000 / 1800));
+    for (let i = hfH0.length - 1; i >= 0; i -= stpH) {
+      const f = hfH0[i]; if (!f) continue; if (f.t < t0 - 45_000) break;
+      for (const k in f.b) { const p = k * hstH; if (p >= pLo && p <= pHi && f.b[k] * rDh > maxV) maxV = f.b[k] * rDh; }
+      for (const k in f.a) { const p = k * hstH; if (p >= pLo && p <= pHi && f.a[k] * rDh > maxV) maxV = f.a[k] * rDh; }
     }
   }
   if (maxV <= 0) maxV = 1;
@@ -499,6 +531,7 @@ function draw() {
   if (live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length) {
     const firstLive = cols.length ? cols[0].t : now;
     const hstep = (hist.step && hist.step[coin]) || cfg.step;
+    const rD = st / hstep;     /* v9: cor por unidade de preço — o passado deixa de saturar */
     /* cada frame estica até ao SEGUINTE (agora há frames de 1 min E de 10 min misturados),
        com tecto de 15 min — um coletor morto deixa o buraco à vista, não se pinta por cima */
     const hCap = TW * 900_000 / span;
@@ -526,31 +559,57 @@ function draw() {
       nextHX = x;
       const hRowH = Math.max(1, hstep / (pHi - pLo) * TH);
       for (const k in f.b) { const p = k * hstep; if (p < pLo || p > pHi) continue;
-        const col2 = heat(f.b[k], maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
+        const col2 = heat(f.b[k] * rD, maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
       for (const k in f.a) { const p = k * hstep; if (p < pLo || p > pHi) continue;
-        const col2 = heat(f.a[k], maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
+        const col2 = heat(f.a[k] * rD, maxV); if (col2) { cx.fillStyle = col2; cx.fillRect(x, yOf(p) - hRowH / 2, wClip + 0.5, hRowH + 0.4); } }
       drew = true;
     }
-    if (drew && cols.length) {
-      histEdgeX = TW - (now - firstLive) / span * TW;
-      cx.strokeStyle = "rgba(250,178,25,0.5)"; cx.setLineDash([3, 4]); cx.beginPath();
-      cx.moveTo(histEdgeX, 0); cx.lineTo(histEdgeX, TH); cx.stroke(); cx.setLineDash([]);
-      cx.fillStyle = "#8f9aac"; cx.font = "8.5px 'IBM Plex Mono', monospace"; cx.textAlign = "right";
-      cx.fillText("collector ◂", histEdgeX - 4, 12);
-      cx.textAlign = "left"; cx.fillText("▸ fine 1s (browser)", histEdgeX + 4, 12);
+    if (drew && cols.length) histEdgeX = TW - (now - firstLive) / span * TW;
+  }
+  /* v9: camada HIRES do servidor — a VPS grava "a sessão" por nós 24/7. Pinta por cima do
+     grosso; a sessão do browser pinta por cima disto. Um frame de 15 s estica no máx. 45 s —
+     VPS parada deixa o buraco à vista, nada se inventa. */
+  let hiresNew = 0, hiresOld = Infinity;
+  if (hiresOk) {
+    const hstH = hires.step || st, rDh = st / hstH;
+    const hfH = hires.frames;
+    hiresNew = hfH[hfH.length - 1].t; hiresOld = hfH[0].t;
+    const hRowH2 = Math.max(1, hstH / (pHi - pLo) * TH);
+    const capW = TW * 45_000 / span;
+    let nx = Math.min(TW, TW - (now - hiresNew) / span * TW + capW);
+    for (let i = hfH.length - 1; i >= 0; i--) {
+      const f = hfH[i]; if (!f) continue;
+      if (f.t < t0 - 45_000) break;
+      const x = TW - (now - f.t) / span * TW;
+      if (i && nx - x < 0.7 && hfH[i - 1].t >= t0 - 45_000) continue;   /* sub-pixel em janelas largas */
+      const w = Math.min(Math.max(0.6, nx - x), capW) + 0.3;
+      for (const k in f.b) { const p = k * hstH; if (p < pLo || p > pHi) continue;
+        const c2 = heat(f.b[k] * rDh, maxV); if (c2) { cx.fillStyle = c2; cx.fillRect(x, yOf(p) - hRowH2 / 2, w, hRowH2 + 0.4); } }
+      for (const k in f.a) { const p = k * hstH; if (p < pLo || p > pHi) continue;
+        const c2 = heat(f.a[k] * rDh, maxV); if (c2) { cx.fillStyle = c2; cx.fillRect(x, yOf(p) - hRowH2 / 2, w, hRowH2 + 0.4); } }
+      nx = x;
     }
+  }
+  if (histEdgeX !== null) {
+    cx.strokeStyle = "rgba(250,178,25,0.5)"; cx.setLineDash([3, 4]); cx.beginPath();
+    cx.moveTo(histEdgeX, 0); cx.lineTo(histEdgeX, TH); cx.stroke(); cx.setLineDash([]);
+    cx.fillStyle = "#8f9aac"; cx.font = "8.5px 'IBM Plex Mono', monospace"; cx.textAlign = "right";
+    cx.fillText("server ◂", histEdgeX - 4, 12);
+    cx.textAlign = "left"; cx.fillText("▸ fine 1s (browser)", histEdgeX + 4, 12);
   }
   /* células — cada bin no seu preço exacto, coluna na sua posição exacta no tempo.
      GAP-STRETCH (pedido dele, riscas resolvidas): cada coluna estica até à seguinte — o book
      em descanso É o último estado real conhecido — mas só até 60 s; buracos maiores (PC
      desligado, tab morto) ficam PRETOS: gap honesto, não se inventa nada. */
   const maxStretch = live ? TW * 60_000 / span : TW * 900_000 / span;
+  const maxStretch20 = TW * 20_000 / span;   /* v9: onde o hires cobre, o gap da sessão mostra o servidor */
   let nextX = TW;
   for (let i = cols.length - 1; i >= 0; i--) {
     const c = cols[i]; if (c.t < t0) break;
     const x = TW - (now - c.t) / span * TW - colW;
     if (i && nextX - x < 0.7 && cols[i - 1].t >= t0) continue;   /* v8: sub-pixel — ~1 coluna por px */
-    const wPaint = Math.min(Math.max(colW, nextX - x), Math.max(colW, maxStretch)) + 0.5;
+    const mS = (live && hiresNew && c.t >= hiresOld && c.t <= hiresNew) ? maxStretch20 : maxStretch;
+    const wPaint = Math.min(Math.max(colW, nextX - x), Math.max(colW, mS)) + 0.5;
     for (const k in c.b) { const p = k * st; if (p < pLo || p > pHi) continue;
       const col = heat(c.b[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, wPaint, rowH + 0.4); } }
     for (const k in c.a) { const p = k * st; if (p < pLo || p > pHi) continue;
@@ -568,6 +627,20 @@ function draw() {
       if (f.px < pLo || f.px > pHi) { on = false; continue; }
       if (!on || f.t - pT > 960_000) { cx.moveTo(x, y); on = true; } else cx.lineTo(x, y);
       pT = f.t;
+    }
+    cx.stroke();
+  }
+  if (hiresOk) {
+    /* v9: linha de preço também sobre a camada hires — px real de cada frame de 15 s */
+    cx.strokeStyle = "rgba(255,255,255,0.55)"; cx.lineWidth = 1; cx.beginPath();
+    let onH = false, pTH = 0;
+    const hfH2 = hires.frames;
+    for (let i = 0; i < hfH2.length; i++) {
+      const f = hfH2[i]; if (!f || !f.px || f.t < t0) continue;
+      const x = TW - (now - f.t) / span * TW, y = yOf(f.px);
+      if (f.px < pLo || f.px > pHi) { onH = false; continue; }
+      if (!onH || f.t - pTH > 60_000) { cx.moveTo(x, y); onH = true; } else cx.lineTo(x, y);
+      pTH = f.t;
     }
     cx.stroke();
   }
