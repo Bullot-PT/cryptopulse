@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-7bllA92U50YIuMkVRrl9UCMU7b2epuF2NGpJ+z+zjRQ='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-ik0N+KNUN3UqnJLH9sfRWBuD1F/cA/TICrPxUBlYG1c='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -120,7 +120,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v10: velas OHLC reais (Binance spot 1s/1m/5m, fallback Bybit perp) por cima do heat, toggle CANDLES; v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v11: eixo do tempo + candles sempre frescas (refresh fora do draw) + purga da sessão pré-v9b; v10: velas OHLC reais (Binance spot 1s/1m/5m, fallback Bybit perp) por cima do heat, toggle CANDLES; v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -212,6 +212,10 @@ function idbSave() {
     if (nt.length) idbLastTr = nt[nt.length - 1].t;
   } catch (e) {}
 }
+/* v11: sessão gravada ANTES do fix v9b (mid cruzado no switch) tem px contaminado — os spikes
+   do HYPE nas fotos dele. Não se restaura nem se mantém nada anterior a esta época; o servidor
+   (hires/fine/live) cobre esse período. A época sai sozinha da janela de 48 h. */
+const SESS_EPOCH = 1785148500000;   /* 27-jul-2026 ~15:15 UTC — v9b live */
 function idbRestore(c) {
   if (!idb) return;
   try {
@@ -222,11 +226,11 @@ function idbRestore(c) {
     tx.oncomplete = () => {
       if (coin !== c) return;                            /* trocou de moeda entretanto */
       const firstT = liveCols.length ? liveCols[0].t : Infinity;
-      const older = (rc.result || []).filter(x => x && x.t < firstT)
+      const older = (rc.result || []).filter(x => x && x.t < firstT && x.t >= SESS_EPOCH)
         .map(x => ({ t: x.t, b: x.b || {}, a: x.a || {}, px: x.px, src: x.src || [] }));
       if (older.length) liveCols = older.concat(liveCols);
       const firstTr = trades.length ? trades[0].t : Infinity;
-      const oldTr = (rt.result || []).filter(x => x && x.t < firstTr)
+      const oldTr = (rt.result || []).filter(x => x && x.t < firstTr && x.t >= SESS_EPOCH)
         .map(x => ({ t: x.t, px: x.px, usd: x.usd, buy: !!x.buy }));
       if (oldTr.length) trades = oldTr.concat(trades);
       idbLastCol = 0; idbLastTr = 0;                     /* re-put é upsert: a chave deduplica */
@@ -237,7 +241,7 @@ function idbRestore(c) {
 function idbPrune() {
   if (!idb) return;
   try {
-    const cut = Date.now() - IDB_KEEP;
+    const cut = Math.max(Date.now() - IDB_KEEP, SESS_EPOCH);   /* v11: apaga também o pré-v9b */
     const tx = idb.transaction(["cols", "trades"], "readwrite");
     Object.keys(COINS).forEach(c => {
       tx.objectStore("cols").delete(IDBKeyRange.bound([c, 0], [c, cut]));
@@ -754,6 +758,23 @@ function draw() {
     const y = yOf(lastPx);
     cx.fillStyle = "#12a33a"; cx.fillRect(TW, y - 8, AXIS_W, 15);
     cx.fillStyle = "#fff"; cx.fillText(fmtPx(lastPx), TW + 5, y + 3);
+  }
+  /* v11: eixo do TEMPO com gridlines (Coinglass/Bookmap têm; sem isto o passado não se lê) */
+  {
+    const tSteps = [30_000, 60_000, 300_000, 900_000, 1800_000, 3600_000, 7200_000, 14400_000, 43200_000];
+    let stp = tSteps[tSteps.length - 1];
+    for (const sv of tSteps) { if (span / sv <= 9) { stp = sv; break; } }
+    cx.font = "9px 'IBM Plex Mono', monospace"; cx.textAlign = "center";
+    for (let tt = Math.ceil(t0 / stp) * stp; tt <= now; tt += stp) {
+      const x = TW - (now - tt) / span * TW;
+      if (x < 20 || x > TW - 10) continue;
+      cx.strokeStyle = "rgba(255,255,255,0.05)"; cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, TH); cx.stroke();
+      const dT = new Date(tt);
+      const lbl = String(dT.getHours()).padStart(2, "0") + ":" + String(dT.getMinutes()).padStart(2, "0") +
+        (stp < 60_000 ? ":" + String(dT.getSeconds()).padStart(2, "0") : "");
+      cx.fillStyle = "#6b7688"; cx.fillText(lbl, x, TH - 5);
+    }
+    cx.textAlign = "left";
   }
   hmView = { t0, span, now, pLo, pHi, TW, TH, st, cols, live, maxV };
   /* legenda do heat: barra da paleta + escala em USD do pico visível */
@@ -1547,6 +1568,16 @@ window.addEventListener("beforeunload", sessSave);
 loadHist();
 setInterval(loadHist, 5 * 60_000);
 setInterval(loadHires, 120_000);   /* v9: a camada do servidor é publicada ao minuto — refresca a borda */
+setInterval(() => { if (showCandles && view !== "dom") loadCandles(); }, 10_000);   /* v11: corre mesmo com o tab escondido */
+document.addEventListener("visibilitychange", () => {
+  /* v11: ao voltar ao tab, nada pode estar velho — velas, camada do servidor e um draw já */
+  if (document.visibilityState === "visible") {
+    candles.fetchedAt = 0;
+    if (showCandles) loadCandles();
+    loadHires();
+    if (view !== "dom") draw();
+  }
+});
 /* amostragem no Web Worker: o setInterval da PÁGINA é estrangulado a 1/min com o tab em
    segundo plano — era isso que deixava o heatmap às riscas (1 coluna por minuto escondido,
    denso só depois de voltares ao tab). O timer num Worker não é estrangulado e os WebSockets
