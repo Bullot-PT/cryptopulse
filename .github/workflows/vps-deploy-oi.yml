@@ -1,0 +1,69 @@
+name: VPS deploy oi-collector
+# Instala/actualiza o coletor OI como serviço systemd 24/7 na VPS (migração 2 — padrão do book).
+# Idempotente: correr outra vez = actualizar código e reiniciar. O estado (data/) NÃO é esmagado
+# num redeploy — só se semeia o que faltar. Depois de verificar: desligar oi-collector.yml e
+# oi-standby.yml nas Actions (ficam como standby de 1 clique).
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Instalar código + estado inicial + secrets (do GitHub para a VPS, nunca pelo chat)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+          SOLANA_RPC: ${{ secrets.SOLANA_RPC }}
+          COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          set -eu
+          mkdir -p /opt/cryptomacho/oi/data
+          cp collect.mjs oi-daemon.sh /opt/cryptomacho/oi/
+          chmod +x /opt/cryptomacho/oi/oi-daemon.sh
+          # semear data/ só com o que ainda não existe — um redeploy não pode esmagar o estado
+          # vivo do daemon (alert-state, históricos) com a cópia do repo
+          for f in data/*.json; do
+            [ -f "/opt/cryptomacho/oi/$f" ] || cp "$f" "/opt/cryptomacho/oi/$f"
+          done
+          umask 077
+          printf 'TELEGRAM_TOKEN=%s\nTELEGRAM_CHAT=%s\nSOLANA_RPC=%s\nCOINALYZE_KEY=%s\nCF_ACCOUNT_ID=%s\nCF_API_TOKEN=%s\nCF_KV_NAMESPACE_ID=%s\n' \
+            "$TELEGRAM_TOKEN" "$TELEGRAM_CHAT" "$SOLANA_RPC" "$COINALYZE_KEY" \
+            "$CF_ACCOUNT_ID" "$CF_API_TOKEN" "$CF_KV_NAMESPACE_ID" > /opt/cryptomacho/oi/env
+          ls -la /opt/cryptomacho/oi
+      - name: Serviço systemd + arranque
+        run: |
+          set -eu
+          sudo tee /etc/systemd/system/cryptomacho-oi.service >/dev/null <<'EOF'
+          [Unit]
+          Description=Cryptomacho OI collector (24/7)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=runner
+          WorkingDirectory=/opt/cryptomacho/oi
+          EnvironmentFile=/opt/cryptomacho/oi/env
+          ExecStart=/bin/sh /opt/cryptomacho/oi/oi-daemon.sh
+          Restart=always
+          RestartSec=10
+          MemoryMax=1G
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          sudo systemctl daemon-reload
+          sudo systemctl enable cryptomacho-oi
+          sudo systemctl restart cryptomacho-oi
+      - name: Verificar (espera uma passagem completa)
+        run: |
+          sleep 340
+          sudo systemctl status cryptomacho-oi --no-pager | head -12
+          echo "---- últimas linhas do log ----"
+          sudo journalctl -u cryptomacho-oi -n 60 --no-pager

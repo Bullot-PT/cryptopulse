@@ -1,0 +1,55 @@
+name: OI archive (KV -> git, hourly)
+# Com o coletor OI na VPS (migração 2), o KV é quem serve o site em tempo real; este workflow
+# guarda no git, de hora a hora, uma cópia dos ficheiros que o collect.mjs escreve — arquivo e
+# fallback do raw. NÃO toca em liq-book-lighter.json (é do coletor Lighter, que continua a
+# fazer push próprio). Valida o JSON antes de commitar — nunca se arquiva uma página de erro.
+on:
+  schedule:
+    - cron: '9 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: oi-archive
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Descarregar do KV e commitar se mudou
+        run: |
+          set -u
+          FILES="oi-history.json hl-pos.json hl-wallets.json hl-seen.json alert-log.json alert-state.json radar-history.json liq-book.json liq-totals.json upbit.json kalshi.json cg-mirror.json"
+          mkdir -p /tmp/kv
+          GOT=""
+          for f in $FILES; do
+            if curl -s --max-time 30 "https://cryptomacho.io/data/${f}?b=$(date +%s)" -o "/tmp/kv/$f" \
+               && [ -s "/tmp/kv/$f" ] \
+               && python3 -c "import json,sys;json.load(open('/tmp/kv/$f'))" 2>/dev/null; then
+              GOT="$GOT $f"
+            else
+              echo "salto ${f} — download falhou ou não é JSON válido"
+            fi
+          done
+          [ -n "$GOT" ] || { echo "nada descarregado — termino sem mexer"; exit 0; }
+          git config user.name "oi-archive-bot"
+          git config user.email "actions@users.noreply.github.com"
+          apply() { for f in $GOT; do cp "/tmp/kv/$f" "data/$f"; done; }
+          apply
+          git add data/
+          git diff --cached --quiet && { echo "sem mudanças — arquivo já em dia"; exit 0; }
+          git commit -m "OI archive [skip ci]" >/dev/null
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "push recusado — reconstruo em cima de origin/main (tentativa $i)"
+            git fetch origin main && git reset --hard FETCH_HEAD
+            apply
+            git add data/
+            git diff --cached --quiet && { echo "alguém já arquivou o mesmo — nada a fazer"; exit 0; }
+            git commit -m "OI archive [skip ci]" >/dev/null
+            sleep $((i * 3))
+          done
+          echo "push falhou após tentativas — a próxima hora arquiva"
+          exit 0
