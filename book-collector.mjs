@@ -312,7 +312,7 @@ if (mode === "once") {
       try { await hiresTick(); } catch (e) { console.error("hires tick rebentou: " + (e && e.message)); }
       const now = Date.now();
       const minute = Math.floor(now / 60_000);
-      if (minute % 2 === 0 && now % 60_000 < 25_000 && minute !== hiresPubMin) {
+      if (now % 60_000 < 25_000 && minute !== hiresPubMin) {
         hiresPubMin = minute;
         try { await hiresPublish(); } catch (e) { console.error("hires publish rebentou: " + (e && e.message)); }
       }
