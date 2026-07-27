@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-IyKjSnS51HiAk6ybx6APK4VML7cOOqeulh2k+WHIs2I=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-atlvYGKRDCfuxrjZjR1kUMHuSxI1Z3z06D64vTjB3uA=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -734,6 +734,9 @@
   .up-sym:hover { text-decoration: underline; }
   /* Funding & Basis */
   .fd-table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+  /* v134: funding extremo pisca — a cor da célula já diz o lado, o brilho diz a urgência */
+  @keyframes fdBlink { 0%, 100% { filter: none; } 50% { filter: brightness(2.4); } }
+  .fd-blink { animation: fdBlink 0.85s ease-in-out infinite; font-weight: 800; }
   .fd-grip { cursor: grab; color: var(--muted); margin-right: 5px; user-select: none; font-size: 10px; }
   tr[data-fdc]:hover .fd-grip { color: var(--ink-2); }
   .fd-rm { opacity: 0; transition: opacity .12s; }
@@ -4456,7 +4459,7 @@ async function renderGlobalOI(rows, total, cachedAt) {
     if (i === 0 || i === raw.length - 1) return true;
     const a = raw[i - 1][1], b = x[1], c = raw[i + 1][1];
     if (!(a > 0) || !(c > 0)) return true;
-    const bad = Math.abs(b - a) / a > 0.15 && Math.abs(b - c) / c > 0.15 && Math.abs(a - c) / a < 0.05;
+    const bad = Math.abs(b - a) / a > 0.02 && Math.abs(b - c) / c > 0.02 && Math.abs(a - c) / a < 0.01;
     if (bad) goiSkip++;
     return !bad;
   }).map(x => x[1]);
@@ -7898,9 +7901,12 @@ function fdCell(v, iv, miss) {
     return '<td class="fd-c" style="color:var(--muted)"' + (miss ? ' title="' + esc(miss) + '"' : "") + ">—</td>";
   const pct = v * 100;
   const mag = Math.min(1, Math.abs(pct) / 0.005);
-  const col = pct > 0 ? "208,59,59" : "18,163,58";
+  /* v134 (pedido dele): positivo = VERDE, negativo = VERMELHO; extremo (|rate| ≥ 0.005%/h,
+     4× o funding standard, ≈ ±44%/ano) PISCA — verde a piscar / vermelho a piscar */
+  const col = pct > 0 ? "18,163,58" : "208,59,59";
+  const ext = Math.abs(pct) >= 0.005;
   const per = iv > 0 ? " — the exchange charges " + (pct * iv).toFixed(4) + "% every " + iv + "h, which is what its own screen shows; this column divides by " + iv + " so every venue is comparable per hour" : "";
-  return '<td class="fd-c" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + esc(per) + '">' + pct.toFixed(4) + "</td>";
+  return '<td class="fd-c' + (ext ? " fd-blink" : "") + '" style="background:rgba(' + col + "," + (0.06 + 0.38 * mag).toFixed(2) + ')" title="' + pct.toFixed(4) + "%/h ≈ " + (pct * 24 * 365).toFixed(0) + '%/yr — ' + (pct > 0 ? "longs pay (down-fuel)" : "shorts pay (up-fuel)") + (ext ? " — EXTREME funding" : "") + esc(per) + '">' + pct.toFixed(4) + "</td>";
 }
 function kCell(k) {
   const v = k && typeof k === "object" ? k.v : k;
