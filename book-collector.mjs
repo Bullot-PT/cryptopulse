@@ -1,5 +1,5 @@
-/* book-collector.mjs — snapshots do orderbook agregado (Binance + OKX + Hyperliquid + Bybit)
-   para o heatmap de liquidez (v128). Frames de 10 em 10 minutos, guardados no Workers KV:
+/* book-collector.mjs — snapshots do orderbook agregado (Binance spot+perp + OKX + Hyperliquid + Bybit)
+   para o heatmap de liquidez (v129-vps: modo daemon p/ systemd na VPS + fonte BNP via fapi + SQLite local opcional; v128: Frames de 10 em 10 minutos, guardados no Workers KV:
      book-live.json           — janela rolante de 48h (o que a página lê por defeito)
      book-arch-YYYYMMDD.json  — arquivo do dia anterior, escrito uma vez por dia
    REGRAS: só dados reais — uma exchange que falhe fica FORA do frame e o frame diz quais
@@ -51,6 +51,26 @@ async function kvPut(key, obj) {
   return r.ok;
 }
 
+/* ---------- v129-vps: SQLite local (história longa para backtests, 14-ago) ----------
+   Só activa com BOOK_DB definido E better-sqlite3 instalado (na VPS). Nos runners GitHub
+   (standby) nada disto corre — zero dependências novas lá. Zero escritas KV extra. */
+let db = null, dbIns = null;
+if (process.env.BOOK_DB) {
+  try {
+    const mod = await import("better-sqlite3");
+    db = new mod.default(process.env.BOOK_DB);
+    db.pragma("journal_mode = WAL");
+    db.exec("CREATE TABLE IF NOT EXISTS book_frames (coin TEXT NOT NULL, t INTEGER NOT NULL, step REAL, px REAL, src TEXT, b TEXT, a TEXT, PRIMARY KEY (coin, t))");
+    dbIns = db.prepare("INSERT OR REPLACE INTO book_frames (coin,t,step,px,src,b,a) VALUES (?,?,?,?,?,?,?)");
+    console.log("sqlite activo: " + process.env.BOOK_DB);
+  } catch (e) { console.log("sqlite indisponível (" + e.message + ") — sigo só com KV"); db = null; }
+}
+function dbSave(coin, cfg, f) {
+  if (!dbIns || !f) return;
+  try { dbIns.run(coin, f.t, cfg.step, f.px, f.src.join("+"), JSON.stringify(f.b), JSON.stringify(f.a)); }
+  catch (e) { console.log("sqlite insert falhou: " + e.message); }
+}
+
 /* devolve [[px, usd], ...] dos dois lados, ou null se a fonte falhou */
 async function srcBinance(sym) {
   /* os runners do GitHub (IPs EUA) levam 451 da fapi. A própria Binance publica um endpoint
@@ -62,6 +82,12 @@ async function srcBinance(sym) {
   } catch (e) {
     return mk(await jfetch("https://fapi.binance.com/fapi/v1/depth?symbol=" + sym + "&limit=500"));
   }
+}
+async function srcBinancePerp(sym) {
+  /* v129-vps: na VPS (IP europeu) a fapi responde — book do PERP, onde vive o fluxo forçado.
+     Nos runners GitHub continua 451 e a fonte fica simplesmente FORA do frame (src diz quem entrou). */
+  const j = await jfetch("https://fapi.binance.com/fapi/v1/depth?symbol=" + sym + "&limit=500");
+  return { bids: j.bids.map(x => [+x[0], +x[0] * +x[1]]), asks: j.asks.map(x => [+x[0], +x[0] * +x[1]]) };
 }
 async function srcOkx(inst) {
   const j = await jfetch("https://www.okx.com/api/v5/market/books?instId=" + inst + "&sz=400");
@@ -95,6 +121,7 @@ async function frameFor(coin, cfg) {
   const out = { t: Date.now(), b: {}, a: {}, src: [] };
   const srcs = [
     ["BN", () => srcBinance(cfg.bn)],
+    ["BNP", () => srcBinancePerp(cfg.bn)],
     ["OKX", () => srcOkx(cfg.ok)],
     ["BY", () => srcBybit(cfg.by)],
     ["HL", () => srcHl(cfg.hl)]
@@ -135,6 +162,7 @@ async function pass(grid10) {
   for (const [coin, cfg] of Object.entries(COINS)) {
     const f = await frameFor(coin, cfg);
     frames[coin] = f;
+    dbSave(coin, cfg, f);
     if (f) console.log(coin + ": frame ok (" + f.src.join("+") + ", px " + f.px + ", " +
       Object.keys(f.b).length + "b/" + Object.keys(f.a).length + "a bins)" + (grid10 ? " [10m]" : ""));
   }
@@ -194,6 +222,15 @@ async function pass(grid10) {
 const mode = process.argv[2] || "loop";
 if (mode === "once") {
   await pass(true);
+} else if (mode === "daemon") {
+  /* v129-vps: serviço systemd — corre para sempre, alinhado à grelha de 1 min; o systemd
+     reinicia se rebentar (Restart=always). */
+  for (;;) {
+    const minute = Math.round(Date.now() / 60_000);
+    try { await pass(minute % 10 === 0); } catch (e) { console.error("passagem rebentou: " + (e && e.message)); }
+    const gap = 60_000 - (Date.now() % 60_000);
+    await new Promise(r => setTimeout(r, gap));
+  }
 } else {
   const END = Date.now() + 55 * 60_000;
   while (Date.now() < END) {
