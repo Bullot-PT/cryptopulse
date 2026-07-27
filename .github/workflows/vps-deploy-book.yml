@@ -1,0 +1,71 @@
+name: VPS deploy book-collector
+# Instala/actualiza o book-collector como serviço systemd 24/7 na VPS.
+# Idempotente: correr outra vez = actualizar o código e reiniciar o serviço.
+# Escritas KV: iguais às de hoje (fine 1440/dia + live 144/dia + arch) — a VPS substitui a
+# corrente de Actions, não soma a ela.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Teste de conectividade (o motivo da VPS)
+        run: |
+          set -x
+          curl -s -o /dev/null -w "binance fapi (perp): %{http_code}\n" "https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=5"
+          curl -s -o /dev/null -w "binance spot:        %{http_code}\n" "https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=5"
+          curl -s -o /dev/null -w "bybit linear:        %{http_code}\n" "https://api.bybit.com/v5/market/orderbook?category=linear&symbol=BTCUSDT&limit=5"
+          curl -s -o /dev/null -w "okx:                 %{http_code}\n" "https://www.okx.com/api/v5/market/books?instId=BTC-USDT-SWAP&sz=5"
+          curl -s -o /dev/null -w "hyperliquid:         %{http_code}\n" -X POST -H "Content-Type: application/json" -d '{"type":"l2Book","coin":"BTC","nSigFigs":5}' "https://api.hyperliquid.xyz/info"
+      - name: Instalar código + dependências + secrets (do GitHub para a VPS, nunca pelo chat)
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          set -eu
+          mkdir -p /opt/cryptomacho/data
+          cp book-collector.mjs /opt/cryptomacho/
+          cd /opt/cryptomacho
+          [ -f package.json ] || npm init -y >/dev/null
+          npm install better-sqlite3 --no-audit --no-fund
+          umask 077
+          printf 'CF_ACCOUNT_ID=%s\nCF_API_TOKEN=%s\nCF_KV_NAMESPACE_ID=%s\nBOOK_DB=/opt/cryptomacho/data.db\n' \
+            "$CF_ACCOUNT_ID" "$CF_API_TOKEN" "$CF_KV_NAMESPACE_ID" > /opt/cryptomacho/env
+          ls -la /opt/cryptomacho
+      - name: Serviço systemd + arranque
+        run: |
+          set -eu
+          sudo tee /etc/systemd/system/cryptomacho-book.service >/dev/null <<'EOF'
+          [Unit]
+          Description=Cryptomacho book collector (24/7)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=runner
+          WorkingDirectory=/opt/cryptomacho
+          EnvironmentFile=/opt/cryptomacho/env
+          ExecStart=/usr/bin/node /opt/cryptomacho/book-collector.mjs daemon
+          Restart=always
+          RestartSec=10
+          MemoryMax=1G
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          sudo systemctl daemon-reload
+          sudo systemctl enable cryptomacho-book
+          sudo systemctl restart cryptomacho-book
+      - name: Verificar (espera 2 passes de 1 min)
+        run: |
+          sleep 140
+          sudo systemctl status cryptomacho-book --no-pager | head -12
+          echo "---- últimas linhas do log ----"
+          sudo journalctl -u cryptomacho-book -n 40 --no-pager
+          echo "---- sqlite ----"
+          sqlite3 /opt/cryptomacho/data.db "SELECT coin, COUNT(*), MAX(t) FROM book_frames GROUP BY coin;" || true
