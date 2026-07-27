@@ -1,0 +1,35 @@
+name: VPS watchdog (frescura do KV)
+# Corre nos runners do GITHUB (não na VPS — é ela que está a ser vigiada).
+# Se o book-fine.json parar >15 min, alerta no Telegram. O cron do GitHub é uma lotaria
+# (pode disparar só de hora a hora) — para um alarme chega; o objectivo é saber ANTES de
+# olhares para o site que a VPS calou.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verificar frescura do book-fine.json
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+        run: |
+          set -u
+          T=$(curl -s --max-time 20 "https://cryptomacho.io/data/book-fine.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('t',0))" 2>/dev/null || echo 0)
+          NOW=$(date +%s)000
+          AGE_MIN=$(( (NOW - T) / 60000 ))
+          echo "book-fine.json: idade ${AGE_MIN} min (t=${T})"
+          if [ "${T:-0}" -eq 0 ] || [ "$AGE_MIN" -gt 15 ]; then
+            MSG="⚠️ CRYPTOMACHO: book-fine.json parado há ${AGE_MIN} min — a VPS (cryptomacho-book) pode estar em baixo. Fallback: Actions → 'Book depth collector' → Enable workflow. Redeploy: 'VPS deploy book-collector' → Run workflow."
+            if [ -n "${TELEGRAM_TOKEN:-}" ]; then
+              curl -s --max-time 15 -X POST "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+                -d chat_id="${TELEGRAM_CHAT}" --data-urlencode text="${MSG}" >/dev/null || true
+            fi
+            echo "$MSG"
+            exit 1
+          fi
+          echo "fresco — tudo bem"
