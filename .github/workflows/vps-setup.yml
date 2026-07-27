@@ -1,0 +1,43 @@
+name: VPS setup (hardening + base)
+# Corre NA VPS (self-hosted runner). Endurece a máquina e prepara a base dos coletores.
+# Idempotente: pode correr-se outra vez sem partir nada.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  setup:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 20
+    steps:
+      - name: Hardening — firewall, fail2ban, updates automáticos
+        run: |
+          set -eux
+          sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ufw fail2ban unattended-upgrades sqlite3
+          # Firewall: SÓ SSH de entrada. Os coletores são 100% tráfego de SAÍDA — nada mais escuta.
+          sudo ufw default deny incoming
+          sudo ufw default allow outgoing
+          sudo ufw allow OpenSSH
+          sudo ufw --force enable
+          sudo ufw status verbose
+          # fail2ban: quem errar a password SSH 5x fica banido 1h (trava brute-force ao root)
+          printf '[sshd]\nenabled = true\nmaxretry = 5\nfindtime = 10m\nbantime = 1h\n' | sudo tee /etc/fail2ban/jail.d/sshd.local
+          sudo systemctl enable --now fail2ban
+          sudo fail2ban-client status sshd || true
+          # Updates de segurança automáticos (o servidor mantém-se sozinho)
+          printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades
+      - name: Base dos coletores — node 22 + pasta de trabalho
+        run: |
+          set -eux
+          curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
+          node -v
+          sudo mkdir -p /opt/cryptomacho/data
+          sudo chown -R runner:runner /opt/cryptomacho
+          df -h / | tail -1
+      - name: Reboot em 1 min (aplicar updates de kernel pendentes)
+        run: |
+          # O runner é um serviço systemd — volta sozinho depois do boot.
+          sudo shutdown -r +1 "reboot: aplicar updates de kernel" || true
+          echo "reboot agendado"
