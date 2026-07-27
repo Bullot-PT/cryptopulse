@@ -28,6 +28,8 @@ jobs:
           CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
         run: |
           set -eu
+          # better-sqlite3 não tem prebuild para este node — compila localmente (precisa de make/g++)
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential python3
           mkdir -p /opt/cryptomacho/data
           cp book-collector.mjs /opt/cryptomacho/
           cd /opt/cryptomacho
