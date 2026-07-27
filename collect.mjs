@@ -76,9 +76,10 @@ try {
     jget('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
   ]);
   const btcPx = spr.bitcoin.usd;
+  let gxN = 0;
   gxr.forEach(e => {
     const oi = (parseFloat(e.open_interest_btc) || 0) * btcPx;
-    if (oi > 0) { agg += oi; ex[(e.name || '').replace(' (Futures)', '')] = Math.round(oi); }
+    if (oi > 0) { agg += oi; ex[(e.name || '').replace(' (Futures)', '')] = Math.round(oi); gxN++; }
   });
   /* The dashboard replaces CoinGecko's estimate for the perp DEXes with the exact number straight from each
      API, so if this 24/7 series didn't do the same the chart would square-wave between two DIFFERENT
@@ -128,11 +129,27 @@ try {
     agg += d.oi; ex[d.name] = Math.round(d.oi);
   });
   aggExact = dex.length >= 4;   /* the chart only mixes samples measured the same way — see aggx on the client */
-  console.log('global OI:', fmtBig(agg), '—', dex.length, 'perp DEXes measured directly');
+  /* v129: se o CoinGecko devolveu <85 exchanges com OI (o normal é ~100), a soma é PARCIAL — não é o
+     OI global real. Antes entrava no gráfico como um mergulho de $2-5B que revertia na amostra seguinte
+     (os "picos" das fotos). Amostra sem agg = buraco honesto de 5 min, nada inventado. */
+  if (gxN < 85) { console.log('CoinGecko parcial (' + gxN + ' exchanges) — amostra sem agg'); agg = 0; }
+  else console.log('global OI:', fmtBig(agg), '—', dex.length, 'perp DEXes measured directly (' + gxN + ' CG rows)');
 } catch (e) { console.log('gx fetch failed', e.message); }
 
 let hist = { samples: [] };
 try { hist = JSON.parse(fs.readFileSync('data/oi-history.json', 'utf8')); } catch (e) {}
+/* v129: a cópia no KV é a mais completa (é a que o site serve). Quando os pushes de uma run falhavam,
+   o checkout git da run seguinte vinha SEM essas amostras e elas perdiam-se para sempre — os buracos
+   de ~1h no gráfico nocturno. Merge por timestamp: nada se perde, duplicados caem. */
+try {
+  const kvh = await jget('https://cryptomacho.io/data/oi-history.json?b=' + Date.now());
+  if (kvh && Array.isArray(kvh.samples) && kvh.samples.length) {
+    const have = new Set(hist.samples.map(s => s && s.t));
+    let added = 0;
+    kvh.samples.forEach(s => { if (s && s.t && !have.has(s.t)) { hist.samples.push(s); added++; } });
+    if (added) { hist.samples.sort((a, b) => a.t - b.t); console.log('oi-history: merge KV +' + added + ' amostras'); }
+  }
+} catch (e) { console.log('oi-history merge KV saltado:', e.message); }
 const sample = { t: now, total: Math.round(total), coins: top };
 if (Object.keys(bb).length) sample.bb = topN(bb, 40);
 if (Object.keys(ok).length) sample.ok = topN(ok, 40);
@@ -1231,3 +1248,4 @@ fs.writeFileSync('data/alert-state.json', JSON.stringify({
   radar: st.radar || {}
 }));
 console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
+process.exit(0);   /* v129: sem isto, um handle aberto (WS) segura o processo e a passagem fica presa */
