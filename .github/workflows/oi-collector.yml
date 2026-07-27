@@ -152,11 +152,14 @@ jobs:
             echo "--- pass $PASS at $(date -u +%H:%M:%SZ) ---"
             # one bad pass (an exchange API blipping) must not end the hour — alert de-dup state lives in
             # data/alert-state.json and survives across passes, so nothing gets sent twice
-            node collect.mjs || echo "collector exited non-zero on this pass — continuing"
+            # v129: tecto de 4,5 min por passagem — uma passagem pendurada custa UMA amostra, não a hora
+            timeout -k 15 270 node collect.mjs || echo "collector exited non-zero/timeout on this pass — continuing"
             push_data
             # KV a cada passe de 5 min (máxima frescura — regra do Bullot). Conta permitida pelo
             # Workers Paid desde 26-jul; ao planear coletores novos, calcular writes/dia primeiro.
-            kv_put $KV_LIST
+            # v129: os ficheiros quentes vão para o KV MESMO quando o git recusa o push — o site lê do
+            # KV; o git é arquivo. (~860 writes/dia extra, dentro do plano pago; vigiar 429 como sempre.)
+            kv_put $KV_LIST data/oi-history.json data/hl-pos.json data/alert-log.json
             NOW=$(date +%s)
             if [ "$NOW" -ge "$END" ]; then break; fi
             # land on the 5-minute grid so samples are evenly spaced no matter how long a pass took

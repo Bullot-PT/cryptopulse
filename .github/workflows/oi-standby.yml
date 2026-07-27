@@ -197,9 +197,12 @@ jobs:
 
             PASS=$((PASS + 1))
             echo "--- dados com ${AGE}s (por $WHO) — passagem de takeover $PASS às $(date -u +%H:%M:%SZ) ---"
-            node collect.mjs || echo "collector exited non-zero on this pass — continuing"
+            # v129: tecto de 4,5 min por passagem — uma passagem pendurada custa UMA amostra, não a hora
+            timeout -k 15 270 node collect.mjs || echo "collector exited non-zero/timeout on this pass — continuing"
             push_data
-            kv_put $KV_LIST
+            # v129: os ficheiros quentes vão para o KV MESMO quando o git recusa o push — o site lê do
+            # KV; o git é arquivo. (~860 writes/dia extra, dentro do plano pago; vigiar 429 como sempre.)
+            kv_put $KV_LIST data/oi-history.json data/hl-pos.json data/alert-log.json
 
             NOW=$(date +%s)
             sleep $(( 300 - (NOW % 300) ))
