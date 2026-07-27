@@ -1,0 +1,58 @@
+name: VPS deploy backup R2
+# Instala o backup do SQLite → R2 como timer systemd na VPS (4×/dia: 00:20/06:20/12:20/18:20 UTC).
+# PRÉ-REQUISITOS (Bullot): subscrição R2 activa + bucket cryptomacho-backups + secrets
+# R2_ACCESS_KEY_ID e R2_SECRET_ACCESS_KEY no GitHub. Idempotente; verifica com um backup real.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Instalar rclone + script + secrets (do GitHub para a VPS, nunca pelo chat)
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          set -eu
+          [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ] || { echo "FALTAM os secrets R2_* — cria-os primeiro (ver instruções no chat)"; exit 1; }
+          command -v rclone >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y rclone
+          cp vps-backup.sh /opt/cryptomacho/
+          chmod +x /opt/cryptomacho/vps-backup.sh
+          umask 077
+          printf 'R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nCF_ACCOUNT_ID=%s\n' \
+            "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" "$CF_ACCOUNT_ID" > /opt/cryptomacho/env-backup
+      - name: Timer systemd + backup de verificação
+        run: |
+          set -eu
+          sudo tee /etc/systemd/system/cryptomacho-backup.service >/dev/null <<'EOF'
+          [Unit]
+          Description=Cryptomacho SQLite backup to R2
+
+          [Service]
+          Type=oneshot
+          User=runner
+          EnvironmentFile=/opt/cryptomacho/env-backup
+          ExecStart=/bin/sh /opt/cryptomacho/vps-backup.sh
+          EOF
+          sudo tee /etc/systemd/system/cryptomacho-backup.timer >/dev/null <<'EOF'
+          [Unit]
+          Description=Cryptomacho SQLite backup to R2 (4x/day)
+
+          [Timer]
+          OnCalendar=*-*-* 00,06,12,18:20:00
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+          EOF
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now cryptomacho-backup.timer
+          echo "---- backup de verificação (corre já um) ----"
+          sudo systemctl start cryptomacho-backup.service
+          sudo journalctl -u cryptomacho-backup -n 20 --no-pager
+          systemctl list-timers cryptomacho-backup.timer --no-pager | head -4
