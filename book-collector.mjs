@@ -196,6 +196,18 @@ async function hiresFrameFor(coin, cfg) {
   }
   return out;
 }
+async function hiresSeed() {
+  for (const coin of Object.keys(COINS)) {
+    try {
+      const doc = await kvGet("book-hires-" + coin + ".json");
+      if (doc && doc.v === 1 && Array.isArray(doc.frames) && doc.step === COINS[coin].lstep) {
+        const cut = Date.now() - HIRES_MS;
+        hiresRing[coin] = doc.frames.filter(f => f && f.t > cut);
+        console.log("hires seed " + coin + ": " + hiresRing[coin].length + " frames repostos do KV");
+      }
+    } catch (e) { console.log("hires seed " + coin + " falhou: " + (e && e.message)); }
+  }
+}
 async function hiresTick() {
   await Promise.all(Object.entries(COINS).map(async ([coin, cfg]) => {
     let f = null;
@@ -308,6 +320,7 @@ if (mode === "once") {
     }
   })();
   const hiresLoop = (async () => {
+    try { await hiresSeed(); } catch (e) { console.error("hires seed rebentou: " + (e && e.message)); }
     for (;;) {
       try { await hiresTick(); } catch (e) { console.error("hires tick rebentou: " + (e && e.message)); }
       const now = Date.now();
