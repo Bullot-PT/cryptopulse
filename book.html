@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-6sL8nX9Zef2Xi7KXiZ9K+W8G7u6Kft3Pfkz5UeDsWUA='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-HNcz1oB0hgDv+45QP7/LYl5kWPRvgYIeLQPUv4Rld6M='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -117,7 +117,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -146,7 +146,7 @@ const books = {};            /* src -> { bids: Map(px->usd), asks: Map(px->usd),
 const conn = {};             /* src -> bool */
 let trades = [];             /* {t, px, usd, buy} — só ≥ $25k entram nas bolhas; TODOS entram no CVD */
 let cvd = 0;
-let liveCols = [];           /* {t, b:{idx:usd}, a:{idx:usd}, src:[]} a cada 5 s, máx 2h */
+let liveCols = [];           /* {t, b:{idx:usd}, a:{idx:usd}, src:[]} a cada 1 s; ~3h em RAM, 48h no IndexedDB (v8) */
 let hist = null;             /* doc do KV */
 let sockets = [];
 /* memória da sessão: por moeda, em RAM enquanto a página vive + localStorage para reabrir já
@@ -154,12 +154,13 @@ let sockets = [];
    honesto — se estiveste 1h fora, o buraco aparece no heatmap, não se inventa nada. */
 const sess = {};
 function sessKey(c) { return "cryptomacho-book-sess-" + c; }
-function sessStash(c) { sess[c] = { cols: liveCols, trades: trades, cvd: cvd }; }
+function sessStash(c) { sess[c] = { cols: liveCols.slice(-3600), trades: trades.slice(-2400), cvd: cvd }; }
 function sessSave() {
   try {
     localStorage.setItem(sessKey(coin), JSON.stringify({ t: Date.now(), cvd: cvd,
       cols: liveCols.slice(-900), trades: trades.slice(-600) }));
   } catch (e) { /* quota: a sessão vive só em RAM, paciência */ }
+  idbSave();
 }
 function sessRestore(c) {
   const cut = Date.now() - 30 * 60_000;
@@ -175,6 +176,70 @@ function sessRestore(c) {
       trades = (j.trades || []).filter(x => x && x.t > cut);
       cvd = j.cvd || 0;
     }
+  } catch (e) {}
+}
+
+/* ---------- v8: IndexedDB — história fina persistente ----------
+   O localStorage guarda ~15 min; isto guarda 48 h de colunas de 1 s + trades ≥$25k por moeda,
+   tudo no browser (zero escritas KV). Reabrir o tab repõe o passado FINO real — linha de preço,
+   bolhas e colunas de 1 s — em vez de só os frames do coletor. Gaps continuam honestos. */
+let idb = null, idbLastCol = 0, idbLastTr = 0;
+const IDB_KEEP = 48 * 3600_000, IDB_LOAD = 3 * 3600_000;
+function idbInit() {
+  try {
+    const rq = indexedDB.open("cryptomacho-book", 1);
+    rq.onupgradeneeded = () => {
+      const d = rq.result;
+      if (!d.objectStoreNames.contains("cols")) d.createObjectStore("cols", { keyPath: ["c", "t"] });
+      if (!d.objectStoreNames.contains("trades")) d.createObjectStore("trades", { keyPath: ["c", "t", "px", "usd"] });
+    };
+    rq.onsuccess = () => { idb = rq.result; idbRestore(coin); idbPrune(); };
+  } catch (e) {}
+}
+function idbSave() {
+  if (!idb) return;
+  try {
+    const nc = liveCols.filter(x => x.t > idbLastCol), nt = trades.filter(x => x.t > idbLastTr);
+    if (!nc.length && !nt.length) return;
+    const tx = idb.transaction(["cols", "trades"], "readwrite");
+    const sc = tx.objectStore("cols"), sv = tx.objectStore("trades");
+    nc.forEach(x => { try { sc.put({ c: coin, t: x.t, b: x.b, a: x.a, px: x.px, src: x.src }); } catch (e) {} });
+    nt.forEach(x => { try { sv.put({ c: coin, t: x.t, px: x.px, usd: x.usd, buy: x.buy ? 1 : 0 }); } catch (e) {} });
+    if (nc.length) idbLastCol = nc[nc.length - 1].t;
+    if (nt.length) idbLastTr = nt[nt.length - 1].t;
+  } catch (e) {}
+}
+function idbRestore(c) {
+  if (!idb) return;
+  try {
+    const lo = Date.now() - IDB_LOAD, hi = Date.now() + 60_000;
+    const tx = idb.transaction(["cols", "trades"], "readonly");
+    const rc = tx.objectStore("cols").getAll(IDBKeyRange.bound([c, lo], [c, hi]));
+    const rt = tx.objectStore("trades").getAll(IDBKeyRange.bound([c, lo], [c, hi, Infinity, Infinity]));
+    tx.oncomplete = () => {
+      if (coin !== c) return;                            /* trocou de moeda entretanto */
+      const firstT = liveCols.length ? liveCols[0].t : Infinity;
+      const older = (rc.result || []).filter(x => x && x.t < firstT)
+        .map(x => ({ t: x.t, b: x.b || {}, a: x.a || {}, px: x.px, src: x.src || [] }));
+      if (older.length) liveCols = older.concat(liveCols);
+      const firstTr = trades.length ? trades[0].t : Infinity;
+      const oldTr = (rt.result || []).filter(x => x && x.t < firstTr)
+        .map(x => ({ t: x.t, px: x.px, usd: x.usd, buy: !!x.buy }));
+      if (oldTr.length) trades = oldTr.concat(trades);
+      idbLastCol = 0; idbLastTr = 0;                     /* re-put é upsert: a chave deduplica */
+      draw();
+    };
+  } catch (e) {}
+}
+function idbPrune() {
+  if (!idb) return;
+  try {
+    const cut = Date.now() - IDB_KEEP;
+    const tx = idb.transaction(["cols", "trades"], "readwrite");
+    Object.keys(COINS).forEach(c => {
+      tx.objectStore("cols").delete(IDBKeyRange.bound([c, 0], [c, cut]));
+      tx.objectStore("trades").delete(IDBKeyRange.bound([c, 0], [c, cut, Infinity, Infinity]));
+    });
   } catch (e) {}
 }
 
@@ -290,7 +355,7 @@ function sampleCol() {
   });
   const px = midPx(); if (px) col.px = px;
   liveCols.push(col);
-  if (liveCols.length > 2100) liveCols = liveCols.slice(-1800);   /* ~30 min de colunas de 1 s */
+  if (liveCols.length > 12600) liveCols = liveCols.slice(-11400);   /* ~3 h de colunas de 1 s em RAM (48 h no IndexedDB) */
 }
 
 /* ---------- história do coletor ---------- */
@@ -364,7 +429,8 @@ function heat(v, max) {
     Math.round(a[1][2] + (b[1][2] - a[1][2]) * k) + ")";
 }
 let hmView = null;            /* geometria do último draw() — é o que o hover usa para inverter */
-let viewSpan = 300_000;       /* janela LIVE: 1m/5m/15m */
+let viewSpan = 300_000;       /* janela LIVE: 1m/5m/15m (shift-wheel estica/comprime 30 s–48 h) */
+let histStretch = 1;          /* v8: zoom horizontal no modo history */
 let zoomHalf = null;          /* meio-alcance Y (preço); null = automático */
 let yCenter = null;           /* centro Y suavizado — segue o mid sem saltos */
 function draw() {
@@ -374,7 +440,8 @@ function draw() {
   const live = mode === "live";
   const st = live ? cfg.lstep : (hist && hist.step && hist.step[coin]) || cfg.step;
   const cols = live ? liveCols : (hist && hist.coins && hist.coins[coin] || []);
-  if (!cols.length) {
+  const histAvail = live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length;
+  if (!cols.length && !histAvail) {
     cx.fillStyle = "#6b7688"; cx.font = "13px sans-serif"; cx.textAlign = "center";
     cx.fillText(live ? "Connecting to the feeds — the heatmap starts flowing in seconds…"
       : "History is building — the collector writes a frame every 10 minutes, 24/7.", W / 2, H / 2);
@@ -382,23 +449,34 @@ function draw() {
   }
   const CVD_H = live ? 44 : 16, AXIS_W = 60, TW = W - AXIS_W, TH = H - CVD_H - 14;
   const now = live ? Date.now() : cols[cols.length - 1].t;
-  const span = live ? viewSpan : Math.max(3600_000, now - cols[0].t + 600_000);
+  const span = live ? viewSpan : Math.max(3600_000, (now - cols[0].t + 600_000) / histStretch);
   const t0 = now - span;
   /* base 1 min: a história mistura frames de 10 min e de 1 min (book-fine) — cada um
      pinta a sua largura real e estica até ao seguinte (tecto 15 min, já em maxStretch) */
   const sampleMs = live ? 1000 : 60_000;
   const colW = Math.max(1, TW * sampleMs / span);
   /* centro Y: mid suavizado (EMA) para a vista seguir o preço sem tremer */
-  const lastPx = (cols[cols.length - 1].px) || (yCenter || 0);
+  const lastPx = (cols.length && cols[cols.length - 1].px) || (histAvail && hist.coins[coin][hist.coins[coin].length - 1].px) || (yCenter || 0);
   if (lastPx > 0) yCenter = yCenter == null ? lastPx : yCenter + (lastPx - yCenter) * 0.15;
   /* por defeito a vista ABRAÇA o book real (±~0.06%) — o wheel afasta se quiseres contexto */
-  const half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0006, st * 28) : Math.max(lastPx * 0.02, st * 24));
+  let half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0006, st * 28) : Math.max(lastPx * 0.02, st * 24));
+  if (live && zoomHalf == null && span > 900_000) {
+    /* v8: janela larga — a vista abre para abraçar o percurso REAL do preço (nada inventado) */
+    let pMin = Infinity, pMax = -Infinity;
+    const stpA = Math.max(1, Math.floor(span / sampleMs / 2000));
+    for (let i = cols.length - 1; i >= 0; i -= stpA) { const c = cols[i]; if (c.t < t0) break; if (c.px) { if (c.px < pMin) pMin = c.px; if (c.px > pMax) pMax = c.px; } }
+    if (hist && hist.coins && hist.coins[coin]) { const hfA = hist.coins[coin];
+      for (let i = hfA.length - 1; i >= 0; i--) { const f = hfA[i]; if (!f) continue; if (f.t < t0) break; if (f.px) { if (f.px < pMin) pMin = f.px; if (f.px > pMax) pMax = f.px; } } }
+    const cen = yCenter || lastPx;
+    if (isFinite(pMin) && pMax >= pMin) half = Math.max(half, cen - pMin + st * 8, pMax - cen + st * 8);
+  }
   const pLo = yCenter - half, pHi = yCenter + half;
   const yOf = p => TH - (p - pLo) / (pHi - pLo) * TH;
   const rowH = Math.max(1, st / (pHi - pLo) * TH);
   /* pico de referência da cor: max dentro da janela e do alcance visível */
   let maxV = 0;
-  for (let i = cols.length - 1; i >= 0; i--) {
+  const mvStep = Math.max(1, Math.floor(span / sampleMs / 1800));   /* v8: custo fixo em janelas largas */
+  for (let i = cols.length - 1; i >= 0; i -= mvStep) {
     const c = cols[i]; if (c.t < t0) break;
     for (const k in c.b) { const p = k * st; if (p >= pLo && p <= pHi && c.b[k] > maxV) maxV = c.b[k]; }
     for (const k in c.a) { const p = k * st; if (p >= pLo && p <= pHi && c.a[k] > maxV) maxV = c.a[k]; }
@@ -409,7 +487,7 @@ function draw() {
     const hstep0 = (hist.step && hist.step[coin]) || cfg.step;
     const hf0 = hist.coins[coin];
     for (let i = hf0.length - 1; i >= 0; i--) {
-      const f = hf0[i]; if (!f || f.t >= firstLive0) continue;
+      const f = hf0[i]; if (!f || f.t > now) continue;
       if (f.t < t0 - 600_000) break;
       for (const k in f.b) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.b[k] > maxV) maxV = f.b[k]; }
       for (const k in f.a) { const p = k * hstep0; if (p >= pLo && p <= pHi && f.a[k] > maxV) maxV = f.a[k]; }
@@ -424,13 +502,17 @@ function draw() {
     /* cada frame estica até ao SEGUINTE (agora há frames de 1 min E de 10 min misturados),
        com tecto de 15 min — um coletor morto deixa o buraco à vista, não se pinta por cima */
     const hCap = TW * 900_000 / span;
-    let nextHX = TW - (now - firstLive) / span * TW;
+    let nextHX = TW;
     const hf = hist.coins[coin];
-    let drew = false;
+    let drew = false, jj = cols.length - 1;
     for (let i = hf.length - 1; i >= 0; i--) {
-      const f = hf[i]; if (!f || f.t >= firstLive) continue;
+      const f = hf[i]; if (!f) continue;
       if (f.t < t0 - 900_000) break;
+      /* v8: o frame só pinta onde a sessão fina NÃO tem dados — nunca dados velhos por trás dos novos */
+      const fEnd = (i + 1 < hf.length && hf[i + 1]) ? Math.min(hf[i + 1].t, f.t + 900_000) : f.t + 900_000;
+      while (jj >= 0 && cols[jj].t >= fEnd) jj--;
       const x = TW - (now - f.t) / span * TW;
+      if (jj >= 0 && cols[jj].t >= f.t) { nextHX = x; continue; }
       const wClip = Math.min(Math.max(0.5, nextHX - x), hCap);
       nextHX = x;
       const hRowH = Math.max(1, hstep / (pHi - pLo) * TH);
@@ -445,8 +527,8 @@ function draw() {
       cx.strokeStyle = "rgba(250,178,25,0.5)"; cx.setLineDash([3, 4]); cx.beginPath();
       cx.moveTo(histEdgeX, 0); cx.lineTo(histEdgeX, TH); cx.stroke(); cx.setLineDash([]);
       cx.fillStyle = "#8f9aac"; cx.font = "8.5px 'IBM Plex Mono', monospace"; cx.textAlign = "right";
-      cx.fillText("collector history (10m) ◂", histEdgeX - 4, 12);
-      cx.textAlign = "left"; cx.fillText("▸ this session (1s)", histEdgeX + 4, 12);
+      cx.fillText("collector ◂", histEdgeX - 4, 12);
+      cx.textAlign = "left"; cx.fillText("▸ fine 1s (browser)", histEdgeX + 4, 12);
     }
   }
   /* células — cada bin no seu preço exacto, coluna na sua posição exacta no tempo.
@@ -458,6 +540,7 @@ function draw() {
   for (let i = cols.length - 1; i >= 0; i--) {
     const c = cols[i]; if (c.t < t0) break;
     const x = TW - (now - c.t) / span * TW - colW;
+    if (i && nextX - x < 0.7 && cols[i - 1].t >= t0) continue;   /* v8: sub-pixel — ~1 coluna por px */
     const wPaint = Math.min(Math.max(colW, nextX - x), Math.max(colW, maxStretch)) + 0.5;
     for (const k in c.b) { const p = k * st; if (p < pLo || p > pHi) continue;
       const col = heat(c.b[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, wPaint, rowH + 0.4); } }
@@ -465,14 +548,31 @@ function draw() {
       const col = heat(c.a[k], maxV); if (col) { cx.fillStyle = col; cx.fillRect(x, yOf(p) - rowH / 2, wPaint, rowH + 0.4); } }
     nextX = x;
   }
+  /* v8: linha de preço também sobre a HISTÓRIA do coletor — px real de cada frame, quebra em gaps */
+  if (live && hist && hist.coins && hist.coins[coin] && hist.coins[coin].length) {
+    const hfp = hist.coins[coin];
+    cx.strokeStyle = "rgba(255,255,255,0.55)"; cx.lineWidth = 1; cx.beginPath();
+    let on = false, pT = 0;
+    for (let i = 0; i < hfp.length; i++) {
+      const f = hfp[i]; if (!f || !f.px || f.t < t0) continue;
+      const x = TW - (now - f.t) / span * TW, y = yOf(f.px);
+      if (f.px < pLo || f.px > pHi) { on = false; continue; }
+      if (!on || f.t - pT > 960_000) { cx.moveTo(x, y); on = true; } else cx.lineTo(x, y);
+      pT = f.t;
+    }
+    cx.stroke();
+  }
   /* linha do preço por cima do heat */
+  const plStep = Math.max(1, Math.floor(span / sampleMs / 3000));
+  const plGap = live ? 90_000 : 1200_000;   /* v8: gap é gap — não se liga o buraco com recta falsa */
   cx.strokeStyle = "#ffffff"; cx.lineWidth = 1.2; cx.beginPath();
-  let started = false;
-  for (let i = 0; i < cols.length; i++) {
+  let started = false, prevT = 0;
+  for (let i = 0; i < cols.length; i += plStep) {
     const c = cols[i]; if (c.t < t0 || !c.px) continue;
     const x = TW - (now - c.t) / span * TW;
     const y = yOf(c.px);
-    if (!started) { cx.moveTo(x, y); started = true; } else cx.lineTo(x, y);
+    if (!started || c.t - prevT > plGap) { cx.moveTo(x, y); started = true; } else cx.lineTo(x, y);
+    prevT = c.t;
   }
   cx.stroke();
   /* bolhas de trades (live) */
@@ -523,8 +623,8 @@ function draw() {
   cx.textAlign = "left";
   /* rótulo da janela + CVD */
   cx.fillStyle = "#6b7688"; cx.font = "9.5px sans-serif"; cx.textAlign = "left";
-  cx.fillText((live ? "live · last " + (span >= 90_000 ? Math.round(span / 60_000) + "m" : Math.round(span / 1000) + "s")
-    : "collector history · " + Math.round(span / 3600_000) + "h") + " → now · wheel = zoom · click = snap to price", 4, TH + 10);
+  cx.fillText((live ? "live · last " + (span >= 5400_000 ? (span / 3600_000).toFixed(1).replace(".0", "") + "h" : span >= 90_000 ? Math.round(span / 60_000) + "m" : Math.round(span / 1000) + "s")
+    : "collector history · " + Math.round(span / 3600_000) + "h") + " → now · wheel = price zoom · shift+wheel = time zoom · click = snap", 4, TH + 10);
   if (live && trades.length) {
     const cy0 = TH + 13, ch = CVD_H - 8;
     let acc = 0; const pts = [];
@@ -580,10 +680,19 @@ cv.addEventListener("mousemove", e => {
 cv.addEventListener("mouseleave", () => { hmTip.style.display = "none"; });
 cv.addEventListener("wheel", e => {
   e.preventDefault();
+  if (e.shiftKey || e.ctrlKey) {                       /* v8: esticar/comprimir o TEMPO */
+    const grow = (e.deltaY || e.deltaX) > 0;
+    if (mode === "live") {
+      viewSpan = Math.max(30_000, Math.min(48 * 3600_000, Math.round(viewSpan * (grow ? 1.25 : 0.8))));
+      document.querySelectorAll("[data-span]").forEach(b => b.classList.toggle("on", +b.dataset.span * 1000 === viewSpan));
+    } else histStretch = Math.max(1, Math.min(48, histStretch * (grow ? 0.8 : 1.25)));
+    draw();
+    return;
+  }
   const cfg = COINS[coin];
   const st = mode === "live" ? cfg.lstep : cfg.step;
   const base = zoomHalf != null ? zoomHalf : (yCenter || 1) * 0.0016;
-  zoomHalf = Math.max(st * 8, Math.min((yCenter || 1) * 0.05, base * (e.deltaY > 0 ? 1.25 : 0.8)));
+  zoomHalf = Math.max(st * 8, Math.min((yCenter || 1) * 0.12, base * (e.deltaY > 0 ? 1.25 : 0.8)));
   draw();
 }, { passive: false });
 /* clique no heatmap = snap back ao preço ACTUAL (pedido dele — a função voltou): recentra a
@@ -1153,11 +1262,13 @@ function paintTabs() {
 }
 function switchCoin(nc) {
   if (!COINS[nc] || nc === coin) return;
+  idbSave();                                          /* v8: persiste o resto antes de trocar */
   const prevCoin = coin;
   coin = nc;
   try { localStorage.setItem("cryptomacho-book-coin", coin); } catch (er) {}
   sessStash(prevCoin);
   sessRestore(coin);
+  idbRestore(coin);                                   /* v8: repõe até 3 h finas do IndexedDB */
   zoomHalf = null; yCenter = null; domOff = 0;
   Object.keys(deep).forEach(k => delete deep[k]);
   paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();
@@ -1252,6 +1363,7 @@ document.addEventListener("click", e => {
 
 /* ---------- arranque ---------- */
 sessRestore(coin);
+idbInit();
 (() => {
   const pg = $("palGamma"), pv = $("palGv"), pc = $("palCap");
   const gvPaint = () => { if (pv) pv.textContent = heatGamma.toFixed(2); };
