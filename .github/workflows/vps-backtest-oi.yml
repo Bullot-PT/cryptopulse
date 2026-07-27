@@ -1,0 +1,22 @@
+name: VPS backtest OI (grande)
+# Corre o backtest grande do gatilho de ΔOI na VPS (IP alemão = fapi acessível).
+# Passe A: 30 dias @5m, ~40 símbolos · Passe B: Coinalyze @1h até onde a API der (tenta anos).
+# Resultado: log + KV backtest-oi.json (1 escrita). Dispatch manual.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Correr backtest
+        env:
+          COINALYZE_KEY: ${{ secrets.COINALYZE_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          node backtest-oi-big.mjs
