@@ -1,0 +1,32 @@
+name: OI target study (quanto % dá para tirar)
+# Corre no runner da VPS (a Binance/Bybit bloqueiam IPs de datacenter partilhados; a VPS passa).
+# Mede MFE/MAE e testa alvos em múltiplos de ATR e alvos fixos, em 6h/12h/24h.
+# Publica oi-target.json no KV — o oi-signal.mjs lê de lá os multiplicadores.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '50 3 * * 1'      # segundas, 03:50 UTC — depois do oi-prob (03:40)
+permissions:
+  contents: read
+concurrency:
+  group: oi-target
+  cancel-in-progress: false
+jobs:
+  study:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Correr o estudo
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: node oi-target.mjs
+      - name: Guardar o JSON como artefacto
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 (sha fixo)
+        with:
+          name: oi-target
+          path: /tmp/oi-target.json
+          if-no-files-found: warn

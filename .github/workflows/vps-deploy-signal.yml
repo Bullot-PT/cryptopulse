@@ -1,0 +1,97 @@
+name: VPS deploy oi-signal (estágio 2)
+# Instala/actualiza na VPS o sinal ao vivo com direcção e alvo dimensionado por ATR.
+# Serviço systemd cryptomacho-signal, a correr na grelha dos 5 min.
+# Secrets usados (só os NOMES passam por aqui): TELEGRAM_TOKEN, TELEGRAM_CHAT,
+# CF_ACCOUNT_ID, CF_API_TOKEN, CF_KV_NAMESPACE_ID.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'oi-signal.mjs'
+      - 'oi-signal-daemon.sh'
+      - '.github/workflows/vps-deploy-signal.yml'
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: vps-deploy-signal
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Instalar ficheiros
+        run: |
+          set -eu
+          sudo mkdir -p /opt/cryptomacho/signal/data
+          sudo cp oi-signal.mjs /opt/cryptomacho/signal/oi-signal.mjs
+          sudo cp oi-signal-daemon.sh /opt/cryptomacho/signal/oi-signal-daemon.sh
+          sudo chmod +x /opt/cryptomacho/signal/oi-signal-daemon.sh
+          sudo chown -R "$(whoami)":"$(whoami)" /opt/cryptomacho/signal
+          node --check /opt/cryptomacho/signal/oi-signal.mjs
+      - name: Escrever env (do secret store, nunca do chat)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          set -eu
+          umask 077
+          T=$(mktemp)
+          {
+            echo "TELEGRAM_TOKEN=${TELEGRAM_TOKEN}"
+            echo "TELEGRAM_CHAT=${TELEGRAM_CHAT}"
+            echo "CF_ACCOUNT_ID=${CF_ACCOUNT_ID}"
+            echo "CF_API_TOKEN=${CF_API_TOKEN}"
+            echo "CF_KV_NAMESPACE_ID=${CF_KV_NAMESPACE_ID}"
+          } > "$T"
+          sudo install -m 600 -o root -g root "$T" /etc/cryptomacho-signal.env
+          rm -f "$T"
+      - name: Serviço systemd
+        run: |
+          set -eu
+          U=$(whoami)
+          sudo tee /etc/systemd/system/cryptomacho-signal.service >/dev/null <<EOF
+          [Unit]
+          Description=CryptoMacho OI signal (estagio 2)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=${U}
+          WorkingDirectory=/opt/cryptomacho/signal
+          EnvironmentFile=/etc/cryptomacho-signal.env
+          ExecStart=/bin/sh /opt/cryptomacho/signal/oi-signal-daemon.sh
+          Restart=always
+          RestartSec=20
+          StandardOutput=append:/var/log/cryptomacho-signal.log
+          StandardError=append:/var/log/cryptomacho-signal.log
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          sudo touch /var/log/cryptomacho-signal.log
+          sudo chown "${U}":"${U}" /var/log/cryptomacho-signal.log
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now cryptomacho-signal
+          sudo systemctl restart cryptomacho-signal
+          sleep 5
+          systemctl is-active cryptomacho-signal
+      - name: Passagem de teste (uma só, para se ver o resultado já)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: |
+          set -eu
+          cd /opt/cryptomacho/signal
+          timeout -k 15 240 node oi-signal.mjs || echo "passagem de teste falhou — o serviço tenta na grelha seguinte"
+      - name: Log
+        run: tail -25 /var/log/cryptomacho-signal.log || true
