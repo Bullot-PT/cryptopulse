@@ -1,0 +1,147 @@
+name: VPS deploy regime-rider bot
+# Instala/actualiza o Regime Rider Bot (BTC/USDT v2.4) na VPS como systemd
+# TIMER diario (uma corrida por dia, logo apos o fecho da candle 00:00 UTC).
+# Idempotente: correr outra vez = actualizar codigo + config e reiniciar o timer.
+# PRESERVA state.json e bot.log (a memoria do bot entre corridas).
+#
+# Seguranca: config.json vai do repo SEM chaves (api_key/api_secret vazios).
+# Se um dia existirem os secrets RR_BINANCE_KEY / RR_BINANCE_SECRET, este
+# workflow injecta-os no config.json JA NA VPS, com umask 077 — nunca no git,
+# nunca pelo chat. Sem esses secrets, o bot fica em dry_run e nao toca em nada.
+on:
+  workflow_dispatch:
+    inputs:
+      run_now:
+        description: "Correr o bot uma vez no fim do deploy (recomendado)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+
+      - name: Teste de conectividade (o motivo da VPS)
+        run: |
+          set -x
+          curl -s -o /dev/null -w "binance fapi (perp klines): %{http_code}\n" \
+            "https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=5"
+          curl -s -o /dev/null -w "binance fapi exchangeInfo:    %{http_code}\n" \
+            "https://fapi.binance.com/fapi/v1/exchangeInfo"
+          curl -s -o /dev/null -w "binance spot:                 %{http_code}\n" \
+            "https://api.binance.com/api/v3/time"
+
+      - name: Instalar codigo + venv + dependencias
+        run: |
+          set -eu
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv jq
+          sudo mkdir -p /opt/regime-rider
+          sudo chown -R runner:runner /opt/regime-rider
+          cp regime-rider/bot.py       /opt/regime-rider/bot.py
+          cp regime-rider/config.json  /opt/regime-rider/config.json
+          cp regime-rider/README.md    /opt/regime-rider/README.md
+          # state.json e bot.log NAO sao tocados (memoria do bot entre corridas)
+          [ -f /opt/regime-rider/state.json ] || echo '{}' > /opt/regime-rider/state.json
+          [ -f /opt/regime-rider/bot.log ]    || : > /opt/regime-rider/bot.log
+          [ -d /opt/regime-rider/venv ] || python3 -m venv /opt/regime-rider/venv
+          /opt/regime-rider/venv/bin/pip install --quiet --upgrade pip
+          /opt/regime-rider/venv/bin/pip install --quiet ccxt
+          /opt/regime-rider/venv/bin/python -c "import ccxt; print('ccxt', ccxt.__version__)"
+          ls -la /opt/regime-rider
+
+      - name: Injectar chaves de API (so se os secrets existirem; nunca no git)
+        env:
+          RR_BINANCE_KEY: ${{ secrets.RR_BINANCE_KEY }}
+          RR_BINANCE_SECRET: ${{ secrets.RR_BINANCE_SECRET }}
+        run: |
+          set -eu
+          if [ -n "${RR_BINANCE_KEY:-}" ] && [ -n "${RR_BINANCE_SECRET:-}" ]; then
+            umask 077
+            jq --arg k "$RR_BINANCE_KEY" --arg s "$RR_BINANCE_SECRET" \
+               '.api_key=$k | .api_secret=$s' \
+               /opt/regime-rider/config.json > /opt/regime-rider/config.tmp
+            mv /opt/regime-rider/config.tmp /opt/regime-rider/config.json
+            chmod 600 /opt/regime-rider/config.json
+            echo "Chaves injectadas a partir dos secrets (config.json agora 600)."
+          else
+            echo "Sem secrets de API -> config.json fica sem chaves."
+          fi
+          echo "--- config efectivo (chaves mascaradas) ---"
+          jq '.api_key = (if (.api_key|length)>0 then "***SET***" else "" end)
+              | .api_secret = (if (.api_secret|length)>0 then "***SET***" else "" end)' \
+             /opt/regime-rider/config.json
+
+      - name: Servico systemd + timer diario (00:07 UTC)
+        run: |
+          set -eu
+          sudo tee /etc/systemd/system/regime-rider.service >/dev/null <<'EOF'
+          [Unit]
+          Description=Regime Rider Bot - uma decisao diaria (BTC/USDT v2.4)
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          WorkingDirectory=/opt/regime-rider
+          ExecStart=/opt/regime-rider/venv/bin/python /opt/regime-rider/bot.py
+          TimeoutStartSec=600
+          MemoryMax=512M
+          EOF
+
+          # OnCalendar com sufixo UTC so se este systemd o suportar; senao,
+          # assume-se que a VPS esta em UTC (verificado no passo seguinte).
+          if systemd-analyze calendar "*-*-* 00:07:00 UTC" >/dev/null 2>&1; then
+            CAL="*-*-* 00:07:00 UTC"
+          else
+            CAL="*-*-* 00:07:00"
+          fi
+          echo "OnCalendar escolhido: $CAL"
+
+          sudo tee /etc/systemd/system/regime-rider.timer >/dev/null <<EOF
+          [Unit]
+          Description=Corre o Regime Rider Bot uma vez por dia, logo apos o fecho 00:00 UTC
+
+          [Timer]
+          OnCalendar=$CAL
+          Persistent=true
+          AccuracySec=1min
+          RandomizedDelaySec=0
+
+          [Install]
+          WantedBy=timers.target
+          EOF
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable regime-rider.timer
+          sudo systemctl restart regime-rider.timer
+
+      - name: Verificar (fuso, timer, e uma corrida real do bot)
+        run: |
+          set -eu
+          echo "==== FUSO HORARIO DA VPS (tem de ser UTC) ===="
+          timedatectl | sed -n '1,8p'
+          echo
+          echo "==== TIMER ===="
+          systemctl status regime-rider.timer --no-pager | head -8 || true
+          systemctl list-timers regime-rider.timer --all --no-pager
+          echo
+          if [ "${{ inputs.run_now }}" = "true" ]; then
+            echo "==== CORRIDA DE VERIFICACAO ===="
+            sudo systemctl start regime-rider.service || true
+            sleep 5
+            systemctl status regime-rider.service --no-pager | head -12 || true
+            echo "---- journalctl ----"
+            sudo journalctl -u regime-rider.service -n 40 --no-pager
+          fi
+          echo
+          echo "==== bot.log (ultimas 20 linhas) ===="
+          tail -20 /opt/regime-rider/bot.log || true
+          echo
+          echo "==== state.json ===="
+          cat /opt/regime-rider/state.json || true

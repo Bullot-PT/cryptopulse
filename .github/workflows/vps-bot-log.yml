@@ -1,0 +1,53 @@
+name: VPS ler log do regime-rider
+# Le o estado do Regime Rider Bot na VPS sem precisar do PC do Bullot.
+# Existe para resolver a limitacao estrutural registada no ops log do projecto:
+# os checks diarios na cloud nao alcancavam C:\regime-rider-bot\ no Windows.
+# Nao altera nada — so le. Seguro de disparar a qualquer momento.
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: "Quantas linhas do bot.log mostrar"
+        type: string
+        default: "60"
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 5
+    steps:
+      - name: Estado do timer e da ultima corrida
+        run: |
+          echo "==== AGORA (UTC) ===="
+          date -u
+          echo
+          echo "==== TIMER (proxima corrida) ===="
+          systemctl list-timers regime-rider.timer --all --no-pager || true
+          echo
+          echo "==== ULTIMA CORRIDA DO SERVICO ===="
+          systemctl status regime-rider.service --no-pager | head -12 || true
+          echo
+          echo "==== STATE.JSON (posicao / stop / kill switch) ===="
+          cat /opt/regime-rider/state.json || true
+          echo
+          echo "==== CONFIG (chaves mascaradas) ===="
+          jq '.api_key = (if (.api_key|length)>0 then "***SET***" else "" end)
+              | .api_secret = (if (.api_secret|length)>0 then "***SET***" else "" end)' \
+             /opt/regime-rider/config.json || true
+
+      - name: bot.log
+        run: |
+          echo "==== bot.log — ultimas ${{ inputs.lines }} linhas ===="
+          tail -n ${{ inputs.lines }} /opt/regime-rider/bot.log || true
+          echo
+          echo "==== so as linhas de decisao (Close/ENTRY/stop/erro) ===="
+          grep -E "Close=|ENTRY|Raising stop|Stop unchanged|KILL SWITCH|Regime DOWN|Long opened|Refusing|ERROR" \
+            /opt/regime-rider/bot.log | tail -n 30 || true
+
+      - name: journalctl do servico
+        run: |
+          echo "==== journalctl regime-rider.service (ultimas 60) ===="
+          sudo journalctl -u regime-rider.service -n 60 --no-pager || true
