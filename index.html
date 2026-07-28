@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-uVIfQOn9/i/q+H66JFCwPQO7wjEiXLgBz2bUlczF6fc=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-IMtPuVB2L4kdy/nJnRpNn8PgGKK8fA3dWWey80ydUuc=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -587,6 +587,10 @@
   .ca-rule.hot { background: rgba(208,59,59,0.10); }
 
   /* ---------- whales vs crowd ---------- */
+  .lsx-mkt { padding: 10px 14px 12px; border-bottom: 1px solid var(--grid); background: rgba(255,255,255,0.02); }
+  .lsx-mkt-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .lsx-mkt-t { font-size: 11px; font-weight: 700; letter-spacing: .4px; color: var(--ink); }
+  .lsx-mkt-s { font-size: 10px; color: var(--ink-2); }
   .lsx-legend { display: flex; gap: 12px; padding: 7px 14px; border-bottom: 1px solid var(--grid); font-size: 10.5px; color: var(--ink-2); flex-wrap: wrap; }
   .lsx-legend .k { display: inline-flex; align-items: center; gap: 5px; }
   .lsx-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
@@ -6320,6 +6324,48 @@ async function fetchLsxCex(only) {
   lsxCexFetched = Date.now();
   renderLsCrowd();
 }
+/* posicionamento agregado de todo o mercado, escrito pela VPS de 5 em 5 min */
+let mktLs = {t: 0, doc: null};
+async function fetchMarketLs() {
+  try {
+    const j = await fetchJSONraw("data/market-ls.json?b=" + Math.floor(Date.now() / 300_000), {timeout: 12000});
+    if (j && (j.crowdLong != null || j.topLong != null)) { mktLs = {t: Date.now(), doc: j}; renderLsCrowd(); }
+  } catch (e) { /* ficheiro ainda não publicado — o bloco simplesmente não aparece */ }
+}
+/* o total on-chain das 500 maiores carteiras, o mesmo número do painel Long vs Short */
+function lsxWhaleAll() {
+  let L = 0, S = 0;
+  Object.values(lsSnapshot.coins || {}).forEach(c => { L += c.long || 0; S += c.short || 0; });
+  return (L + S) > 0 ? L / (L + S) : null;
+}
+function lsxMarketBlock() {
+  const d = mktLs.doc;
+  const wh = lsxWhaleAll();
+  if (!d && wh == null) return "";
+  const rows = [];
+  if (wh != null) rows.push(["HL whales", "top 500 wallets · dollars", wh,
+    "Long share of the top 500 Hyperliquid wallets by equity, measured in dollars of open notional. This is money, not accounts."]);
+  if (d && d.crowdLong != null) rows.push(["Binance crowd", "all accounts · " + d.nCoins + " coins", d.crowdLong / 100,
+    "Share of Binance USDⓈ-M accounts that are net long, aggregated across " + d.nCoins + " perps and weighted by each coin's open interest. Counts accounts, not dollars — a $200 account weighs the same as a $2M one."]);
+  if (d && d.topLong != null) rows.push(["Binance top traders", "positions · dollars", d.topLong / 100,
+    "Same universe, but Binance's top-trader position ratio: weighted by position size, so it reflects where the bigger money sits on the exchange."]);
+  if (!rows.length) return "";
+  let tag = "";
+  if (wh != null && d && d.crowdLong != null) {
+    const crowdLong = d.crowdLong >= 50, whaleLong = wh >= 0.5;
+    const gap = Math.abs(d.crowdLong - wh * 100);
+    if (crowdLong !== whaleLong) {
+      tag = '<span class="lsx-tag lsx-tag-div" title="The crowd and the whales are on opposite sides market-wide. Whichever way price moves against the crowd, their liquidations push it further — that forced flow is the squeeze fuel.">' +
+        icn("warn") + " crowd vs whales · " + gap.toFixed(0) + " pts apart</span>";
+    } else {
+      tag = '<span class="lsx-tag lsx-tag-al" title="Crowd and whales lean the same way market-wide — no forced-flow conflict between retail and the big money right now.">aligned · ' + gap.toFixed(0) + " pts apart</span>";
+    }
+  }
+  return '<div class="lsx-mkt"><div class="lsx-mkt-h"><span class="lsx-mkt-t">ACROSS ALL MARKETS</span>' + tag +
+    '<span class="lsx-mkt-s">' + (d ? "Binance perps weighted by open interest · " + timeAgo(d.t) : "on-chain only") + "</span></div>" +
+    rows.map(r => '<div class="lsx-src"><div class="lsx-label"><span class="who">' + esc(r[0]) + '</span><span class="kind">' + esc(r[1]) + "</span></div>" +
+      lsxBar(r[2]) + '<div class="lsx-pct" title="' + esc(r[3]) + '">' + lsxPct(r[2]) + "</div></div>").join("") + "</div>";
+}
 function lsxBar(long) {
   const l = Math.max(0, Math.min(1, long)) * 100;
   return '<div class="lsx-bar"><div class="l" style="width:' + l.toFixed(1) + '%"></div><div class="s" style="width:' + Math.max(0, 100 - l - 0.6).toFixed(1) + '%"></div></div>';
@@ -6381,8 +6427,12 @@ function renderLsCrowd() {
       '<span class="lsx-note">' + note + "</span>" +
       '<button class="lsx-del" data-del="' + esc(coin) + '" title="Remove from this panel">✕</button></div>' + srcs.join("") + "</div>";
   }).filter(Boolean).join("");
-  if (!rows) { if (!body.querySelector(".lsx-coin")) body.innerHTML = '<div class="empty">Loading positioning…</div>'; return; }
-  body.innerHTML =
+  if (!rows) {
+    const mb = lsxMarketBlock();
+    if (!body.querySelector(".lsx-coin")) body.innerHTML = mb || '<div class="empty">Loading positioning…</div>';
+    return;
+  }
+  body.innerHTML = lsxMarketBlock() +
     '<div class="lsx-legend"><span class="k"><span class="lsx-dot" style="background:var(--up)"></span>% long</span>' +
     '<span class="k"><span class="lsx-dot" style="background:var(--down)"></span>% short</span>' +
     '<span class="k"><span class="lsx-dot" style="background:var(--warn)"></span>whale/crowd disagree = squeeze fuel</span></div>' + rows;
@@ -6390,6 +6440,7 @@ function renderLsCrowd() {
   if (sub) sub.textContent = "HL on-chain vs Binance + Bybit · whale $ live · ratios " + (lsxCexFetched ? timeAgo(lsxCexFetched) : "…");
 }
 setTimeout(fetchLsxCex, 3000);
+setTimeout(fetchMarketLs, 3500); setInterval(fetchMarketLs, 300_000);
 setInterval(renderLsCrowd, 1000); /* live-scale whale $ + refresh every second */
 /* fully customizable token list — add via the bar, remove via ✕, saved per-browser */
 function lsxAddCoin() {

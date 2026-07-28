@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-jvMaCL86BQTeFR4RpUUTP+NHHLvjvsj+N383RyXBD+E='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-DAdGHMkuIaCTeoWaS3HMq3c8qVvBu8o/0LnEFbIMGVU='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -38,6 +38,21 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
 .ev .t { color:var(--dim); font-family:'IBM Plex Mono',monospace; font-size:11px; }
 .note { padding:10px 12px; color:var(--dim); font-size:11.5px; line-height:1.5; }
 #status { color:var(--dim); font-size:11px; margin-left:auto; }
+/* estágio 2 */
+.sig { display:flex; flex-wrap:wrap; gap:14px; }
+.sigc { flex:1 1 260px; border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:rgba(255,255,255,0.02); }
+.sigc.long { border-color:rgba(18,163,58,0.55); }
+.sigc.short { border-color:rgba(208,59,59,0.55); }
+.sig-dir { font-size:22px; font-weight:800; letter-spacing:.5px; }
+.sig-dir.up { color:var(--up); } .sig-dir.dn { color:var(--down); }
+.sig-coin { font-size:15px; font-weight:700; margin-left:8px; }
+.sig-p { font-size:12px; color:var(--dim); margin:6px 0 10px; }
+.sig-lv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:12px; font-family:'IBM Plex Mono',monospace; }
+.sig-lv .k { color:var(--dim); }
+.sig-none { font-size:13px; color:var(--dim); }
+.sig-skip { margin-top:10px; font-size:11.5px; font-family:'IBM Plex Mono',monospace; color:var(--dim); }
+.sig-skip div { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+.sig-skip b { color:var(--ink); font-weight:600; }
 </style>
 </head>
 <body>
@@ -50,6 +65,11 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
   <span id="status">loading…</span>
 </header>
 <main>
+  <section class="panel">
+    <h2>LIVE SIGNAL — stage 2, armed on the VPS <span class="r" id="sigWhen"></span></h2>
+    <div id="sigBody"><div class="sig-none">loading…</div></div>
+    <div class="note" id="sigNote"></div>
+  </section>
   <section class="panel">
     <h2>OPEN INTEREST BURSTS — real 5-min samples, 24/7 collector
       <span class="r">min OI <select id="floor"><option value="2000000">$2M</option><option value="5000000" selected>$5M</option><option value="20000000">$20M</option></select></span>
@@ -82,6 +102,48 @@ let prob = null;                 /* tabela de probabilidade condicional (backtes
 const trend = {};                /* coin -> {sign, t} tendência das últimas 2h, do preço real */
 const BMAP = { kPEPE: "1000PEPEUSDT", kSHIB: "1000SHIBUSDT", kBONK: "1000BONKUSDT", kFLOKI: "1000FLOKIUSDT" };
 const bsym = c => BMAP[c] || (c + "USDT");
+/* ---------------- estágio 2: o sinal ao vivo ---------------- */
+let sig = null;
+const agoTxt = t => { const s = Math.round((Date.now() - t) / 1000); return s < 90 ? s + "s ago" : Math.round(s / 60) + "m ago"; };
+const px6 = v => v >= 1000 ? v.toFixed(1) : v >= 1 ? v.toFixed(3) : (+v).toPrecision(4);
+async function loadSig() {
+  try {
+    const r = await fetch("data/oi-signals.json?b=" + Math.floor(Date.now() / 60000), { cache: "no-store" });
+    if (r.ok) { sig = await r.json(); renderSig(); }
+  } catch (e) {}
+}
+function renderSig() {
+  const b = $("sigBody"), w = $("sigWhen"), note = $("sigNote");
+  if (!b) return;
+  if (!sig) { b.innerHTML = '<div class="sig-none">Signal feed unavailable right now — retrying.</div>'; return; }
+  if (w) w.textContent = agoTxt(sig.t);
+  const p = sig.params || {}, k = p.k || {};
+  const armed = (sig.rows || []).filter(r => !r.skip);
+  if (armed.length) {
+    b.innerHTML = '<div class="sig">' + armed.map(r => {
+      const up = r.dir === "LONG";
+      return '<div class="sigc ' + (up ? "long" : "short") + '">' +
+        '<span class="sig-dir ' + (up ? "up" : "dn") + '">' + r.dir + '</span><span class="sig-coin">' + r.coin + '</span>' +
+        '<div class="sig-p">' + (r.p != null ? r.p + "% historical · n=" + r.n : "") + ' · OI ' + (r.dOI > 0 ? "+" : "") + r.dOI + '% in 15m · ' + fmt$(r.oi) + ' open interest</div>' +
+        '<div class="sig-lv"><span class="k">entry</span><span>' + px6(r.px) + '</span>' +
+        '<span class="k">target</span><span>' + px6(r.tgtPx) + ' (+' + r.tgtPct + '%)</span>' +
+        '<span class="k">stop</span><span>' + px6(r.stopPx) + ' (−' + r.stopPct + '%)</span>' +
+        '<span class="k">ATR</span><span>' + r.atr + '% · ' + (k.tgt || "?") + '×/' + (k.stop || "?") + '× · ' + (k.horizonH || "?") + 'h</span></div></div>';
+    }).join("") + "</div>";
+  } else {
+    const skipped = (sig.rows || []).slice(0, 6);
+    b.innerHTML = '<div class="sig-none">No armed signal right now. The gate only fires on the one profile that beat chance in the backtest — most bursts are meant to be filtered out.</div>' +
+      (skipped.length ? '<div class="sig-skip">' + skipped.map(r =>
+        "<div><b>" + r.coin + "</b> " + r.tier + " · OI " + (r.dOI > 0 ? "+" : "") + r.dOI + "% · would be " + r.dir +
+        " · target " + r.tgtPct + "% — <i>" + r.skip + "</i></div>").join("") + "</div>" : "");
+  }
+  if (note) note.innerHTML = "Written by the VPS every 5 minutes and published to " +
+    "<span style=\"font-family:'IBM Plex Mono',monospace\">data/oi-signals.json</span>; the same signal goes out on Telegram. " +
+    "A burst is only armed when ALL of these hold: the profile is <b style='color:var(--ink)'>OI up + price already trending up + red tier</b> (the only bucket that beat chance, 58.2% over 208 cases in 14 months), " +
+    "open interest above " + fmt$(p.floor || 2e7) + ", and the ATR-scaled target is at least " + ((p.minTarget || 0.02) * 100).toFixed(0) + "% — a target smaller than that is not worth the risk even with leverage. " +
+    "One alert per coin every " + (p.cooldownH || 2) + "h. Targets are volatility-scaled (" + (k.tgt || "?") + "× ATR) rather than a fixed percentage, so a quiet major and a fast alt do not get the same trade. " +
+    "Direction is the <b style='color:var(--ink)'>continuation</b> rule, the only one that stayed positive out of sample. This is a base rate on a real sample, not a prediction — and not financial advice.";
+}
 async function loadProb() {
   try {
     const r = await fetch("data/oi-prob.json?b=" + Math.floor(Date.now()/600000), { cache: "no-store" });
@@ -197,6 +259,7 @@ function render() {
   const age = Math.round((Date.now() - hist.samples[hist.samples.length-1].t) / 60000);
   $("status").textContent = hist.samples.length + " samples · last " + age + "m ago · refreshes 60s";
 }
+setInterval(loadSig, 60_000);
 async function load() {
   try {
     const r = await fetch("data/oi-history.json?b=" + Math.floor(Date.now()/60000), { cache: "no-store" });
@@ -205,7 +268,7 @@ async function load() {
   } catch (e) { $("status").textContent = "data unreachable"; }
 }
 $("floor").addEventListener("change", render);
-load(); loadProb();
+load(); loadProb(); loadSig();
 setInterval(load, 60_000);
 setInterval(loadProb, 15 * 60_000);
 </script>
