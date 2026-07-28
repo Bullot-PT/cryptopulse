@@ -1,0 +1,116 @@
+{
+  "long": {
+    "all": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "BTC-spot",
+        "DOGE-perp",
+        "ETH-perp",
+        "ETH-spot",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 219,
+      "win_rate_pct": 39.7,
+      "profit_factor": 4.839,
+      "profit_factor_after_funding": 4.281,
+      "avg_trade_pct_equity": 5.851,
+      "avg_trade_pct_equity_after_funding": 5.255,
+      "median_trade_pct_equity": -1.35
+    },
+    "perps_only": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "DOGE-perp",
+        "ETH-perp",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 161,
+      "win_rate_pct": 36.6,
+      "profit_factor": 4.481,
+      "profit_factor_after_funding": 3.785,
+      "avg_trade_pct_equity": 5.525,
+      "avg_trade_pct_equity_after_funding": 4.715,
+      "median_trade_pct_equity": -1.4
+    }
+  },
+  "short": {
+    "all": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "BTC-spot",
+        "DOGE-perp",
+        "ETH-perp",
+        "ETH-spot",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 206,
+      "win_rate_pct": 32.0,
+      "profit_factor": 1.1,
+      "profit_factor_after_funding": 1.1,
+      "avg_trade_pct_equity": 0.167,
+      "avg_trade_pct_equity_after_funding": 0.165,
+      "median_trade_pct_equity": -1.51
+    },
+    "perps_only": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "DOGE-perp",
+        "ETH-perp",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 147,
+      "win_rate_pct": 30.6,
+      "profit_factor": 0.93,
+      "profit_factor_after_funding": 0.928,
+      "avg_trade_pct_equity": -0.116,
+      "avg_trade_pct_equity_after_funding": -0.118,
+      "median_trade_pct_equity": -1.51
+    }
+  },
+  "both": {
+    "all": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "BTC-spot",
+        "DOGE-perp",
+        "ETH-perp",
+        "ETH-spot",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 390,
+      "win_rate_pct": 37.7,
+      "profit_factor": 3.009,
+      "profit_factor_after_funding": 2.763,
+      "avg_trade_pct_equity": 3.356,
+      "avg_trade_pct_equity_after_funding": 3.018,
+      "median_trade_pct_equity": -1.45
+    },
+    "perps_only": {
+      "symbols": [
+        "BNB-perp",
+        "BTC-perp",
+        "DOGE-perp",
+        "ETH-perp",
+        "SOL-perp",
+        "XRP-perp"
+      ],
+      "trades": 280,
+      "win_rate_pct": 35.0,
+      "profit_factor": 2.783,
+      "profit_factor_after_funding": 2.462,
+      "avg_trade_pct_equity": 3.086,
+      "avg_trade_pct_equity_after_funding": 2.616,
+      "median_trade_pct_equity": -1.51
+    }
+  }
+}
