@@ -21,7 +21,7 @@ jobs:
       - name: Descarregar do KV e commitar se mudou
         run: |
           set -u
-          FILES="oi-history.json hl-pos.json hl-ls.json hl-wallets.json hl-seen.json alert-log.json alert-state.json radar-history.json liq-book.json liq-totals.json upbit.json kalshi.json cg-mirror.json oi-signals.json"
+          FILES="oi-history.json hl-pos.json hl-ls.json hl-wallets.json hl-seen.json alert-log.json alert-state.json radar-history.json liq-book.json liq-totals.json upbit.json kalshi.json cg-mirror.json oi-signals.json market-ls.json"
           mkdir -p /tmp/kv
           GOT=""
           for f in $FILES; do
