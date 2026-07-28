@@ -1,0 +1,73 @@
+name: VPS investigacao regime-rider (amostra alargada)
+# Corre research.py na VPS: as MESMAS regras do bot.py contra uma amostra
+# muito maior — 8 series (6 perps + BTC/ETH spot para apanhar 2017-2018),
+# 3 variantes cada, funding historico real, sub-periodos anuais e bootstrap.
+#
+# NAO altera parametros, NAO procura variantes, NAO optimiza nada. Playbook
+# §3: espremer mais o mesmo backtest = nao. Testar as mesmas regras contra
+# mais dados = pergunta diferente e legitima. E esta.
+#
+# A VPS existe precisamente para isto: os runners do GitHub levam 451 da
+# Binance; a maquina alema passa.
+on:
+  workflow_dispatch:
+    inputs:
+      quick:
+        description: "Modo rapido (so BTC) para testar o harness"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: regime-rider-research
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+
+      - name: Instalar o harness
+        run: |
+          set -eu
+          PY=/opt/regime-rider/venv/bin/python
+          test -x "$PY" || { echo "venv nao existe — correr o deploy primeiro"; exit 1; }
+          cp regime-rider/research.py /opt/regime-rider/research.py
+          cp regime-rider/bot.py      /opt/regime-rider/bot.py
+          "$PY" -m py_compile /opt/regime-rider/research.py
+          mkdir -p /opt/regime-rider/research
+
+      - name: Correr a investigacao
+        run: |
+          set -eu
+          PY=/opt/regime-rider/venv/bin/python
+          mkdir -p regime-rider
+          Q=""
+          [ "${{ inputs.quick }}" = "true" ] && Q="--quick" || true
+          "$PY" /opt/regime-rider/research.py \
+            --out-dir /opt/regime-rider/research \
+            --md regime-rider/research.md $Q
+          cp /opt/regime-rider/research/pooled.json regime-rider/research-pooled.json
+          echo "---- tamanhos ----"
+          ls -la /opt/regime-rider/research regime-rider/research.md
+
+      - name: Commit dos resultados
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add regime-rider/research.md regime-rider/research-pooled.json
+          if git diff --cached --quiet; then
+            echo "Sem alteracoes."; exit 0
+          fi
+          git commit -m "regime-rider: investigacao com amostra alargada [skip ci]"
+          for i in 1 2 3; do
+            if git push; then echo "push ok"; exit 0; fi
+            git pull --rebase --autostash || true
+            sleep 3
+          done
+          echo "push falhou 3x"; exit 1
