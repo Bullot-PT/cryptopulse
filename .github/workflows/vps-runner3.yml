@@ -1,0 +1,57 @@
+name: VPS instalar 3º runner
+# Instala um TERCEIRO runner self-hosted na mesma VPS, com as MESMAS labels [self-hosted, vps],
+# para que três trabalhos (ex.: um backtest longo meu + um deploy de outro projecto) corram em
+# paralelo em vez de ficarem em fila. Um runner = um job de cada vez; três runners = três jobs.
+#
+# PRÉ-REQUISITO (só o Bullot pode fazer): criar o secret RUNNER_REG_TOKEN com o token de registo
+# de runner (Settings → Actions → Runners → New self-hosted runner → copiar o token do comando
+# ./config.sh --token XXXX). O token expira ~1h — criar o secret e correr este workflow logo a seguir.
+# O token NUNCA passa pelo chat: vai do GitHub para a VPS dentro do próprio workflow.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 20
+    steps:
+      - name: Instalar e arrancar o 3º runner
+        env:
+          REG: ${{ secrets.RUNNER_REG_TOKEN }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -eu
+          [ -n "${REG:-}" ] || { echo "FALTA o secret RUNNER_REG_TOKEN — ver instruções no topo do workflow"; exit 1; }
+          DIR="$HOME/actions-runner-3"
+          if [ -f "$DIR/.runner" ]; then
+            echo "3º runner já configurado — só garanto que o serviço está a correr"
+            cd "$DIR" && sudo ./svc.sh start || true
+            sudo ./svc.sh status || true
+            exit 0
+          fi
+          # pacote SEMPRE novo — copiar o 1º runner arrastava .runner/.credentials (alguns de root,
+          # que o rm do utilizador não apaga) e o config.sh dizia "already configured".
+          sudo rm -rf "$DIR"
+          mkdir -p "$DIR" && cd "$DIR"
+          V=$(curl -sS https://api.github.com/repos/actions/runner/releases/latest | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\(.*\)"/\1/')
+          [ -n "$V" ] || V="2.330.0"
+          echo "a descarregar runner v$V"
+          curl -sSL -o r.tar.gz "https://github.com/actions/runner/releases/download/v${V}/actions-runner-linux-x64-${V}.tar.gz"
+          tar xzf r.tar.gz && rm r.tar.gz
+          ls -la | head -6
+          ./config.sh --unattended --replace \
+            --url "$REPO" --token "$REG" \
+            --name "cryptomacho-vps-3" --labels "vps" --work "_work"
+          sudo ./svc.sh install "$(whoami)"
+          sudo ./svc.sh start
+          sleep 3
+          sudo ./svc.sh status | head -8
+      - name: Confirmar
+        run: |
+          echo "Runners activos na máquina:"
+          systemctl list-units 'actions.runner.*' --no-pager | head -12
+          echo "--- folga da VPS (3 runners + coletores a partilhar a mesma máquina) ---"
+          free -m || true
+          uptime || true
+          df -h / | tail -1 || true
