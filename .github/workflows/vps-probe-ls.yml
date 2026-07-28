@@ -1,0 +1,14 @@
+name: Sonda long/short das bolsas
+# Corre a sonda no runner da VPS (IP limpo — a partir de datacenters partilhados quase todas estas
+# APIs devolvem 403). Só imprime o que cada API responde; não escreve nada.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - run: node probe-ls.mjs

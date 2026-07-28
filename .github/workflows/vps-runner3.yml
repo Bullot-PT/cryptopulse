@@ -3,7 +3,7 @@ name: VPS instalar 3º runner
 # para que três trabalhos (ex.: um backtest longo meu + um deploy de outro projecto) corram em
 # paralelo em vez de ficarem em fila. Um runner = um job de cada vez; três runners = três jobs.
 #
-# PRÉ-REQUISITO (só o Bullot pode fazer): criar o secret RUNNER_REG_TOKEN com o token de registo
+# PRÉ-REQUISITO (só o Bullot pode fazer): criar o secret RUNNER3_REG_TOKEN com o token de registo
 # de runner (Settings → Actions → Runners → New self-hosted runner → copiar o token do comando
 # ./config.sh --token XXXX). O token expira ~1h — criar o secret e correr este workflow logo a seguir.
 # O token NUNCA passa pelo chat: vai do GitHub para a VPS dentro do próprio workflow.
@@ -18,11 +18,11 @@ jobs:
     steps:
       - name: Instalar e arrancar o 3º runner
         env:
-          REG: ${{ secrets.RUNNER_REG_TOKEN }}
+          REG: ${{ secrets.RUNNER3_REG_TOKEN }}
           REPO: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -eu
-          [ -n "${REG:-}" ] || { echo "FALTA o secret RUNNER_REG_TOKEN — ver instruções no topo do workflow"; exit 1; }
+          [ -n "${REG:-}" ] || { echo "FALTA o secret RUNNER3_REG_TOKEN — ver instruções no topo do workflow"; exit 1; }
           DIR="$HOME/actions-runner-3"
           if [ -f "$DIR/.runner" ]; then
             echo "3º runner já configurado — só garanto que o serviço está a correr"
