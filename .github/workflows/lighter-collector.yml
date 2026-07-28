@@ -52,7 +52,7 @@ jobs:
           else
             echo "não consegui despachar a sucessora — o cron fica como rede"
           fi
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
       - name: Scan Lighter every 5 minutes for one hour
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
