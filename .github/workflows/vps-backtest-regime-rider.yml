@@ -1,0 +1,147 @@
+name: VPS backtest regime-rider (3 variantes)
+# Corre o modo --backtest do bot.py nas tres variantes (long / short / both)
+# e escreve o resultado em regime-rider/backtest.md + backtest-<v>.csv no repo.
+#
+# O replay usa a MESMA funcao decide() que decide ao vivo. Serve para (a)
+# verificar a implementacao do lado short antes de a deixar decidir e (b) dar
+# forensica ao nivel do trade. NAO e out-of-sample e NAO deve ser usado para
+# afinar parametros (Playbook §3: a resposta por omissao a "vamos espremer
+# mais o backtest" e nao).
+#
+# Funding NAO e modelado. Tratar o lado favoravel como TECTO (Playbook §5).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: regime-rider-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+
+      - name: Correr o replay nas tres variantes
+        run: |
+          set -eu
+          PY=/opt/regime-rider/venv/bin/python
+          BOT=/opt/regime-rider/bot.py
+          test -x "$PY" || { echo "venv nao existe — correr o deploy primeiro"; exit 1; }
+          mkdir -p /tmp/rr-bt
+          for v in long short both; do
+            echo "==================== $v ===================="
+            "$PY" "$BOT" --dir /opt/regime-rider/$v --tag bt-$v --backtest \
+              --json /tmp/rr-bt/$v.json --csv /tmp/rr-bt/$v.csv \
+              | tee /tmp/rr-bt/$v.txt
+          done
+          ls -la /tmp/rr-bt
+
+      - name: Construir regime-rider/backtest.md
+        run: |
+          set -eu
+          command -v jq >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y jq
+          mkdir -p regime-rider
+          cp /tmp/rr-bt/long.csv  regime-rider/backtest-long.csv
+          cp /tmp/rr-bt/short.csv regime-rider/backtest-short.csv
+          cp /tmp/rr-bt/both.csv  regime-rider/backtest-both.csv
+
+          P=$(jq -r '.period | "\(.from) .. \(.to)  (\(.candles) candles, \(.years)y)"' /tmp/rr-bt/long.json)
+
+          {
+            echo "# Regime Rider — replay historico das 3 variantes"
+            echo
+            echo "_Gerado por \`vps-backtest-regime-rider.yml\`. Nao editar a mao._"
+            echo
+            echo "**Periodo:** $P"
+            echo "**Gerado:** $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo
+            echo "## Ordem de leitura do Playbook §2 — nunca comecar pelo lucro"
+            echo
+            echo "| # | metrica | long-only | short-only | long+short |"
+            echo "|---|---|---|---|---|"
+            row() {
+              printf "| %s | %s | %s | %s | %s |\n" "$1" "$2" \
+                "$(jq -r "$3" /tmp/rr-bt/long.json)" \
+                "$(jq -r "$3" /tmp/rr-bt/short.json)" \
+                "$(jq -r "$3" /tmp/rr-bt/both.json)"
+            }
+            row 1 "Trades"                  '.trades'
+            row "" "&nbsp;&nbsp;dos quais long"  '.by_side.long.trades // 0'
+            row "" "&nbsp;&nbsp;dos quais short" '.by_side.short.trades // 0'
+            row 2 "Win rate %"              '.win_rate_pct'
+            row 3 "Payoff (avgWin/avgLoss)" '.payoff_ratio'
+            row "" "Avg win"                '.avg_win'
+            row "" "Avg loss"               '.avg_loss'
+            row 4 "**Profit factor**"       '.profit_factor'
+            row 5 "Net return %"            '.net_return_pct'
+            row "" "CAGR %"                 '.cagr_pct'
+            row 6 "**Max drawdown %**"      '.max_drawdown_pct'
+            row 7 "Maior perda"             '.largest_loss'
+            row "" "Maior ganho"            '.largest_win'
+            row 8 "Pior serie de perdas"    '.worst_losing_streak'
+            row 9 "Buy & hold %"            '.buy_hold_return_pct'
+            row "" "Buy & hold drawdown %"  '.buy_hold_max_drawdown_pct'
+            echo
+            echo "### Profit factor isolado por lado (dentro de cada variante)"
+            echo
+            echo "| variante | PF long | PF short |"
+            echo "|---|---|---|"
+            for v in long short both; do
+              printf "| %s | %s | %s |\n" "$v" \
+                "$(jq -r '.by_side.long.profit_factor // "-"' /tmp/rr-bt/$v.json)" \
+                "$(jq -r '.by_side.short.profit_factor // "-"' /tmp/rr-bt/$v.json)"
+            done
+            echo
+            echo "## Como ler isto honestamente"
+            echo
+            echo "- **Funding nao esta modelado.** Nenhuma destas colunas paga"
+            echo "  funding. No lado short isso e material: e um custo real que"
+            echo "  o simulador nao ve. Tratar o lado favoravel como **tecto**."
+            echo "- **Nao e out-of-sample.** As regras foram desenhadas sobre"
+            echo "  esta mesma historia. O replay verifica a implementacao e da"
+            echo "  forensica ao nivel do trade — nao prova que funciona."
+            echo "- **Trades < 30 => conclusao fragil** (Playbook §2.1)."
+            echo "- **Drawdown baixo por pouca exposicao nao e controlo de"
+            echo "  risco.** Perguntar sempre porque e que e baixo."
+            echo "- O registo que decide de facto a questao dos shorts e o"
+            echo "  **forward**, das tres instancias em dry-run na VPS."
+            echo
+            echo "## Saida completa do replay"
+            echo
+            for v in long short both; do
+              echo "<details><summary>$v</summary>"
+              echo
+              echo '```'
+              cat /tmp/rr-bt/$v.txt
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            done
+            echo "Listas de trades completas: \`backtest-long.csv\`,"
+            echo "\`backtest-short.csv\`, \`backtest-both.csv\`."
+          } > regime-rider/backtest.md
+          echo "---- resumo ----"
+          head -40 regime-rider/backtest.md
+
+      - name: Commit dos resultados
+        run: |
+          set -eu
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add regime-rider/backtest.md regime-rider/backtest-*.csv
+          if git diff --cached --quiet; then
+            echo "Sem alteracoes."; exit 0
+          fi
+          git commit -m "regime-rider: replay historico das 3 variantes [skip ci]"
+          for i in 1 2 3; do
+            if git push; then echo "push ok"; exit 0; fi
+            git pull --rebase --autostash || true
+            sleep 3
+          done
+          echo "push falhou 3x"; exit 1

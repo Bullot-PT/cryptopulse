@@ -1,18 +1,22 @@
 name: VPS deploy regime-rider bot
-# Instala/actualiza o Regime Rider Bot (BTC/USDT v2.4) na VPS como systemd
-# TIMER diario (uma corrida por dia, logo apos o fecho da candle 00:00 UTC).
-# Idempotente: correr outra vez = actualizar codigo + config e reiniciar o timer.
-# PRESERVA state.json e bot.log (a memoria do bot entre corridas).
+# Instala/actualiza o Regime Rider Bot na VPS como systemd TIMER diario.
+# Corre TRES instancias independentes a partir do mesmo bot.py:
+#   /opt/regime-rider/long   -> so longs   (continua o registo original)
+#   /opt/regime-rider/short  -> so shorts
+#   /opt/regime-rider/both   -> longs + shorts
+# Todas em dry_run, sem chaves. Servem para acumular registo forward paralelo.
 #
-# Seguranca: config.json vai do repo SEM chaves (api_key/api_secret vazios).
-# Se um dia existirem os secrets RR_BINANCE_KEY / RR_BINANCE_SECRET, este
-# workflow injecta-os no config.json JA NA VPS, com umask 077 — nunca no git,
-# nunca pelo chat. Sem esses secrets, o bot fica em dry_run e nao toca em nada.
+# Idempotente: correr outra vez = actualizar codigo + configs e reiniciar o
+# timer. PRESERVA state.json e bot.log de cada instancia (a memoria do bot).
+#
+# Seguranca: os config-*.json vao do repo SEM chaves. Se um dia existirem os
+# secrets RR_BINANCE_KEY / RR_BINANCE_SECRET, sao injectados JA NA VPS com
+# umask 077 — nunca no git, nunca pelo chat. O repo e PUBLICO.
 on:
   workflow_dispatch:
     inputs:
       run_now:
-        description: "Correr o bot uma vez no fim do deploy (recomendado)"
+        description: "Correr as tres instancias uma vez no fim do deploy"
         type: boolean
         default: true
 
@@ -22,7 +26,7 @@ permissions:
 jobs:
   deploy:
     runs-on: [self-hosted, vps]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
 
@@ -33,26 +37,47 @@ jobs:
             "https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=5"
           curl -s -o /dev/null -w "binance fapi exchangeInfo:    %{http_code}\n" \
             "https://fapi.binance.com/fapi/v1/exchangeInfo"
-          curl -s -o /dev/null -w "binance spot:                 %{http_code}\n" \
-            "https://api.binance.com/api/v3/time"
+
+      - name: Migrar a instancia antiga para long/ (uma so vez)
+        run: |
+          set -eu
+          sudo mkdir -p /opt/regime-rider
+          sudo chown -R runner:runner /opt/regime-rider
+          mkdir -p /opt/regime-rider/long /opt/regime-rider/short /opt/regime-rider/both
+          if [ -f /opt/regime-rider/state.json ] && [ ! -f /opt/regime-rider/long/state.json ]; then
+            echo "Migrando state.json/bot.log da instancia unica para long/"
+            mv /opt/regime-rider/state.json /opt/regime-rider/long/state.json
+            [ -f /opt/regime-rider/bot.log ] && mv /opt/regime-rider/bot.log /opt/regime-rider/long/bot.log || true
+            [ -f /opt/regime-rider/config.json ] && mv /opt/regime-rider/config.json /opt/regime-rider/config.json.pre-multi || true
+          else
+            echo "Nada a migrar (ja migrado, ou instalacao nova)."
+          fi
+          ls -la /opt/regime-rider /opt/regime-rider/long
 
       - name: Instalar codigo + venv + dependencias
         run: |
           set -eu
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv jq
-          sudo mkdir -p /opt/regime-rider
-          sudo chown -R runner:runner /opt/regime-rider
-          cp regime-rider/bot.py       /opt/regime-rider/bot.py
-          cp regime-rider/config.json  /opt/regime-rider/config.json
-          cp regime-rider/README.md    /opt/regime-rider/README.md
-          # state.json e bot.log NAO sao tocados (memoria do bot entre corridas)
-          [ -f /opt/regime-rider/state.json ] || echo '{}' > /opt/regime-rider/state.json
-          [ -f /opt/regime-rider/bot.log ]    || : > /opt/regime-rider/bot.log
+          cp regime-rider/bot.py    /opt/regime-rider/bot.py
+          cp regime-rider/README.md /opt/regime-rider/README.md
+          cp regime-rider/config-long.json  /opt/regime-rider/long/config.json
+          cp regime-rider/config-short.json /opt/regime-rider/short/config.json
+          cp regime-rider/config-both.json  /opt/regime-rider/both/config.json
+          for v in long short both; do
+            [ -f /opt/regime-rider/$v/state.json ] || echo '{}' > /opt/regime-rider/$v/state.json
+            [ -f /opt/regime-rider/$v/bot.log ]    || : > /opt/regime-rider/$v/bot.log
+          done
           [ -d /opt/regime-rider/venv ] || python3 -m venv /opt/regime-rider/venv
           /opt/regime-rider/venv/bin/pip install --quiet --upgrade pip
           /opt/regime-rider/venv/bin/pip install --quiet ccxt
           /opt/regime-rider/venv/bin/python -c "import ccxt; print('ccxt', ccxt.__version__)"
-          ls -la /opt/regime-rider
+          echo "---- sanidade: o bot compila e as tres configs sao validas ----"
+          /opt/regime-rider/venv/bin/python -m py_compile /opt/regime-rider/bot.py
+          for v in long short both; do
+            echo -n "$v: "
+            jq -c '{enable_longs, enable_shorts, dry_run, risk_pct, long_cap_x, short_cap_x}' \
+              /opt/regime-rider/$v/config.json
+          done
 
       - name: Injectar chaves de API (so se os secrets existirem; nunca no git)
         env:
@@ -62,26 +87,25 @@ jobs:
           set -eu
           if [ -n "${RR_BINANCE_KEY:-}" ] && [ -n "${RR_BINANCE_SECRET:-}" ]; then
             umask 077
-            jq --arg k "$RR_BINANCE_KEY" --arg s "$RR_BINANCE_SECRET" \
-               '.api_key=$k | .api_secret=$s' \
-               /opt/regime-rider/config.json > /opt/regime-rider/config.tmp
-            mv /opt/regime-rider/config.tmp /opt/regime-rider/config.json
-            chmod 600 /opt/regime-rider/config.json
-            echo "Chaves injectadas a partir dos secrets (config.json agora 600)."
+            for v in long short both; do
+              F=/opt/regime-rider/$v/config.json
+              jq --arg k "$RR_BINANCE_KEY" --arg s "$RR_BINANCE_SECRET" \
+                 '.api_key=$k | .api_secret=$s' "$F" > "$F.tmp"
+              mv "$F.tmp" "$F"; chmod 600 "$F"
+            done
+            echo "Chaves injectadas nas tres instancias (configs agora 600)."
           else
-            echo "Sem secrets de API -> config.json fica sem chaves."
+            echo "Sem secrets de API -> configs sem chaves (dry-run puro)."
           fi
-          echo "--- config efectivo (chaves mascaradas) ---"
-          jq '.api_key = (if (.api_key|length)>0 then "***SET***" else "" end)
-              | .api_secret = (if (.api_secret|length)>0 then "***SET***" else "" end)' \
-             /opt/regime-rider/config.json
 
       - name: Servico systemd + timer diario (00:07 UTC)
         run: |
           set -eu
-          sudo tee /etc/systemd/system/regime-rider.service >/dev/null <<'EOF'
+          PY=/opt/regime-rider/venv/bin/python
+          BOT=/opt/regime-rider/bot.py
+          sudo tee /etc/systemd/system/regime-rider.service >/dev/null <<EOF
           [Unit]
-          Description=Regime Rider Bot - uma decisao diaria (BTC/USDT v2.4)
+          Description=Regime Rider Bot - uma decisao diaria, 3 instancias (BTC/USDT v2.4)
           After=network-online.target
           Wants=network-online.target
 
@@ -89,13 +113,16 @@ jobs:
           Type=oneshot
           User=runner
           WorkingDirectory=/opt/regime-rider
-          ExecStart=/opt/regime-rider/venv/bin/python /opt/regime-rider/bot.py
-          TimeoutStartSec=600
-          MemoryMax=512M
+          ExecStart=-$PY $BOT --dir /opt/regime-rider/long  --tag long
+          ExecStart=-$PY $BOT --dir /opt/regime-rider/short --tag short
+          ExecStart=-$PY $BOT --dir /opt/regime-rider/both  --tag both
+          TimeoutStartSec=1800
+          MemoryMax=768M
           EOF
 
-          # OnCalendar com sufixo UTC so se este systemd o suportar; senao,
-          # assume-se que a VPS esta em UTC (verificado no passo seguinte).
+          # OnCalendar com sufixo UTC so se este systemd o suportar. A VPS NAO
+          # esta em UTC (corre em CEST) — sem o sufixo, o bot correria antes do
+          # fecho da candle, que foi exactamente o bug do PC.
           if systemd-analyze calendar "*-*-* 00:07:00 UTC" >/dev/null 2>&1; then
             CAL="*-*-* 00:07:00 UTC"
           else
@@ -105,7 +132,7 @@ jobs:
 
           sudo tee /etc/systemd/system/regime-rider.timer >/dev/null <<EOF
           [Unit]
-          Description=Corre o Regime Rider Bot uma vez por dia, logo apos o fecho 00:00 UTC
+          Description=Corre as 3 instancias do Regime Rider logo apos o fecho 00:00 UTC
 
           [Timer]
           OnCalendar=$CAL
@@ -121,27 +148,25 @@ jobs:
           sudo systemctl enable regime-rider.timer
           sudo systemctl restart regime-rider.timer
 
-      - name: Verificar (fuso, timer, e uma corrida real do bot)
+      - name: Verificar (fuso, timer, e uma corrida real das 3 instancias)
         run: |
           set -eu
-          echo "==== FUSO HORARIO DA VPS (tem de ser UTC) ===="
+          echo "==== FUSO DA VPS ===="
           timedatectl | sed -n '1,8p'
-          echo
-          echo "==== TIMER ===="
-          systemctl status regime-rider.timer --no-pager | head -8 || true
+          echo; echo "==== TIMER ===="
           systemctl list-timers regime-rider.timer --all --no-pager
           echo
           if [ "${{ inputs.run_now }}" = "true" ]; then
-            echo "==== CORRIDA DE VERIFICACAO ===="
+            echo "==== CORRIDA DE VERIFICACAO (3 instancias) ===="
             sudo systemctl start regime-rider.service || true
             sleep 5
-            systemctl status regime-rider.service --no-pager | head -12 || true
+            systemctl status regime-rider.service --no-pager | head -14 || true
             echo "---- journalctl ----"
-            sudo journalctl -u regime-rider.service -n 40 --no-pager
+            sudo journalctl -u regime-rider.service -n 60 --no-pager
           fi
-          echo
-          echo "==== bot.log (ultimas 20 linhas) ===="
-          tail -20 /opt/regime-rider/bot.log || true
-          echo
-          echo "==== state.json ===="
-          cat /opt/regime-rider/state.json || true
+          for v in long short both; do
+            echo; echo "==== $v — ultimas 8 linhas ===="
+            tail -8 /opt/regime-rider/$v/bot.log || true
+            echo "---- state ----"
+            cat /opt/regime-rider/$v/state.json || true
+          done

@@ -1,25 +1,19 @@
 name: VPS estado do regime-rider
-# Le o estado do Regime Rider Bot na VPS e escreve-o em regime-rider/status.md
-# no proprio repo. Existe para resolver a limitacao estrutural registada no ops
-# log: as sessoes/checks na cloud nao alcancam C:\regime-rider-bot\ no Windows,
-# nem conseguem ler os logs do Actions de forma fiavel. Um ficheiro no repo e
-# legivel por qualquer sessao, em qualquer maquina, para sempre.
+# Le o estado das TRES instancias do Regime Rider na VPS (long / short / both)
+# e escreve-o em regime-rider/status.md no proprio repo. Existe para resolver
+# a limitacao estrutural registada no ops log: as sessoes/checks na cloud nao
+# alcancam o PC do utilizador, nem conseguem ler os logs do Actions de forma
+# fiavel. Um ficheiro no repo e legivel por qualquer sessao, para sempre.
 #
 # NAO altera nada na VPS — so le. Seguro de disparar a qualquer momento.
 #
-# PRIVACIDADE: o repo e PUBLICO. Por isso o status.md publica apenas campos
-# operacionais (data da corrida, Close/SMA200/ATR/regime/HH20, ha posicao ou
-# nao, kill switch, proxima corrida). NAO publica equity, quantidade, preco de
-# entrada nem stop — esses ficam so na VPS, visiveis no output do job.
+# PRIVACIDADE: o repo e PUBLICO. O status.md publica apenas campos
+# operacionais. NAO publica equity, quantidade, preco de entrada nem stop —
+# esses ficam so na VPS, visiveis no output do job.
 on:
   workflow_dispatch:
-    inputs:
-      lines:
-        description: "Quantas linhas do bot.log mostrar no output do job"
-        type: string
-        default: "60"
   schedule:
-    - cron: "25 0 * * *"   # 00:25 UTC — 18 min depois da corrida diaria do bot
+    - cron: "25 0 * * *"   # 00:25 UTC — 18 min depois da corrida diaria
 
 permissions:
   contents: write
@@ -41,71 +35,88 @@ jobs:
           echo; echo "==== TIMER ===="
           systemctl list-timers regime-rider.timer --all --no-pager || true
           echo; echo "==== ULTIMA CORRIDA DO SERVICO ===="
-          systemctl status regime-rider.service --no-pager | head -14 || true
-          echo; echo "==== state.json (completo, so aqui) ===="
-          cat /opt/regime-rider/state.json || true
-          echo; echo "==== bot.log — ultimas linhas ===="
-          tail -n 60 /opt/regime-rider/bot.log || true
+          systemctl status regime-rider.service --no-pager | head -16 || true
+          for v in long short both; do
+            echo; echo "######## $v ########"
+            echo "-- state.json (completo, so aqui) --"
+            cat /opt/regime-rider/$v/state.json || true
+            echo "-- bot.log (40) --"
+            tail -n 40 /opt/regime-rider/$v/bot.log || true
+          done
           echo; echo "==== journalctl ===="
-          sudo journalctl -u regime-rider.service -n 60 --no-pager || true
+          sudo journalctl -u regime-rider.service -n 80 --no-pager || true
 
       - name: Construir regime-rider/status.md (sem dados financeiros)
         run: |
           set -eu
           command -v jq >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y jq
-          S=/opt/regime-rider/state.json
-          L=/opt/regime-rider/bot.log
           NEXT=$(systemctl list-timers regime-rider.timer --all --no-pager 2>/dev/null | sed -n '2p' | cut -c1-40 || echo "?")
-          LASTDEC=$(grep -E "Close=" "$L" 2>/dev/null | tail -1 || echo "(ainda sem linha de decisao)")
-          LASTACT=$(grep -E "Flat, no signal|ENTRY signal|Long opened|Raising stop|Stop unchanged|Regime DOWN ->|KILL SWITCH|Refusing to act|Simulated stop hit" "$L" 2>/dev/null | tail -1 || echo "(sem accao registada)")
-          NRUNS=$(grep -c "Close=" "$L" 2>/dev/null || echo 0)
-          INPOS=$(jq -r '.in_position // false' "$S" 2>/dev/null || echo "?")
-          SIDE=$(jq -r 'if (.side // "")=="" then "-" else .side end' "$S" 2>/dev/null || echo "?")
-          HALT=$(jq -r '.halted // false' "$S" 2>/dev/null || echo "?")
-          DRY=$(jq -r '.dry_run' /opt/regime-rider/config.json 2>/dev/null || echo "?")
-          KEYS=$(jq -r 'if (.api_key|length)>0 then "SIM" else "nao" end' /opt/regime-rider/config.json 2>/dev/null || echo "?")
           SVC=$(systemctl is-active regime-rider.timer 2>/dev/null || echo inactive)
-          DEC15=$(grep -E "Close=" "$L" 2>/dev/null | tail -15 || true)
+          LASTRUN=$(systemctl show regime-rider.service -p ExecMainExitTimestamp --value 2>/dev/null || echo "?")
 
           mkdir -p regime-rider
           {
-            echo "# Regime Rider Bot — estado na VPS"
+            echo "# Regime Rider — estado das 3 instancias na VPS"
             echo
-            echo "_Gerado automaticamente pelo workflow \`vps-bot-log.yml\`. Nao editar a mao._"
+            echo "_Gerado por \`vps-bot-log.yml\`. Nao editar a mao._"
             echo
             echo "| campo | valor |"
             echo "|---|---|"
             echo "| Snapshot (UTC) | $(date -u '+%Y-%m-%d %H:%M:%S') |"
             echo "| Timer | $SVC |"
             echo "| Proxima corrida | $NEXT |"
-            echo "| Corridas ja registadas | $NRUNS |"
-            echo "| Em posicao | $INPOS (lado: $SIDE) |"
-            echo "| Kill switch accionado | $HALT |"
-            echo "| dry_run | $DRY |"
-            echo "| Chaves de API configuradas | $KEYS |"
+            echo "| Ultima corrida terminou | $LASTRUN |"
             echo
-            echo "## Ultima linha de decisao"
+            echo "## Resumo"
             echo
-            echo '```'
-            echo "$LASTDEC"
-            echo '```'
+            echo "| instancia | longs | shorts | corridas | em posicao | lado | kill switch | dry_run | chaves |"
+            echo "|---|---|---|---|---|---|---|---|---|"
+            for v in long short both; do
+              C=/opt/regime-rider/$v/config.json
+              S=/opt/regime-rider/$v/state.json
+              L=/opt/regime-rider/$v/bot.log
+              printf "| **%s** | %s | %s | %s | %s | %s | %s | %s | %s |\n" "$v" \
+                "$(jq -r '.enable_longs' $C 2>/dev/null || echo '?')" \
+                "$(jq -r '.enable_shorts' $C 2>/dev/null || echo '?')" \
+                "$(grep -c 'Close=' $L 2>/dev/null || echo 0)" \
+                "$(jq -r '.in_position // false' $S 2>/dev/null || echo '?')" \
+                "$(jq -r 'if (.side // "")=="" then "-" else .side end' $S 2>/dev/null || echo '?')" \
+                "$(jq -r '.halted // false' $S 2>/dev/null || echo '?')" \
+                "$(jq -r '.dry_run' $C 2>/dev/null || echo '?')" \
+                "$(jq -r 'if (.api_key|length)>0 then "SIM" else "nao" end' $C 2>/dev/null || echo '?')"
+            done
             echo
-            echo "## Ultima accao"
-            echo
-            echo '```'
-            echo "$LASTACT"
-            echo '```'
-            echo
-            echo "## Ultimas 15 decisoes"
-            echo
-            echo '```'
-            echo "$DEC15"
-            echo '```'
-            echo
-            echo "> Equity, quantidade, preco de entrada e stop NAO sao publicados aqui"
-            echo "> (o repo e publico). Estao no output do job deste workflow, no Actions."
+            for v in long short both; do
+              L=/opt/regime-rider/$v/bot.log
+              echo "## $v"
+              echo
+              echo "**Ultima linha de decisao**"
+              echo
+              echo '```'
+              grep -E "Close=" "$L" 2>/dev/null | tail -1 || echo "(sem decisao registada)"
+              echo '```'
+              echo
+              echo "**Ultima accao**"
+              echo
+              echo '```'
+              grep -E "Flat, no signal|ENTRY signal|opened|Moving stop|Stop unchanged|regime_flip|KILL SWITCH|Refusing to act|Simulated stop hit" "$L" 2>/dev/null | tail -1 || echo "(sem accao registada)"
+              echo '```'
+              echo
+              echo "**Ultimas 10 decisoes**"
+              echo
+              echo '```'
+              grep -E "Close=" "$L" 2>/dev/null | tail -10 || true
+              echo '```'
+              echo
+            done
+            echo "> Equity, quantidade, preco de entrada e stop NAO sao publicados"
+            echo "> aqui (o repo e publico). Estao no output do job deste workflow."
+            echo ">"
+            echo "> \`HH20\`/\`LL20\` sao extremos de FECHOS diarios, nao de maximos"
+            echo "> e minimos intraday. Comparar com wicks de um grafico da uma"
+            echo "> fasquia diferente da que o bot usa."
           } > regime-rider/status.md
-          echo "---- status.md gerado ----"
+          echo "---- status.md ----"
           cat regime-rider/status.md
 
       - name: Commit do status (so se mudou)
