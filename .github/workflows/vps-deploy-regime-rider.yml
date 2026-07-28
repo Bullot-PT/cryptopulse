@@ -6,17 +6,26 @@ name: VPS deploy regime-rider bot
 #   /opt/regime-rider/both   -> longs + shorts
 # Todas em dry_run, sem chaves. Servem para acumular registo forward paralelo.
 #
+# Instala tambem os ALERTAS DE TELEGRAM (custo zero, sem chave de API nova):
+#   - entrada / saida / stop atingido / kill switch / erro -> mensagem
+#   - dias normais sem sinal e arrasto rotineiro do stop -> silencio
+#   - watchdog diario as 02:00 UTC -> avisa se o bot DEIXOU de correr
+#
 # Idempotente: correr outra vez = actualizar codigo + configs e reiniciar o
 # timer. PRESERVA state.json e bot.log de cada instancia (a memoria do bot).
 #
-# Seguranca: os config-*.json vao do repo SEM chaves. Se um dia existirem os
-# secrets RR_BINANCE_KEY / RR_BINANCE_SECRET, sao injectados JA NA VPS com
-# umask 077 — nunca no git, nunca pelo chat. O repo e PUBLICO.
+# Seguranca: os config-*.json vao do repo SEM chaves. Os segredos (Telegram e,
+# um dia, a exchange) entram a partir dos GitHub Secrets e sao escritos JA NA
+# VPS com umask 077 — nunca no git, nunca pelo chat. O repo e PUBLICO.
 on:
   workflow_dispatch:
     inputs:
       run_now:
         description: "Correr as tres instancias uma vez no fim do deploy"
+        type: boolean
+        default: true
+      test_telegram:
+        description: "Enviar uma mensagem de teste para o Telegram"
         type: boolean
         default: true
 
@@ -35,8 +44,8 @@ jobs:
           set -x
           curl -s -o /dev/null -w "binance fapi (perp klines): %{http_code}\n" \
             "https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1d&limit=5"
-          curl -s -o /dev/null -w "binance fapi exchangeInfo:    %{http_code}\n" \
-            "https://fapi.binance.com/fapi/v1/exchangeInfo"
+          curl -s -o /dev/null -w "api.telegram.org:            %{http_code}\n" \
+            "https://api.telegram.org"
 
       - name: Migrar a instancia antiga para long/ (uma so vez)
         run: |
@@ -52,14 +61,18 @@ jobs:
           else
             echo "Nada a migrar (ja migrado, ou instalacao nova)."
           fi
-          ls -la /opt/regime-rider /opt/regime-rider/long
 
       - name: Instalar codigo + venv + dependencias
         run: |
           set -eu
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv jq
-          cp regime-rider/bot.py    /opt/regime-rider/bot.py
-          cp regime-rider/README.md /opt/regime-rider/README.md
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv jq curl
+          cp regime-rider/bot.py          /opt/regime-rider/bot.py
+          cp regime-rider/research.py     /opt/regime-rider/research.py
+          cp regime-rider/README.md       /opt/regime-rider/README.md
+          cp regime-rider/notify.sh       /opt/regime-rider/notify.sh
+          cp regime-rider/run-instance.sh /opt/regime-rider/run-instance.sh
+          cp regime-rider/watchdog.sh     /opt/regime-rider/watchdog.sh
+          chmod +x /opt/regime-rider/*.sh
           cp regime-rider/config-long.json  /opt/regime-rider/long/config.json
           cp regime-rider/config-short.json /opt/regime-rider/short/config.json
           cp regime-rider/config-both.json  /opt/regime-rider/both/config.json
@@ -71,15 +84,34 @@ jobs:
           /opt/regime-rider/venv/bin/pip install --quiet --upgrade pip
           /opt/regime-rider/venv/bin/pip install --quiet ccxt
           /opt/regime-rider/venv/bin/python -c "import ccxt; print('ccxt', ccxt.__version__)"
-          echo "---- sanidade: o bot compila e as tres configs sao validas ----"
           /opt/regime-rider/venv/bin/python -m py_compile /opt/regime-rider/bot.py
+          /opt/regime-rider/venv/bin/python -m py_compile /opt/regime-rider/research.py
+          for s in notify run-instance watchdog; do bash -n /opt/regime-rider/$s.sh; done
+          echo "---- configs ----"
           for v in long short both; do
             echo -n "$v: "
             jq -c '{enable_longs, enable_shorts, dry_run, risk_pct, long_cap_x, short_cap_x}' \
               /opt/regime-rider/$v/config.json
           done
 
-      - name: Injectar chaves de API (so se os secrets existirem; nunca no git)
+      - name: Credenciais do Telegram (dos Secrets para a VPS, umask 077)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+        run: |
+          set -eu
+          if [ -n "${TELEGRAM_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT:-}" ]; then
+            umask 077
+            printf 'TELEGRAM_TOKEN=%s\nTELEGRAM_CHAT=%s\n' \
+              "$TELEGRAM_TOKEN" "$TELEGRAM_CHAT" > /opt/regime-rider/telegram.env
+            chmod 600 /opt/regime-rider/telegram.env
+            echo "telegram.env escrito (600). Alertas ligados."
+          else
+            rm -f /opt/regime-rider/telegram.env
+            echo "Sem secrets de Telegram -> alertas desligados (o bot corre na mesma)."
+          fi
+
+      - name: Chaves de API da exchange (so se os secrets existirem)
         env:
           RR_BINANCE_KEY: ${{ secrets.RR_BINANCE_KEY }}
           RR_BINANCE_SECRET: ${{ secrets.RR_BINANCE_SECRET }}
@@ -93,16 +125,15 @@ jobs:
                  '.api_key=$k | .api_secret=$s' "$F" > "$F.tmp"
               mv "$F.tmp" "$F"; chmod 600 "$F"
             done
-            echo "Chaves injectadas nas tres instancias (configs agora 600)."
+            echo "Chaves injectadas nas tres instancias."
           else
             echo "Sem secrets de API -> configs sem chaves (dry-run puro)."
           fi
 
-      - name: Servico systemd + timer diario (00:07 UTC)
+      - name: Servicos systemd + timers (bot 00:07 UTC, watchdog 02:00 UTC)
         run: |
           set -eu
-          PY=/opt/regime-rider/venv/bin/python
-          BOT=/opt/regime-rider/bot.py
+          RI=/opt/regime-rider/run-instance.sh
           sudo tee /etc/systemd/system/regime-rider.service >/dev/null <<EOF
           [Unit]
           Description=Regime Rider Bot - uma decisao diaria, 3 instancias (BTC/USDT v2.4)
@@ -113,29 +144,41 @@ jobs:
           Type=oneshot
           User=runner
           WorkingDirectory=/opt/regime-rider
-          ExecStart=-$PY $BOT --dir /opt/regime-rider/long  --tag long
-          ExecStart=-$PY $BOT --dir /opt/regime-rider/short --tag short
-          ExecStart=-$PY $BOT --dir /opt/regime-rider/both  --tag both
+          ExecStart=-$RI long
+          ExecStart=-$RI short
+          ExecStart=-$RI both
           TimeoutStartSec=1800
           MemoryMax=768M
           EOF
 
-          # OnCalendar com sufixo UTC so se este systemd o suportar. A VPS NAO
-          # esta em UTC (corre em CEST) — sem o sufixo, o bot correria antes do
-          # fecho da candle, que foi exactamente o bug do PC.
+          sudo tee /etc/systemd/system/regime-rider-watchdog.service >/dev/null <<'EOF'
+          [Unit]
+          Description=Avisa no Telegram se o regime-rider deixou de correr
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=runner
+          ExecStart=/opt/regime-rider/watchdog.sh
+          TimeoutStartSec=120
+          EOF
+
+          # A VPS NAO esta em UTC (corre em CEST). Sem o sufixo, o bot correria
+          # antes do fecho da candle — exactamente o bug que a maquina do
+          # Windows tinha. Testar se este systemd aceita o sufixo.
           if systemd-analyze calendar "*-*-* 00:07:00 UTC" >/dev/null 2>&1; then
-            CAL="*-*-* 00:07:00 UTC"
+            CAL_BOT="*-*-* 00:07:00 UTC"; CAL_WD="*-*-* 02:00:00 UTC"
           else
-            CAL="*-*-* 00:07:00"
+            CAL_BOT="*-*-* 00:07:00";     CAL_WD="*-*-* 02:00:00"
           fi
-          echo "OnCalendar escolhido: $CAL"
+          echo "OnCalendar bot=$CAL_BOT watchdog=$CAL_WD"
 
           sudo tee /etc/systemd/system/regime-rider.timer >/dev/null <<EOF
           [Unit]
           Description=Corre as 3 instancias do Regime Rider logo apos o fecho 00:00 UTC
 
           [Timer]
-          OnCalendar=$CAL
+          OnCalendar=$CAL_BOT
           Persistent=true
           AccuracySec=1min
           RandomizedDelaySec=0
@@ -144,17 +187,40 @@ jobs:
           WantedBy=timers.target
           EOF
 
-          sudo systemctl daemon-reload
-          sudo systemctl enable regime-rider.timer
-          sudo systemctl restart regime-rider.timer
+          sudo tee /etc/systemd/system/regime-rider-watchdog.timer >/dev/null <<EOF
+          [Unit]
+          Description=Watchdog diario do Regime Rider
 
-      - name: Verificar (fuso, timer, e uma corrida real das 3 instancias)
+          [Timer]
+          OnCalendar=$CAL_WD
+          Persistent=true
+          AccuracySec=5min
+
+          [Install]
+          WantedBy=timers.target
+          EOF
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable regime-rider.timer regime-rider-watchdog.timer
+          sudo systemctl restart regime-rider.timer regime-rider-watchdog.timer
+
+      - name: Teste do Telegram
+        if: ${{ inputs.test_telegram }}
+        run: |
+          MSG=$(printf '%s\n%s\n%s\n%s' \
+            "Alertas do regime-rider ligados na VPS." \
+            "Recebes mensagem quando: uma instancia abrir ou fechar posicao, o stop for atingido, o kill switch disparar, ou o bot falhar." \
+            "Dias normais sem sinal = silencio." \
+            "Watchdog diario as 02:00 UTC avisa se o bot deixar de correr.")
+          /opt/regime-rider/notify.sh "$MSG"
+
+      - name: Verificar (fuso, timers, e uma corrida real das 3 instancias)
         run: |
           set -eu
           echo "==== FUSO DA VPS ===="
           timedatectl | sed -n '1,8p'
-          echo; echo "==== TIMER ===="
-          systemctl list-timers regime-rider.timer --all --no-pager
+          echo; echo "==== TIMERS ===="
+          systemctl list-timers 'regime-rider*' --all --no-pager
           echo
           if [ "${{ inputs.run_now }}" = "true" ]; then
             echo "==== CORRIDA DE VERIFICACAO (3 instancias) ===="
@@ -164,9 +230,11 @@ jobs:
             echo "---- journalctl ----"
             sudo journalctl -u regime-rider.service -n 60 --no-pager
           fi
+          echo; echo "==== WATCHDOG (a seco) ===="
+          /opt/regime-rider/watchdog.sh
           for v in long short both; do
-            echo; echo "==== $v — ultimas 8 linhas ===="
-            tail -8 /opt/regime-rider/$v/bot.log || true
-            echo "---- state ----"
-            cat /opt/regime-rider/$v/state.json || true
+            echo; echo "==== $v — ultimas 6 linhas ===="
+            tail -6 /opt/regime-rider/$v/bot.log || true
           done
+          echo; echo "==== permissoes dos segredos ===="
+          ls -l /opt/regime-rider/telegram.env 2>/dev/null || echo "(sem telegram.env)"
