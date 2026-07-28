@@ -60,7 +60,7 @@ function add(key, big, out, mv) {
   if (big) { g.nBig++; if (out === "up") g.upBig++; else if (out === "down") g.downBig++; }
   if (mv != null) { g.mvSum += Math.abs(mv); g.mvN++; }
 }
-function process(evs, kl) {
+function processEvents(evs, kl) {
   const idx = new Map(kl.map((k, i) => [k[0], i]));
   for (const e of evs) {
     const t0 = Math.floor(e.t / BAR) * BAR;
@@ -106,7 +106,7 @@ for (const c of DEEP) {
     const px = new Map(kl.map(k => [k[0], k[3]]));
     const oi = raw.map(([t, v]) => [t, v * (px.get(Math.floor(t / BAR) * BAR) || 0)]).filter(x => x[1] > 0);
     const evs = detect(oi, 5e6);
-    process(evs, kl);
+    processEvents(evs, kl);
     totalEv += evs.length;
     deepest = Math.min(deepest, oi[0][0]);
     console.log(`deep ${c}: desde ${new Date(oi[0][0]).toISOString().slice(0,10)}, ${evs.length} eventos`);
@@ -129,7 +129,7 @@ for (const c of DEEP) {
       if (oi.length < 100) continue;
       const kl = await klines5m(sym, start - 3 * 3600_000, end);
       const evs = detect(oi, 5e6);
-      process(evs, kl);
+      processEvents(evs, kl);
       totalEv += evs.length;
       console.log(`wide ${c}: ${evs.length} eventos`);
     } catch (e) { console.log("wide " + c + ": " + e.message); }
