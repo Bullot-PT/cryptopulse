@@ -1,0 +1,55 @@
+name: VPS instalar 2º runner
+# Instala um SEGUNDO runner self-hosted na mesma VPS, com as MESMAS labels [self-hosted, vps],
+# para que dois trabalhos (ex.: um backtest longo meu + um deploy de outro projecto) corram em
+# paralelo em vez de ficarem em fila. Um runner = um job de cada vez; dois runners = dois jobs.
+#
+# PRÉ-REQUISITO (só o Bullot pode fazer): criar o secret RUNNER_REG_TOKEN com o token de registo
+# de runner (Settings → Actions → Runners → New self-hosted runner → copiar o token do comando
+# ./config.sh --token XXXX). O token expira ~1h — criar o secret e correr este workflow logo a seguir.
+# O token NUNCA passa pelo chat: vai do GitHub para a VPS dentro do próprio workflow.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 20
+    steps:
+      - name: Instalar e arrancar o 2º runner
+        env:
+          REG: ${{ secrets.RUNNER_REG_TOKEN }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -eu
+          [ -n "${REG:-}" ] || { echo "FALTA o secret RUNNER_REG_TOKEN — ver instruções no topo do workflow"; exit 1; }
+          DIR="$HOME/actions-runner-2"
+          if [ -f "$DIR/.runner" ]; then
+            echo "2º runner já configurado — só garanto que o serviço está a correr"
+            cd "$DIR" && sudo ./svc.sh start || true
+            sudo ./svc.sh status || true
+            exit 0
+          fi
+          mkdir -p "$DIR" && cd "$DIR"
+          # reaproveita o pacote já descarregado do 1º runner se existir; senão vai buscar o mais recente
+          if [ -d "$HOME/actions-runner" ] && [ -f "$HOME/actions-runner/config.sh" ]; then
+            echo "a copiar o pacote do 1º runner"
+            cp -r "$HOME/actions-runner/." "$DIR/"
+            rm -rf "$DIR/_work" "$DIR/.runner" "$DIR/.credentials" "$DIR/.credentials_rsaparams" "$DIR/.service" 2>/dev/null || true
+          else
+            V=$(curl -sS https://api.github.com/repos/actions/runner/releases/latest | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\(.*\)"/\1/')
+            echo "a descarregar runner v$V"
+            curl -sSL -o r.tar.gz "https://github.com/actions/runner/releases/download/v${V}/actions-runner-linux-x64-${V}.tar.gz"
+            tar xzf r.tar.gz && rm r.tar.gz
+          fi
+          ./config.sh --unattended --replace \
+            --url "$REPO" --token "$REG" \
+            --name "cryptomacho-vps-2" --labels "vps" --work "_work"
+          sudo ./svc.sh install "$(whoami)"
+          sudo ./svc.sh start
+          sleep 3
+          sudo ./svc.sh status | head -8
+      - name: Confirmar
+        run: |
+          echo "Runners activos na máquina:"
+          systemctl list-units 'actions.runner.*' --no-pager | head -10
