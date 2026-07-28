@@ -30,18 +30,16 @@ jobs:
             sudo ./svc.sh status || true
             exit 0
           fi
+          # pacote SEMPRE novo — copiar o 1º runner arrastava .runner/.credentials (alguns de root,
+          # que o rm do utilizador não apaga) e o config.sh dizia "already configured".
+          sudo rm -rf "$DIR"
           mkdir -p "$DIR" && cd "$DIR"
-          # reaproveita o pacote já descarregado do 1º runner se existir; senão vai buscar o mais recente
-          if [ -d "$HOME/actions-runner" ] && [ -f "$HOME/actions-runner/config.sh" ]; then
-            echo "a copiar o pacote do 1º runner"
-            cp -r "$HOME/actions-runner/." "$DIR/"
-            rm -rf "$DIR/_work" "$DIR/.runner" "$DIR/.credentials" "$DIR/.credentials_rsaparams" "$DIR/.service" 2>/dev/null || true
-          else
-            V=$(curl -sS https://api.github.com/repos/actions/runner/releases/latest | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\(.*\)"/\1/')
-            echo "a descarregar runner v$V"
-            curl -sSL -o r.tar.gz "https://github.com/actions/runner/releases/download/v${V}/actions-runner-linux-x64-${V}.tar.gz"
-            tar xzf r.tar.gz && rm r.tar.gz
-          fi
+          V=$(curl -sS https://api.github.com/repos/actions/runner/releases/latest | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\(.*\)"/\1/')
+          [ -n "$V" ] || V="2.330.0"
+          echo "a descarregar runner v$V"
+          curl -sSL -o r.tar.gz "https://github.com/actions/runner/releases/download/v${V}/actions-runner-linux-x64-${V}.tar.gz"
+          tar xzf r.tar.gz && rm r.tar.gz
+          ls -la | head -6
           ./config.sh --unattended --replace \
             --url "$REPO" --token "$REG" \
             --name "cryptomacho-vps-2" --labels "vps" --work "_work"
