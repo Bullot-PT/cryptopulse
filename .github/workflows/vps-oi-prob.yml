@@ -1,0 +1,21 @@
+name: VPS tabela de probabilidade OI
+# Constrói a tabela de probabilidade de direcção por perfil de burst (oi-prob.json no KV).
+# Corre na VPS (IP alemão = fapi/bybit acessíveis). 1 escrita KV. Dispatch manual.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '40 3 * * 1'      # segunda-feira 03:40 UTC — refresca a tabela com mais uma semana de dados
+permissions:
+  contents: read
+jobs:
+  prob:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - name: Construir tabela
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_KV_NAMESPACE_ID: ${{ secrets.CF_KV_NAMESPACE_ID }}
+        run: node oi-prob.mjs
