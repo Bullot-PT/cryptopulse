@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-qcfBsocD1oWM7o/zPL8STCWsTl6VmjqMOcStXlhwcSA='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-JOyqJ8/Ozh5mab+UibzvH+hCeIzoh8cmQ1zJ2egtGvA='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -131,7 +131,9 @@ function renderSig() {
         '<div class="sig-lv"><span class="k">entry</span><span>' + px6(r.px) + '</span>' +
         '<span class="k">target</span><span>' + px6(r.tgtPx) + ' (+' + r.tgtPct + '%)</span>' +
         '<span class="k">stop</span><span>' + px6(r.stopPx) + ' (−' + r.stopPct + '%)</span>' +
-        '<span class="k">ATR</span><span>' + r.atr + '% · ' + (k.tgt || "?") + '×/' + (k.stop || "?") + '× · ' + (k.horizonH || "?") + 'h</span></div></div>';
+        '<span class="k">ATR</span><span>' + r.atr + '% · ' + (k.tgt || "?") + '×/' + (k.stop || "?") + '× · ' + (k.horizonH || "?") + 'h</span>' +
+        (r.expMove != null ? '<span class="k">typical</span><span>' + r.expMove + '% run within 12h</span>' : "") +
+        '</div></div>';
     }).join("") + "</div>";
   } else {
     const skipped = (sig.rows || []).slice(0, 6);
@@ -142,9 +144,13 @@ function renderSig() {
   }
   if (note) note.innerHTML = "Armed only when ALL hold: profile <b style='color:var(--ink)'>OI up + price already trending up + red tier</b> " +
     "(the one bucket that beat chance — 58.2% over 208 cases in 14 months), open interest above " + fmt$(p.floor || 2e7) +
-    ", and an ATR-scaled target of at least " + ((p.minTarget || 0.02) * 100).toFixed(0) + "% (smaller than that is not worth the risk even with leverage). " +
-    "Targets are " + (k.tgt || "?") + "× ATR, stops " + (k.stop || "?") + "× ATR, so a quiet major and a fast alt do not get the same trade. " +
+    ", and a <b style='color:var(--ink)'>typical run of at least " + ((p.minMove || 0.02) * 100).toFixed(0) + "%</b> — the coin has to be volatile enough for the move to be worth taking. " +
+    "That figure is the coin's own ATR multiplied by the median 12-hour excursion this profile actually produced in the backtest, not a guess. " +
+    "Targets are " + (k.tgt || "?") + "× ATR, stops " + (k.stop || "?") + "× ATR over " + (k.horizonH || "?") + "h — the combination the grid picked" +
+    (k.n ? " on " + k.n + " cases" : "") + ". " +
+    (k.reach ? "For reference, of past cases in this profile <b style='color:var(--ink)'>" + k.reach.p2 + "% reached +2%, " + k.reach.p3 + "% reached +3% and " + k.reach.p5 + "% reached +5%</b> within 24 hours (median run " + k.reach.med + "%). Bigger moves are there, but they need the longer hold. " : "") +
     "One alert per coin every " + (p.cooldownH || 2) + "h. Direction is the <b style='color:var(--ink)'>continuation</b> rule. " +
+    "Execution must be maker — at taker fees this edge is gone. " +
     "Written by the VPS every 5 min to <span style=\"font-family:'IBM Plex Mono',monospace\">data/oi-signals.json</span> and sent on Telegram. " +
     "A base rate on a real sample, not a prediction — not financial advice.";
 }

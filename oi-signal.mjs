@@ -30,8 +30,10 @@ const BAR = 300_000, PREV_MS = 2 * 3600_000, ATR_N = 288;
 const OI_FLOOR = 2e7;              /* $20M — o chão que o backtest mostrou ser melhor nas alts */
 const RED = 0.05, YELLOW = 0.035;
 const COOLDOWN_MS = 2 * 3600_000;  /* um alerta por moeda de 2 em 2h — o detector já exige 1h entre eventos */
-const MIN_TGT = 0.02;              /* alvo mínimo 2%: abaixo disto não vale a pena abrir, mesmo com alavancagem */
-const DEFAULT_K = { tgt: 2, stop: 1.5, horizonH: 12 };
+/* Exigência dele: "preciso de mais % nas trades, especialmente porque vou usar lev".
+   Compara-se com a EXCURSÃO TÍPICA a 12h desta moeda (medida), não com o alvo de 5 minutos. */
+const MIN_MOVE = 0.02;
+const DEFAULT_K = { tgt: 4, stop: 2, horizonH: 6, mfeK: null, reach: null };
 
 /* Buckets ARMADOS. Vindos do estudo de probabilidade (2276 eventos, 14 meses): só um perfil tem
    vantagem real fora do acaso. Os amarelos ficam DESARMADOS — dão 50-53%, ou seja, moeda ao ar —
@@ -80,7 +82,18 @@ async function loadK() {
     const b = j && j.buckets && (j.buckets["OIup|trUp|red|20M"] || j.buckets["OIup|trUp|red"]);
     if (b && b.best && b.best.combo) {
       const m = b.best.combo.match(/^(\d+)h\|([\d.]+)atr\|([\d.]+)atr$/);
-      if (m) return { tgt: +m[2], stop: +m[3], horizonH: +m[1], src: "oi-target.json (" + b.best.netMaker + "%/trade líquido, n=" + b.best.n + ")" };
+      if (m) {
+        const h12 = (b.H && (b.H["12"] || b.H[12])) || null;
+        const h24 = (b.H && (b.H["24"] || b.H[24])) || null;
+        return {
+          tgt: +m[2], stop: +m[3], horizonH: +m[1],
+          /* quantos ATR de 5m vale a excursão mediana a 12h, medido neste mesmo bucket */
+          mfeK: (h12 && b.atrMed > 0) ? +(h12.mfeMed / b.atrMed).toFixed(2) : null,
+          reach: h24 ? { p2: h24.pct2, p3: h24.pct3, p5: h24.pct5, p8: h24.pct8, med: h24.mfeMed } : null,
+          n: b.best.n,
+          src: "oi-target.json (" + b.best.wr + "% acerto, " + b.best.netMaker + "%/trade líquido maker, n=" + b.best.n + ")"
+        };
+      }
     }
   } catch (e) {}
   return { ...DEFAULT_K, src: "defeito (o estudo de alvos ainda não publicou)" };
@@ -125,10 +138,13 @@ async function main() {
     const armed = ARMED[key];
     const dir = d.trend > 0 ? 1 : -1;                 /* regra cont, validada fora de amostra */
     const tgtPct = K.tgt * d.atr, stopPct = K.stop * d.atr;
+    /* excursão típica desta moeda a 12h para este perfil = ATR dela × factor medido no backtest */
+    const expMove = K.mfeK ? K.mfeK * d.atr : null;
     const row = {
       coin: c, t: d.t, tier, key, dOI: +(d.ch * 100).toFixed(2), oi: Math.round(d.oi),
       px: d.px, atr: +(d.atr * 100).toFixed(2), dir: dir > 0 ? "LONG" : "SHORT",
       tgtPct: +(tgtPct * 100).toFixed(2), stopPct: +(stopPct * 100).toFixed(2),
+      expMove: expMove != null ? +(expMove * 100).toFixed(2) : null,
       tgtPx: dir > 0 ? d.px * (1 + tgtPct) : d.px * (1 - tgtPct),
       stopPx: dir > 0 ? d.px * (1 - stopPct) : d.px * (1 + stopPct),
       armed: !!armed, p: armed ? armed.p : null, n: armed ? armed.n : null,
@@ -137,7 +153,7 @@ async function main() {
     /* razões para NÃO mandar — ditas em voz alta no ficheiro, para se ver o que foi filtrado */
     if (!armed) row.skip = "bucket sem vantagem no backtest";
     else if (d.oi < OI_FLOOR) row.skip = "OI abaixo de " + fmtUsd(OI_FLOOR);
-    else if (tgtPct < MIN_TGT) row.skip = "alvo " + row.tgtPct + "% abaixo do mínimo de " + (MIN_TGT * 100) + "%";
+    else if (expMove != null && expMove < MIN_MOVE) row.skip = "movimento típico " + row.expMove + "% abaixo do mínimo de " + (MIN_MOVE * 100) + "%";
     else if (state.sent[c] && now - state.sent[c] < COOLDOWN_MS) row.skip = "em arrefecimento";
     rows.push(row);
     if (!row.skip) fired.push(row);
@@ -153,6 +169,9 @@ async function main() {
       "Probability " + r.p + "% (n=" + r.n + ", 14 months) — not a certainty\n" +
       "Entry " + fmtPx(r.px) + " · target " + fmtPx(r.tgtPx) + " (+" + r.tgtPct + "%) · stop " + fmtPx(r.stopPx) + " (−" + r.stopPct + "%)\n" +
       "Sizing: " + K.tgt + "×ATR / " + K.stop + "×ATR · ATR " + r.atr + "% · horizon " + K.horizonH + "h\n" +
+      (r.expMove != null ? "Typical run for this profile: " + r.expMove + "% within 12h" +
+        (K.reach ? " · of past cases " + K.reach.p3 + "% reached +3% and " + K.reach.p5 + "% reached +5% within 24h" : "") + "\n" : "") +
+      "Use limit orders — at taker fees this edge is gone.\n" +
       stamp(r.t) + " · " + SITE + "/reversal.html\n" +
       "Not financial advice.";
     if (TG.tok && TG.chat) {
@@ -174,7 +193,7 @@ async function main() {
   rows.sort((a, b) => Math.abs(b.dOI) - Math.abs(a.dOI));
   const doc = {
     t: now, v: 1,
-    params: { floor: OI_FLOOR, red: RED, yellow: YELLOW, minTarget: MIN_TGT, k: K, cooldownH: COOLDOWN_MS / 3600_000 },
+    params: { floor: OI_FLOOR, red: RED, yellow: YELLOW, minMove: MIN_MOVE, k: K, cooldownH: COOLDOWN_MS / 3600_000 },
     armedBuckets: Object.keys(ARMED),
     fired: fired.map(r => r.coin),
     rows: rows.slice(0, 40)
@@ -190,7 +209,7 @@ async function main() {
     }
   }
   console.log("passagem: " + rows.length + " bursts · " + fired.length + " enviados · alvos " + K.tgt + "×ATR (" + K.src + ")");
-  for (const r of rows.slice(0, 8)) console.log("  " + r.coin + " " + r.tier + " " + r.dOI + "% " + r.dir + " alvo " + r.tgtPct + "% " + (r.skip ? "— salto: " + r.skip : "— ENVIADO"));
+  for (const r of rows.slice(0, 8)) console.log("  " + r.coin + " " + r.tier + " " + r.dOI + "% " + r.dir + " alvo " + r.tgtPct + "% · típico " + r.expMove + "% " + (r.skip ? "— salto: " + r.skip : "— ENVIADO"));
 }
 await main();
 process.exit(0);
