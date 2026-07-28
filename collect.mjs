@@ -524,6 +524,13 @@ try {
      now" for ANY coin, instead of only the ~119 wallets the browser can scan by itself.
      Addresses are stored once in a dictionary and referenced by index, so the file stays small. */
   const POS_MIN = 250000, POS_PER_COIN = 60;
+  /* ---- positioning verdadeiro (Long vs Short do site) ----
+     MESMO universo que o varrimento ao vivo do browser: as 500 maiores por equity, todas as
+     posições, sem chão de $250k. Publicado em data/hl-ls.json para o site abrir com o valor
+     verdadeiro em vez de um número provisório de outra amostra. */
+  const LS_TOP_N = 500;
+  const lsTop = new Set(wallets.slice(0, LS_TOP_N).map(r => String(r.ethAddress || "").toLowerCase()));
+  const lsAgg = { long: 0, short: 0, coins: {}, wallets: 0 };
   const posIdx = {}, addrDict = [], addrPos = new Map();
   const addrRef = a => {
     let k = addrPos.get(a);
@@ -708,11 +715,19 @@ try {
       scanned++;
       const wAddr = (c.value.__addr) || '';
       if (wAddr) scannedAddrs.add(wAddr.toLowerCase());
+      const isLs = wAddr && lsTop.has(wAddr.toLowerCase());
+      if (isLs) lsAgg.wallets++;
       (c.value.assetPositions || []).forEach(ap => {
         const p = ap.position;
         const v = Math.abs(parseFloat(p.positionValue));
         const liq = parseFloat(p.liquidationPx);
         const px = parseFloat(MIDS[p.coin]);
+        if (isLs && v > 0) {
+          const side = (parseFloat(p.szi) || 0) >= 0 ? "long" : "short";
+          lsAgg[side] += v;
+          const lc = lsAgg.coins[p.coin] || (lsAgg.coins[p.coin] = { long: 0, short: 0 });
+          lc[side] += v;
+        }
         /* index first — the liq-book's sanity filters below must not drop rows from the search index */
         if (v >= POS_MIN && wAddr) {
           if (seen[wAddr.toLowerCase()]) wsHits.add(wAddr.toLowerCase());
@@ -741,6 +756,29 @@ try {
     const spent = Date.now() - t0;
     if (spent < want) await new Promise(r => setTimeout(r, want - spent));
   }
+  /* ---- data/hl-ls.json: o valor verdadeiro, pronto a servir ---- */
+  try {
+    if (lsAgg.long + lsAgg.short > 0) {
+      let totalOI = 0;
+      try {
+        const mc = await post('https://api.hyperliquid.xyz/info', { type: 'metaAndAssetCtxs' });
+        const ctxs = Array.isArray(mc) ? mc[1] : null;
+        (ctxs || []).forEach(c => { if (c) totalOI += (parseFloat(c.openInterest) || 0) * (parseFloat(c.markPx) || 0); });
+      } catch (e) {}
+      const coins = {};
+      Object.entries(lsAgg.coins).forEach(([c, v]) => { coins[c] = [Math.round(v.long), Math.round(v.short)]; });
+      const doc = {
+        t: Date.now(), v: 1, universe: 'top ' + LS_TOP_N + ' wallets by equity',
+        long: Math.round(lsAgg.long), short: Math.round(lsAgg.short),
+        wallets: lsAgg.wallets, totalOI: Math.round(totalOI), coins
+      };
+      fs.mkdirSync('data', { recursive: true });
+      fs.writeFileSync('data/hl-ls.json', JSON.stringify(doc));
+      console.log('hl-ls.json:', lsAgg.wallets, 'of', LS_TOP_N, 'wallets ·',
+        (lsAgg.long / (lsAgg.long + lsAgg.short) * 100).toFixed(1) + '% long ·',
+        Object.keys(coins).length, 'coins');
+    } else console.log('hl-ls.json: sem exposição lida nesta passagem — ficheiro anterior mantido');
+  } catch (e) { console.log('hl-ls failed', e.message); }
   if (rlDrop) console.log('wallet scan: ' + rlDrop + ' of ' + scanList.length + ' unreadable this pass');
   console.log('wallet scan:', scanList.length, 'addresses —', CORE_N, 'core +', rotSlice.length, 'rotating +',
     wsPick.length, 'from the trade feed +', heldExtra, 're-read because they are on screen');

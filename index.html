@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-0mAfTbUDxmJF3Wech0Gf3rLuB2li7alHZZmQM8+8dZs=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-uVIfQOn9/i/q+H66JFCwPQO7wjEiXLgBz2bUlczF6fc=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -3883,12 +3883,43 @@ async function hlTotalOI() {
   } catch (e) {}
   return lsOI.v;
 }
+/* v136: o positioning VERDADEIRO, calculado na VPS sobre o mesmo universo do varrimento ao vivo
+   (top 500 carteiras por equity, todas as posições). Sem chão de $250k, sem amostra diferente. */
+let hlLs = {t: 0, doc: null, inflight: null};
+async function getHlLs() {
+  if (hlLs.doc && Date.now() - hlLs.t < 120_000) return hlLs.doc;
+  if (hlLs.inflight) return hlLs.inflight;
+  hlLs.inflight = fetchJSONraw("data/hl-ls.json?b=" + Math.floor(Date.now() / 120_000), {timeout: 15000})
+    .then(j => { hlLs = {t: Date.now(), doc: j, inflight: null}; return j; })
+    .catch(e => { hlLs.inflight = null; throw e; });
+  return hlLs.inflight;
+}
 async function loadLongShortFast() {
-  if (Date.now() - lsLiveAt < 1_200_000) return;   /* v135: 20 min (era 6.7) — o número saltava entre as duas fontes */
+  if (Date.now() - lsLiveAt < 300_000) return;   /* v136: mesma amostra dos dois lados — 5 min chega */
+  /* caminho normal: valor verdadeiro da VPS */
+  try {
+    const d = await getHlLs();
+    if (d && d.long + d.short > 0 && Date.now() - d.t < 3_600_000) {
+      if (Date.now() - lsLiveAt < 300_000) return;
+      const agg = {long: d.long, short: d.short, wallets: d.wallets || 0, coins: {}};
+      Object.entries(d.coins || {}).forEach(([c, v]) => { agg.coins[c] = {long: v[0], short: v[1]}; });
+      renderLongShort(agg, d.totalOI || (await hlTotalOI()));
+      const el = $("lsHeadSub");
+      if (el) el.textContent = "top 500 wallets by equity · on-chain · scanned on the VPS " + timeAgo(d.t);
+      lsSnapshot = {t: Date.now(), coins: {}};
+      Object.entries(agg.coins).forEach(([coin, c]) => {
+        lsSnapshot.coins[coin] = {net: c.long - c.short, long: c.long, short: c.short, markRef: liveMark[coin] || null};
+      });
+      renderLsCrowd();
+      markUpdated();
+      return;
+    }
+  } catch (e) { /* ficheiro em falta na 1ª publicação — cai para o índice largo */ }
+  /* último recurso: índice ≥$250k — outra amostra, e é dito na cara */
   try {
     const [j, totalOI] = await Promise.all([getHlPos(), hlTotalOI()]);
     if (!j || !j.coins) return;
-    if (Date.now() - lsLiveAt < 1_200_000) return;
+    if (Date.now() - lsLiveAt < 300_000) return;
     const agg = {long: 0, short: 0, coins: {}, wallets: 0}, seen = new Set();
     Object.entries(j.coins).forEach(([coin, c]) => {
       (c.rows || []).forEach(r => {
@@ -3904,12 +3935,12 @@ async function loadLongShortFast() {
     agg.wallets = seen.size;
     if (!(agg.long + agg.short)) return;
     renderLongShort(agg, totalOI);
-    /* v135: é OUTRO universo (posições ≥$250k do índice) vs top-500 por equity do live scan —
-       marcar como provisório para o número não parecer bug quando o live scan o substituir */
+    /* v136: só se chega aqui quando o hl-ls.json da VPS falta ou está velho. É outra amostra
+       (≥$250k, ~1700 carteiras) e por isso é identificada como tal — não como o valor do painel. */
     { const lb = document.querySelector("#lsBody .ls-label");
-      if (lb) lb.textContent += " · provisional (index)"; }
+      if (lb) lb.textContent += " · wider sample"; }
     const el = $("lsHeadSub");
-    if (el) el.textContent = "collector index " + timeAgo(j.t) + " · positions ≥ $250k · provisional — live scan (top 500 by equity) refining";
+    if (el) el.textContent = "fallback: collector index " + timeAgo(j.t) + " · every position ≥ $250k across ~1,700 wallets";
     lsSnapshot = {t: Date.now(), coins: {}};
     Object.entries(agg.coins).forEach(([coin, c]) => {
       lsSnapshot.coins[coin] = {net: c.long - c.short, long: c.long, short: c.short, markRef: liveMark[coin] || null};
@@ -8058,9 +8089,10 @@ every(() => {
   if (body.querySelector(".error")) return;             /* já está a dizer o que se passa */
   whaleHome();
 }, 45_000, 60_000);
-/* Positioning: the index paints it within a second of load and keeps it moving on a 60s tick; the
-   500-wallet live scan runs behind it every 5 minutes instead of every 15 and takes over when it lands.
-   No refresh key required — the panel was only ever static because both timers were too slow. */
+/* Positioning: data/hl-ls.json paints the panel within a second of load. That file is the SAME
+   universe the live scan uses — the top 500 wallets by equity, every position — only measured on the
+   VPS instead of in the browser, so what shows up first is already the true number. The 500-wallet
+   live scan still runs every 5 minutes; it refreshes the reading rather than replacing it. */
 loadWhalesFast(); loadLongShortFast();
 every(loadLongShortFast, 60_000, 3_000);
 every(loadWhalesFast, 90_000, 45_000);  /* o índice do bot, relido sozinho entre varrimentos ao vivo */
