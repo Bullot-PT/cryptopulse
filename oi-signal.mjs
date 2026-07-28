@@ -145,8 +145,10 @@ async function main() {
 
   /* --- Telegram --- */
   for (const r of fired) {
+    /* o nome importa: o bucket armado é de CONTINUAÇÃO (OI a subir com o preço já a subir),
+       não de reversão. Chamar-lhe "early reversal" seria mentir sobre o que o sinal é. */
     const msg =
-      "🔴 EARLY REVERSAL · " + r.dir + " " + r.coin + "\n" +
+      "🔴 OI BURST · " + r.dir + " " + r.coin + " (continuation)\n" +
       "OI " + (r.dOI > 0 ? "+" : "") + r.dOI + "% em 15 min · OI total " + fmtUsd(r.oi) + "\n" +
       "Probability " + r.p + "% (n=" + r.n + ", 14 months) — not a certainty\n" +
       "Entry " + fmtPx(r.px) + " · target " + fmtPx(r.tgtPx) + " (+" + r.tgtPct + "%) · stop " + fmtPx(r.stopPx) + " (−" + r.stopPct + "%)\n" +
