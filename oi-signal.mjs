@@ -22,7 +22,6 @@ const CF = { acc: process.env.CF_ACCOUNT_ID, tok: process.env.CF_API_TOKEN, ns: 
 const SITE = "https://cryptomacho.io";
 const STATE_F = "data/oi-signal-state.json";
 const OUT_F = "data/oi-signals.json";
-const MKT_F = "data/market-ls.json";
 
 const UNIVERSE = ["BTC","ETH","SOL","XRP","DOGE","BNB","ADA","AVAX","LINK","LTC","SUI","NEAR","ARB","OP","APT","UNI","AAVE","ENA","TAO","WLD","PEPE","SHIB","BONK","FLOKI","JTO","LDO","ONDO","TRX","XLM","FET","VIRTUAL","PENDLE","CRV","ZRO","KAITO","TRUMP","PUMP","WLFI","HYPE","ZEC"];
 const bnSym = c => (["PEPE","SHIB","BONK","FLOKI"].includes(c) ? "1000" + c : c) + "USDT";
@@ -105,18 +104,7 @@ async function coinData(coin) {
   const iPrev = kl.length - 1 - Math.round(PREV_MS / BAR);
   if (iPrev < 1) return null;
   const trend = Math.sign((px - kl[iPrev][3]) || 1);
-  /* posicionamento: a multidão (contas) e os traders grandes (posição, logo dólares).
-     Falha de fonte = null, e a moeda fica fora da média — nunca se enche com um palpite. */
-  let crowdLong = null, topLong = null;
-  try {
-    const g = await jget(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=1`, 2);
-    if (Array.isArray(g) && g[0] && isFinite(+g[0].longAccount)) crowdLong = +g[0].longAccount;
-  } catch (e) {}
-  try {
-    const p = await jget(`https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${sym}&period=5m&limit=1`, 2);
-    if (Array.isArray(p) && p[0] && isFinite(+p[0].longAccount)) topLong = +p[0].longAccount;
-  } catch (e) {}
-  return { coin, sym, t: last.timestamp, ch, oi: v1, px, trend, atr: atrPct(kl), crowdLong, topLong };
+  return { coin, sym, t: last.timestamp, ch, oi: v1, px, trend, atr: atrPct(kl) };
 }
 
 async function main() {
@@ -124,18 +112,11 @@ async function main() {
   const state = readJson(STATE_F, { sent: {} });
   const now = Date.now();
   const rows = [], fired = [];
-  const mkt = { crowdW: 0, crowdOI: 0, topW: 0, topOI: 0, coins: [] };   /* ponderado pelo OI */
 
   for (const c of UNIVERSE) {
     let d = null;
     try { d = await coinData(c); } catch (e) { }
     await sleep(150);
-    if (d && d.oi > 0) {
-      if (d.crowdLong != null) { mkt.crowdW += d.crowdLong * d.oi; mkt.crowdOI += d.oi; }
-      if (d.topLong != null) { mkt.topW += d.topLong * d.oi; mkt.topOI += d.oi; }
-      if (d.crowdLong != null || d.topLong != null)
-        mkt.coins.push({ coin: c, oi: Math.round(d.oi), crowd: d.crowdLong, top: d.topLong });
-    }
     if (!d || !d.atr) continue;
     const a = Math.abs(d.ch);
     if (a < YELLOW) continue;
@@ -198,35 +179,17 @@ async function main() {
     fired: fired.map(r => r.coin),
     rows: rows.slice(0, 40)
   };
-  /* --- posicionamento de todo o mercado --- */
-  let mktDoc = null;
-  if (mkt.crowdOI > 0 || mkt.topOI > 0) {
-    mkt.coins.sort((a, b) => b.oi - a.oi);
-    mktDoc = {
-      t: now, v: 1,
-      src: "Binance USDⓈ-M perps · ponderado pelo open interest de cada moeda",
-      nCoins: mkt.coins.length,
-      oiCovered: Math.round(Math.max(mkt.crowdOI, mkt.topOI)),
-      crowdLong: mkt.crowdOI ? +(mkt.crowdW / mkt.crowdOI * 100).toFixed(1) : null,
-      topLong: mkt.topOI ? +(mkt.topW / mkt.topOI * 100).toFixed(1) : null,
-      coins: mkt.coins.slice(0, 25)
-    };
-  }
   fs.mkdirSync("data", { recursive: true });
   fs.writeFileSync(OUT_F, JSON.stringify(doc));
-  if (mktDoc) fs.writeFileSync(MKT_F, JSON.stringify(mktDoc));
   fs.writeFileSync(STATE_F, JSON.stringify(state));
   if (CF.acc && CF.tok && CF.ns) {
-    const puts = [["oi-signals.json", JSON.stringify(doc)]];
-    if (mktDoc) puts.push(["market-ls.json", JSON.stringify(mktDoc)]);
-    for (const [k, body] of puts) {
+    for (const [k, body] of [["oi-signals.json", JSON.stringify(doc)]]) {
       const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF.acc}/storage/kv/namespaces/${CF.ns}/values/${k}`,
         { method: "PUT", headers: { Authorization: "Bearer " + CF.tok }, body });
       console.log("kv put " + k + ": HTTP " + r.status);
     }
   }
   console.log("passagem: " + rows.length + " bursts · " + fired.length + " enviados · alvos " + K.tgt + "×ATR (" + K.src + ")");
-  if (mktDoc) console.log("mercado: multidão " + mktDoc.crowdLong + "% long · traders grandes " + mktDoc.topLong + "% long · " + mktDoc.nCoins + " moedas, " + fmtUsd(mktDoc.oiCovered) + " de OI");
   for (const r of rows.slice(0, 8)) console.log("  " + r.coin + " " + r.tier + " " + r.dOI + "% " + r.dir + " alvo " + r.tgtPct + "% " + (r.skip ? "— salto: " + r.skip : "— ENVIADO"));
 }
 await main();

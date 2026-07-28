@@ -10,5 +10,8 @@ while : ; do
   NOW=$(date +%s)
   sleep $(( 300 - (NOW % 300) + 20 ))
   echo "--- pass at $(date -u +%H:%M:%SZ) ---"
-  timeout -k 15 240 node oi-signal.mjs || echo "passagem falhou — continuo na próxima"
+  timeout -k 15 200 node oi-signal.mjs || echo "sinal: passagem falhou — continuo na próxima"
+  # posicionamento agregado das 6 bolsas — script separado de propósito: se uma bolsa se portar
+  # mal, o sinal (que é o que manda Telegram) não fica refém disso.
+  timeout -k 15 220 node market-ls.mjs || echo "market-ls: passagem falhou — continuo na próxima"
 done

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Early Reversal Radar</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-DAdGHMkuIaCTeoWaS3HMq3c8qVvBu8o/0LnEFbIMGVU='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; img-src 'self' data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-qcfBsocD1oWM7o/zPL8STCWsTl6VmjqMOcStXlhwcSA='; connect-src 'self' https://data-api.binance.vision; upgrade-insecure-requests">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root { --bg:#05070b; --surface:#0a0d13; --surface-2:#10141c; --border:#1c222e; --ink:#e8ecf3; --mut:#8f9aac; --dim:#6b7688; --accent:#19c94a; --green:#12a33a; --red:#d03b3b; --warn:#fab219; }
@@ -19,6 +19,7 @@ a.nav:hover { color:var(--ink); }
 main { display:grid; grid-template-columns: 1fr 340px; gap:14px; padding:14px 16px; max-width:1500px; margin:0 auto; }
 @media (max-width:980px){ main { grid-template-columns:1fr; } }
 .panel { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.side { display:flex; flex-direction:column; gap:14px; min-width:0; }
 .panel h2 { font-size:12px; font-weight:700; letter-spacing:.4px; color:var(--mut); padding:10px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px; }
 .panel h2 .r { margin-left:auto; color:var(--dim); font-weight:400; font-size:11px; }
 table { width:100%; border-collapse:collapse; font-size:12.5px; }
@@ -39,18 +40,18 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
 .note { padding:10px 12px; color:var(--dim); font-size:11.5px; line-height:1.5; }
 #status { color:var(--dim); font-size:11px; margin-left:auto; }
 /* estágio 2 */
-.sig { display:flex; flex-wrap:wrap; gap:14px; }
-.sigc { flex:1 1 260px; border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:rgba(255,255,255,0.02); }
+.sig { display:flex; flex-direction:column; gap:8px; }
+.sigc { border:1px solid var(--line); border-radius:8px; padding:9px 11px; background:rgba(255,255,255,0.02); }
 .sigc.long { border-color:rgba(18,163,58,0.55); }
 .sigc.short { border-color:rgba(208,59,59,0.55); }
-.sig-dir { font-size:22px; font-weight:800; letter-spacing:.5px; }
+.sig-dir { font-size:15px; font-weight:800; letter-spacing:.4px; }
 .sig-dir.up { color:var(--up); } .sig-dir.dn { color:var(--down); }
-.sig-coin { font-size:15px; font-weight:700; margin-left:8px; }
-.sig-p { font-size:12px; color:var(--dim); margin:6px 0 10px; }
-.sig-lv { display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:12px; font-family:'IBM Plex Mono',monospace; }
+.sig-coin { font-size:13px; font-weight:700; margin-left:6px; }
+.sig-p { font-size:10.5px; color:var(--dim); margin:4px 0 7px; line-height:1.35; }
+.sig-lv { display:grid; grid-template-columns:auto 1fr; gap:1px 10px; font-size:11px; font-family:'IBM Plex Mono',monospace; }
 .sig-lv .k { color:var(--dim); }
-.sig-none { font-size:13px; color:var(--dim); }
-.sig-skip { margin-top:10px; font-size:11.5px; font-family:'IBM Plex Mono',monospace; color:var(--dim); }
+.sig-none { font-size:11.5px; color:var(--dim); line-height:1.45; }
+.sig-skip { margin-top:8px; font-size:10.5px; font-family:'IBM Plex Mono',monospace; color:var(--dim); }
 .sig-skip div { padding:2px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
 .sig-skip b { color:var(--ink); font-weight:600; }
 </style>
@@ -66,11 +67,6 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
 </header>
 <main>
   <section class="panel">
-    <h2>LIVE SIGNAL — stage 2, armed on the VPS <span class="r" id="sigWhen"></span></h2>
-    <div id="sigBody"><div class="sig-none">loading…</div></div>
-    <div class="note" id="sigNote"></div>
-  </section>
-  <section class="panel">
     <h2>OPEN INTEREST BURSTS — real 5-min samples, 24/7 collector
       <span class="r">min OI <select id="floor"><option value="2000000">$2M</option><option value="5000000" selected>$5M</option><option value="20000000">$20M</option></select></span>
     </h2>
@@ -79,10 +75,17 @@ select { background:var(--surface-2); color:var(--ink); border:1px solid var(--b
     </tr></thead><tbody id="tb"></tbody></table>
     <div class="note">ΔOI over short windows is the earliest footprint of a squeeze/flush — the ARB reversal of 25-jul showed +7% OI in 15 min at 08:13 UTC, ~34h before the cascade score moved. 🔴 TRIGGER (red) = it is happening now: |Δ15m| ≥ 5% with OI above the floor · 🟡 WATCH (yellow) = building up: ≥ 3.5%. Times as DD/MM HH:MM in UTC+1 (London); the value in brackets ending in Z is the same moment in plain UTC (Z = Zulu/UTC). Each event line reads: date/time · coin · how much open interest changed in 15 minutes · total open interest of that coin at the time · what the setup means. Computed in your browser from <span style="font-family:'IBM Plex Mono',monospace">data/oi-history.json</span> — real samples only, nothing estimated. Backtest 27-jul (27 events, 4.7 days, Binance prices — small sample, indicative): 59% moved ≥2% within 2h vs 17% baseline; +OI bursts hit 86% and tend to CONTINUE the move in progress (64%); −OI unwinds tend to REVERSE it (67%). <b style='color:var(--ink)'>bias column</b>: historical probability that price hits ±1% in the winning direction first, within 6h, for bursts with THIS exact profile (sign of the OI change × prior 2h price trend × tier) — measured on real 5-min data (n shown per row; buckets under 25 decided cases show nothing rather than a weak guess). It is a base rate, not a prediction. Stage 2 (server-side): funding/walls arming gate + explicit LONG/SHORT direction from live price trend + Telegram alerts from the VPS. Not financial advice — the signal flags the pattern, the trade is yours.</div>
   </section>
-  <section class="panel">
-    <h2>TRIGGER EVENTS — last days <span class="r" id="evn"></span></h2>
-    <div id="evs"></div>
-  </section>
+  <div class="side">
+    <section class="panel">
+      <h2>LIVE SIGNAL — stage 2 <span class="r" id="sigWhen"></span></h2>
+      <div id="sigBody"><div class="sig-none">loading…</div></div>
+      <div class="note" id="sigNote"></div>
+    </section>
+    <section class="panel">
+      <h2>TRIGGER EVENTS — last days <span class="r" id="evn"></span></h2>
+      <div id="evs"></div>
+    </section>
+  </div>
 </main>
 <script>
 "use strict";
@@ -137,12 +140,13 @@ function renderSig() {
         "<div><b>" + r.coin + "</b> " + r.tier + " · OI " + (r.dOI > 0 ? "+" : "") + r.dOI + "% · would be " + r.dir +
         " · target " + r.tgtPct + "% — <i>" + r.skip + "</i></div>").join("") + "</div>" : "");
   }
-  if (note) note.innerHTML = "Written by the VPS every 5 minutes and published to " +
-    "<span style=\"font-family:'IBM Plex Mono',monospace\">data/oi-signals.json</span>; the same signal goes out on Telegram. " +
-    "A burst is only armed when ALL of these hold: the profile is <b style='color:var(--ink)'>OI up + price already trending up + red tier</b> (the only bucket that beat chance, 58.2% over 208 cases in 14 months), " +
-    "open interest above " + fmt$(p.floor || 2e7) + ", and the ATR-scaled target is at least " + ((p.minTarget || 0.02) * 100).toFixed(0) + "% — a target smaller than that is not worth the risk even with leverage. " +
-    "One alert per coin every " + (p.cooldownH || 2) + "h. Targets are volatility-scaled (" + (k.tgt || "?") + "× ATR) rather than a fixed percentage, so a quiet major and a fast alt do not get the same trade. " +
-    "Direction is the <b style='color:var(--ink)'>continuation</b> rule, the only one that stayed positive out of sample. This is a base rate on a real sample, not a prediction — and not financial advice.";
+  if (note) note.innerHTML = "Armed only when ALL hold: profile <b style='color:var(--ink)'>OI up + price already trending up + red tier</b> " +
+    "(the one bucket that beat chance — 58.2% over 208 cases in 14 months), open interest above " + fmt$(p.floor || 2e7) +
+    ", and an ATR-scaled target of at least " + ((p.minTarget || 0.02) * 100).toFixed(0) + "% (smaller than that is not worth the risk even with leverage). " +
+    "Targets are " + (k.tgt || "?") + "× ATR, stops " + (k.stop || "?") + "× ATR, so a quiet major and a fast alt do not get the same trade. " +
+    "One alert per coin every " + (p.cooldownH || 2) + "h. Direction is the <b style='color:var(--ink)'>continuation</b> rule. " +
+    "Written by the VPS every 5 min to <span style=\"font-family:'IBM Plex Mono',monospace\">data/oi-signals.json</span> and sent on Telegram. " +
+    "A base rate on a real sample, not a prediction — not financial advice.";
 }
 async function loadProb() {
   try {
