@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cryptomacho — Order Book</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-ik0N+KNUN3UqnJLH9sfRWBuD1F/cA/TICrPxUBlYG1c='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; manifest-src 'self'; worker-src blob:; img-src 'self' data: https://www.google.com https://*.gstatic.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'sha256-o7d+8AMkHQhYGK5bmIdLC6AN5HA2VeWbDRASTxdol+g='; connect-src 'self' https://www.okx.com https://data-api.binance.vision https://api.bybit.com https://api.hyperliquid.xyz https://api.exchange.coinbase.com https://api.kraken.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://api.hyperliquid.xyz; upgrade-insecure-requests">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
@@ -120,7 +120,7 @@ footer b { color:var(--ink-2); font-weight:600; }
 </footer>
 <script>
 "use strict";
-/* Cryptomacho Order Book — página dedicada (v11: eixo do tempo + candles sempre frescas (refresh fora do draw) + purga da sessão pré-v9b; v10: velas OHLC reais (Binance spot 1s/1m/5m, fallback Bybit perp) por cima do heat, toggle CANDLES; v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
+/* Cryptomacho Order Book — página dedicada (v12: transição de moeda sem viagem do eixo + bolhas de trades do servidor; v11: eixo do tempo + candles sempre frescas (refresh fora do draw) + purga da sessão pré-v9b; v10: velas OHLC reais (Binance spot 1s/1m/5m, fallback Bybit perp) por cima do heat, toggle CANDLES; v9: camada hires do servidor (15 s) + cor por unidade de preço + sessão esparsa deixa de tapar o servidor; v8b: história do coletor cola-se à sessão sem buraco; v8: história fina 1 s persistente em IndexedDB — reabrir o tab repõe o passado real; shift+wheel = zoom horizontal do tempo até 48h; linha de preço sobre a história do coletor; coletor visível nos gaps da sessão. v6f: pan/drag na ladder, coluna Σ cumulativa,
    barra B/S ±1%, modo COMPACT, Bybit WS a 500 níveis). Desenhada de raiz; a inspiração de layout
    (heatmap escuro preço×tempo + DOM + bolhas) é da categoria, o código e o estilo são nossos.
    REGRA DURA: só dados reais — cada coluna guarda que fontes entraram; falhas ficam visíveis. */
@@ -490,6 +490,7 @@ let hmView = null;            /* geometria do último draw() — é o que o hove
 let viewSpan = 300_000;       /* janela LIVE: 1m/5m/15m (shift-wheel estica/comprime 30 s–48 h) */
 let histStretch = 1;          /* v8: zoom horizontal no modo history */
 let zoomHalf = null;          /* meio-alcance Y (preço); null = automático */
+let snapY = true;             /* v12: crava o centro no 1º preço fresco (sem EMA) — usado no switch de moeda */
 let yCenter = null;           /* centro Y suavizado — segue o mid sem saltos */
 function draw() {
   const W = cv.clientWidth, H = cv.clientHeight;
@@ -515,8 +516,21 @@ function draw() {
   const sampleMs = live ? 1000 : 60_000;
   const colW = Math.max(1, TW * sampleMs / span);
   /* centro Y: mid suavizado (EMA) para a vista seguir o preço sem tremer */
-  const lastPx = (cols.length && cols[cols.length - 1].px) || (histAvail && hist.coins[coin][hist.coins[coin].length - 1].px) || (hiresOk && hires.frames[hires.frames.length - 1].px) || (yCenter || 0);
-  if (lastPx > 0) yCenter = yCenter == null ? lastPx : yCenter + (lastPx - yCenter) * 0.15;
+  /* v12: preço de referência SEMPRE o mais fresco — book ao vivo primeiro; a sessão restaurada
+     do IndexedDB pode ser de há horas e era ela que puxava a vista para o sítio errado no switch */
+  const liveMid = midPx();
+  const hiresPx = hiresOk ? hires.frames[hires.frames.length - 1].px : 0;
+  const histPx = histAvail ? hist.coins[coin][hist.coins[coin].length - 1].px : 0;
+  const colPx = cols.length ? cols[cols.length - 1].px : 0;
+  const colFresh = cols.length && (Date.now() - cols[cols.length - 1].t < 120_000);
+  const lastPx = liveMid || (colFresh && colPx) || hiresPx || histPx || colPx || (yCenter || 0);
+  if (lastPx > 0) {
+    const fresh = !!(liveMid || (colFresh && colPx) || hiresPx);   /* só crava com preço de agora */
+    if (yCenter == null || (snapY && fresh) || Math.abs(lastPx - yCenter) / lastPx > 0.05) {
+      yCenter = lastPx;                       /* v12: sem viagem — crava e segue */
+      if (fresh) snapY = false;
+    } else yCenter = yCenter + (lastPx - yCenter) * 0.15;
+  }
   /* por defeito a vista ABRAÇA o book real (±~0.06%) — o wheel afasta se quiseres contexto */
   let half = zoomHalf != null ? zoomHalf : (live ? Math.max(lastPx * 0.0006, st * 28) : Math.max(lastPx * 0.02, st * 24));
   if (live && zoomHalf == null && span > 900_000) {
@@ -698,6 +712,28 @@ function draw() {
     prevT = c.t;
   }
   cx.stroke();
+  /* v12: bolhas do SERVIDOR (coletor) — trades ≥$25k que a VPS publica no doc hires.
+     Só onde a sessão do browser não cobre, para não duplicar a mesma bolha. */
+  if (live && hiresOk && Array.isArray(hires.trades) && hires.trades.length) {
+    const firstLiveT = cols.length ? cols[0].t : Infinity;
+    for (let i = hires.trades.length - 1; i >= 0; i--) {
+      const tr = hires.trades[i];
+      if (!tr || tr.t < t0) break;
+      if (tr.t >= firstLiveT) continue;                 /* a sessão já desenha esta */
+      if (tr.px < pLo || tr.px > pHi) continue;
+      const x = TW - (now - tr.t) / span * TW;
+      const r = Math.min(15, 2.5 + Math.sqrt(tr.usd / 25000) * 2);
+      cx.beginPath(); cx.arc(x, yOf(tr.px), r, 0, 6.2832);
+      cx.fillStyle = tr.buy ? "rgba(12,190,60,0.55)" : "rgba(225,60,60,0.55)";
+      cx.fill();
+      if (r >= 8) {
+        cx.fillStyle = "#fff"; cx.textAlign = "center";
+        cx.font = "700 " + Math.min(11, Math.max(8, r * 0.55)) + "px 'IBM Plex Mono', monospace";
+        cx.fillText(fmtBig(tr.usd).replace("$", ""), x, yOf(tr.px) + 3);
+        cx.textAlign = "left";
+      }
+    }
+  }
   /* bolhas de trades (live) */
   if (live && trades.length) {
     for (let i = trades.length - 1; i >= 0; i--) {
@@ -1437,7 +1473,7 @@ function switchCoin(nc) {
   sessStash(prevCoin);
   sessRestore(coin);
   idbRestore(coin);                                   /* v8: repõe até 3 h finas do IndexedDB */
-  zoomHalf = null; yCenter = null; domOff = 0;
+  zoomHalf = null; yCenter = null; snapY = true; domOff = 0;   /* v12: crava o eixo no preço novo */
   Object.keys(deep).forEach(k => delete deep[k]);
   Object.keys(books).forEach(k => delete books[k]);   /* v9b: books velhos davam mids cruzados no 1º s do switch */
   paintTabs(); paintCtl(); fetchOkxCt(COINS[coin]).then(() => { startFeeds(); pollDeep(); }); loadHist(); draw();

@@ -1,5 +1,5 @@
 /* book-collector.mjs — snapshots do orderbook agregado (Binance spot+perp + OKX + Hyperliquid + Bybit)
-   para o heatmap de liquidez (v130: camada hires — frames de 15 s ao lstep do browser, ±0,6% do mid, 45 min por moeda em
+   para o heatmap de liquidez (v131: trades ≥$25k no mesmo doc hires (bolhas do lado do servidor, 0 escritas extra); v130: camada hires — frames de 15 s ao lstep do browser, ±0,6% do mid, 45 min por moeda em
    data/book-hires-<COIN>.json, publicados de 2 em 2 min só no modo daemon (VPS);
    v129-vps: modo daemon p/ systemd na VPS + fonte BNP via fapi + SQLite local opcional; v128: Frames de 10 em 10 minutos, guardados no Workers KV:
      book-live.json           — janela rolante de 48h (o que a página lê por defeito)
@@ -161,6 +161,30 @@ async function frameFor(coin, cfg) {
 
 /* ---------- v130: hires (só no modo daemon / VPS) ---------- */
 const hiresRing = {};                  /* coin -> frames {t,px,src,b,a} ao lstep */
+const tradeRing = {};                  /* v131: coin -> [{t,px,usd,buy}] agressores ≥$25k, 45 min */
+const lastAggId = {};                  /* coin -> último aggId visto (dedup) */
+const TRADE_MIN_USD = 25000;
+async function tradesTick(coin, cfg) {
+  /* aggTrades do perp: o mesmo mercado onde o fluxo forçado acontece. Sem WS — o tick de 15 s
+     chega para apanhar tudo o que interessa (limit 1000 cobre folgadamente 15 s até em BTC). */
+  try {
+    const j = await jfetch("https://fapi.binance.com/fapi/v1/aggTrades?symbol=" + cfg.bn + "&limit=1000");
+    if (!Array.isArray(j) || !j.length) return;
+    const seen = lastAggId[coin] || 0;
+    let maxId = seen;
+    const ring = tradeRing[coin] = tradeRing[coin] || [];
+    for (const t of j) {
+      if (t.a <= seen) continue;
+      if (t.a > maxId) maxId = t.a;
+      const usd = +t.p * +t.q;
+      if (usd >= TRADE_MIN_USD) ring.push({ t: t.T, px: +(+t.p).toFixed(6), usd: Math.round(usd), buy: t.m ? 0 : 1 });
+    }
+    lastAggId[coin] = maxId;
+    const cut = Date.now() - HIRES_MS;
+    while (ring.length && ring[0].t < cut) ring.shift();
+    if (ring.length > 4000) tradeRing[coin] = ring.slice(-3000);
+  } catch (e) { /* fonte em baixo = sem trades neste tick */ }
+}
 let hiresPubMin = -1;
 async function hiresFrameFor(coin, cfg) {
   const st = cfg.lstep;
@@ -203,7 +227,8 @@ async function hiresSeed() {
       if (doc && doc.v === 1 && Array.isArray(doc.frames) && doc.step === COINS[coin].lstep) {
         const cut = Date.now() - HIRES_MS;
         hiresRing[coin] = doc.frames.filter(f => f && f.t > cut);
-        console.log("hires seed " + coin + ": " + hiresRing[coin].length + " frames repostos do KV");
+        if (Array.isArray(doc.trades)) tradeRing[coin] = doc.trades.filter(t => t && t.t > cut);
+        console.log("hires seed " + coin + ": " + hiresRing[coin].length + " frames + " + ((tradeRing[coin] || []).length) + " trades repostos do KV");
       }
     } catch (e) { console.log("hires seed " + coin + " falhou: " + (e && e.message)); }
   }
@@ -212,6 +237,7 @@ async function hiresTick() {
   await Promise.all(Object.entries(COINS).map(async ([coin, cfg]) => {
     let f = null;
     try { f = await hiresFrameFor(coin, cfg); } catch (e) { console.log("hires " + coin + " falhou: " + (e && e.message)); }
+    await tradesTick(coin, cfg);
     if (!f) return;
     const ring = hiresRing[coin] = hiresRing[coin] || [];
     ring.push(f);
@@ -224,15 +250,16 @@ async function hiresPublish() {
     const ring = hiresRing[coin] || [];
     if (!ring.length) continue;
     let frames = ring.slice();
-    let body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames });
+    const trades = (tradeRing[coin] || []).slice();
+    let body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames, trades });
     while (body.length > HIRES_CAP_BYTES && frames.length > 20) {
       frames = frames.slice(Math.ceil(frames.length * 0.15));
-      body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames });
+      body = JSON.stringify({ v: 1, coin, step: cfg.lstep, t: Date.now(), frames, trades });
       console.log("hires " + coin + ": doc acima do tecto — cortei os mais antigos, ficam " + frames.length + " frames");
     }
     try {
       const r = await fetch(KV + "book-hires-" + coin + ".json", { method: "PUT", headers: { Authorization: "Bearer " + TOK }, body });
-      console.log("kv put book-hires-" + coin + ".json: HTTP " + r.status + " (" + body.length + " bytes, " + frames.length + " frames)");
+      console.log("kv put book-hires-" + coin + ".json: HTTP " + r.status + " (" + body.length + " bytes, " + frames.length + " frames, " + trades.length + " trades)");
     } catch (e) { console.log("kv put book-hires-" + coin + ".json falhou: " + (e && e.message)); }
   }
 }
