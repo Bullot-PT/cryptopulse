@@ -8,6 +8,7 @@ on:
   push:
     paths:
       - 'oi-signal.mjs'
+      - 'market-ls.mjs'
       - 'oi-signal-daemon.sh'
       - '.github/workflows/vps-deploy-signal.yml'
     branches: [main]
@@ -27,10 +28,12 @@ jobs:
           set -eu
           sudo mkdir -p /opt/cryptomacho/signal/data
           sudo cp oi-signal.mjs /opt/cryptomacho/signal/oi-signal.mjs
+          sudo cp market-ls.mjs /opt/cryptomacho/signal/market-ls.mjs
           sudo cp oi-signal-daemon.sh /opt/cryptomacho/signal/oi-signal-daemon.sh
           sudo chmod +x /opt/cryptomacho/signal/oi-signal-daemon.sh
           sudo chown -R "$(whoami)":"$(whoami)" /opt/cryptomacho/signal
           node --check /opt/cryptomacho/signal/oi-signal.mjs
+          node --check /opt/cryptomacho/signal/market-ls.mjs
       - name: Escrever env (do secret store, nunca do chat)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -92,6 +95,7 @@ jobs:
         run: |
           set -eu
           cd /opt/cryptomacho/signal
-          timeout -k 15 240 node oi-signal.mjs || echo "passagem de teste falhou — o serviço tenta na grelha seguinte"
+          timeout -k 15 200 node oi-signal.mjs || echo "sinal: passagem de teste falhou"
+          timeout -k 15 220 node market-ls.mjs || echo "market-ls: passagem de teste falhou"
       - name: Log
         run: tail -25 /var/log/cryptomacho-signal.log || true
