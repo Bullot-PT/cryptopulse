@@ -4,37 +4,36 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 
 | campo | valor |
 |---|---|
-| Snapshot (UTC) | 2026-08-14 03:02:30 |
+| Snapshot (UTC) | 2026-08-15 01:53:14 |
 | Timer | active |
-| Proxima corrida | Sat 2026-08-15 02:07:00 CEST  21h Fri 20 |
-| Ultima corrida terminou | Fri 2026-08-14 02:07:18 CEST |
+| Proxima corrida | Sun 2026-08-16 02:07:00 CEST  22h Sat 20 |
+| Ultima corrida terminou | Sat 2026-08-15 02:07:15 CEST |
 
 ## Resumo
 
 | instancia | longs | shorts | corridas | em posicao | lado | kill switch | dry_run | chaves |
 |---|---|---|---|---|---|---|---|---|
-| **long** | true | false | 20 | false | - | false | true | nao |
-| **short** | false | true | 19 | false | - | false | true | nao |
-| **both** | true | true | 19 | false | - | false | true | nao |
+| **long** | true | false | 21 | false | - | false | true | nao |
+| **short** | false | true | 20 | false | - | false | true | nao |
+| **both** | true | true | 20 | false | - | false | true | nao |
 
 ## long
 
 **Ultima linha de decisao**
 
 ```
-2026-08-14 02:07:11,921 [INFO] [long] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=L
+2026-08-15 02:07:08,219 [INFO] [long] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=L
 ```
 
 **Ultima accao**
 
 ```
-2026-08-14 02:07:11,925 [INFO] [long] Flat, no signal. Done.
+2026-08-15 02:07:08,220 [INFO] [long] Flat, no signal. Done.
 ```
 
 **Ultimas 10 decisoes**
 
 ```
-2026-08-05 02:07:12,853 [INFO] [long] Close=64075.50 SMA200=70815.35 ATR=1628.44 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=L
 2026-08-06 02:07:04,392 [INFO] [long] Close=64633.90 SMA200=70662.98 ATR=1596.05 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=L
 2026-08-07 02:07:21,099 [INFO] [long] Close=64300.00 SMA200=70516.41 ATR=1543.53 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=L
 2026-08-08 02:07:19,726 [INFO] [long] Close=64885.40 SMA200=70377.89 ATR=1521.11 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=L
@@ -44,6 +43,7 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 2026-08-12 02:07:12,664 [INFO] [long] Close=63572.00 SMA200=69880.03 ATR=1395.81 regime=DOWN (prev DOWN) HH20=66082.00 LL20=62792.30 sides=L
 2026-08-13 02:07:20,321 [INFO] [long] Close=63454.70 SMA200=69751.40 ATR=1379.47 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=L
 2026-08-14 02:07:11,921 [INFO] [long] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=L
+2026-08-15 02:07:08,219 [INFO] [long] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=L
 ```
 
 ## short
@@ -51,19 +51,18 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 **Ultima linha de decisao**
 
 ```
-2026-08-14 02:07:15,295 [INFO] [short] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=S
+2026-08-15 02:07:11,431 [INFO] [short] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=S
 ```
 
 **Ultima accao**
 
 ```
-2026-08-14 02:07:15,297 [INFO] [short] Flat, no signal. Done.
+2026-08-15 02:07:11,437 [INFO] [short] Flat, no signal. Done.
 ```
 
 **Ultimas 10 decisoes**
 
 ```
-2026-08-05 02:07:15,310 [INFO] [short] Close=64075.50 SMA200=70815.35 ATR=1628.44 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=S
 2026-08-06 02:07:06,569 [INFO] [short] Close=64633.90 SMA200=70662.98 ATR=1596.05 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=S
 2026-08-07 02:07:24,141 [INFO] [short] Close=64300.00 SMA200=70516.41 ATR=1543.53 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=S
 2026-08-08 02:07:22,259 [INFO] [short] Close=64885.40 SMA200=70377.89 ATR=1521.11 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=S
@@ -73,6 +72,7 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 2026-08-12 02:07:14,899 [INFO] [short] Close=63572.00 SMA200=69880.03 ATR=1395.81 regime=DOWN (prev DOWN) HH20=66082.00 LL20=62792.30 sides=S
 2026-08-13 02:07:22,829 [INFO] [short] Close=63454.70 SMA200=69751.40 ATR=1379.47 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=S
 2026-08-14 02:07:15,295 [INFO] [short] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=S
+2026-08-15 02:07:11,431 [INFO] [short] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=S
 ```
 
 ## both
@@ -80,19 +80,18 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 **Ultima linha de decisao**
 
 ```
-2026-08-14 02:07:18,029 [INFO] [both] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=LS
+2026-08-15 02:07:14,826 [INFO] [both] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=LS
 ```
 
 **Ultima accao**
 
 ```
-2026-08-14 02:07:18,030 [INFO] [both] Flat, no signal. Done.
+2026-08-15 02:07:14,827 [INFO] [both] Flat, no signal. Done.
 ```
 
 **Ultimas 10 decisoes**
 
 ```
-2026-08-05 02:07:18,403 [INFO] [both] Close=64075.50 SMA200=70815.35 ATR=1628.44 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=LS
 2026-08-06 02:07:08,837 [INFO] [both] Close=64633.90 SMA200=70662.98 ATR=1596.05 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=LS
 2026-08-07 02:07:27,136 [INFO] [both] Close=64300.00 SMA200=70516.41 ATR=1543.53 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=LS
 2026-08-08 02:07:24,864 [INFO] [both] Close=64885.40 SMA200=70377.89 ATR=1521.11 regime=DOWN (prev DOWN) HH20=66522.40 LL20=62792.30 sides=LS
@@ -102,6 +101,7 @@ _Gerado por `vps-bot-log.yml`. Nao editar a mao._
 2026-08-12 02:07:17,156 [INFO] [both] Close=63572.00 SMA200=69880.03 ATR=1395.81 regime=DOWN (prev DOWN) HH20=66082.00 LL20=62792.30 sides=LS
 2026-08-13 02:07:25,350 [INFO] [both] Close=63454.70 SMA200=69751.40 ATR=1379.47 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=LS
 2026-08-14 02:07:18,029 [INFO] [both] Close=63456.70 SMA200=69635.54 ATR=1365.98 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=LS
+2026-08-15 02:07:14,826 [INFO] [both] Close=63015.00 SMA200=69509.11 ATR=1347.76 regime=DOWN (prev DOWN) HH20=65375.10 LL20=62792.30 sides=LS
 ```
 
 > Equity, quantidade, preco de entrada e stop NAO sao publicados
