@@ -189,6 +189,32 @@ async function main() {
     }
   }
 
+  /* --- v2 (18-ago-2026): REGISTO PERSISTENTE DOS SINAIS ---
+     Até hoje este daemon não guardava nada: o oi-signal-state.json só tem o arrefecimento e nem
+     está no repo. Ou seja, o sinal corria há semanas sem deixar registo nenhum — e sem registo
+     forward não há maneira de julgar a estratégia (Playbook §10). Guarda-se toda a fila vermelha,
+     enviada ou saltada, com preço de entrada, alvo e stop. O resultado calcula-se depois a partir
+     das klines (que a Binance serve com anos de profundidade); o que não se pode recuperar mais
+     tarde é o momento e o preço em que o sinal existiu — é isso que fica aqui. */
+  try {
+    const LOG_F = "data/oi-signal-log.json";
+    const keep = 45 * 86400_000;
+    let log = readJson(LOG_F, { v: 1, rows: [] });
+    if (!Array.isArray(log.rows)) log = { v: 1, rows: [] };
+    for (const r of rows) {
+      if (r.tier !== "red" && !r.armed) continue;         /* amarelos desarmados não interessam */
+      log.rows.push({ t: r.t, coin: r.coin, key: r.key, tier: r.tier, dOI: r.dOI, oi: r.oi,
+        px: r.px, atr: r.atr, dir: r.dir, tgtPct: r.tgtPct, stopPct: r.stopPct,
+        tgtPx: r.tgtPx, stopPx: r.stopPx, armed: r.armed, sent: !r.skip, skip: r.skip,
+        k: { tgt: K.tgt, stop: K.stop, horizonH: K.horizonH } });
+    }
+    const cut = now - keep;
+    log.rows = log.rows.filter(x => x.t > cut).slice(-20000);
+    log.t = now;
+    fs.writeFileSync(LOG_F, JSON.stringify(log));
+    console.log("registo: " + log.rows.length + " sinais guardados em " + LOG_F);
+  } catch (e) { console.log("registo de sinais falhou: " + e.message); }
+
   /* --- ficheiro para o site --- */
   rows.sort((a, b) => Math.abs(b.dOI) - Math.abs(a.dOI));
   const doc = {
@@ -202,7 +228,8 @@ async function main() {
   fs.writeFileSync(OUT_F, JSON.stringify(doc));
   fs.writeFileSync(STATE_F, JSON.stringify(state));
   if (CF.acc && CF.tok && CF.ns) {
-    for (const [k, body] of [["oi-signals.json", JSON.stringify(doc)]]) {
+    const logBody = (() => { try { return fs.readFileSync("data/oi-signal-log.json", "utf8"); } catch (e) { return null; } })();
+    for (const [k, body] of [["oi-signals.json", JSON.stringify(doc)]].concat(logBody ? [["oi-signal-log.json", logBody]] : [])) {
       const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF.acc}/storage/kv/namespaces/${CF.ns}/values/${k}`,
         { method: "PUT", headers: { Authorization: "Bearer " + CF.tok }, body });
       console.log("kv put " + k + ": HTTP " + r.status);

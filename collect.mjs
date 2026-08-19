@@ -1,6 +1,16 @@
 import fs from 'fs';
 
 const now = Date.now();
+/* v135 (18-ago-2026): ORÇAMENTO DE TEMPO. O oi-daemon.sh corre isto com `timeout -k 15 270`.
+   Desde a migração para a VPS (27-jul) a passagem passou a ser cortada a meio: tudo o que é escrito
+   depois do await do Coinalyze — liq-totals, radar-history, alert-log, alert-state — deixou de ser
+   escrito, e o `|| echo ... continuo` do daemon engolia a falha em silêncio. Nada aqui adivinha nada:
+   cada secção cara pergunta quanto tempo falta e salta-se a si própria se não couber, para as escritas
+   do fim acontecerem SEMPRE. */
+const T_START = Date.now();
+const BUDGET_MS = +(process.env.PASS_BUDGET_MS || 240000);
+const left = () => BUDGET_MS - (Date.now() - T_START);
+const napMs = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 const jget = (u, o) => fetch(u, o).then(r => r.json());
 /* Hyperliquid serves roughly 600 info requests a minute per IP. Past that it answers 429 with a body
    that is not JSON, so the old one-shot version threw and the wallet was silently dropped from the pass —
@@ -1081,7 +1091,17 @@ try {
 } catch (e) { console.log('gmx book failed', e.message); }
 
 // ---------------- Coinalyze totals: kicked off earlier (concurrent) — wait for it to finish here ----------------
-if (czPromise) await czPromise; else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
+/* v135: o Coinalyze paga 31 s por lote. Arranca cedo para as esperas custarem zero, mas se a parte
+   de cima da passagem for rápida este await bloqueia mesmo — foi o que passou a acontecer na VPS.
+   Espera-se por ele o que sobrar do orçamento menos a reserva das secções seguintes; se não acabar,
+   segue-se em frente e o liq-totals fica com os dados da passagem anterior (é o que o próprio
+   coinalyze já faz quando um lote falha). */
+if (czPromise) {
+  const wait = Math.max(5000, left() - 150000);
+  let done = false; czPromise.then(() => { done = true; });
+  await Promise.race([czPromise, napMs(wait)]);
+  if (!done) console.log('coinalyze: ainda a correr ao fim de ' + Math.round(wait / 1000) + 's — sigo sem esperar (liq-totals fica da passagem anterior)');
+} else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
 
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
@@ -1112,6 +1132,7 @@ upbitAlerts.forEach(a => consider('upbit', a.key, a.msg));
 
 // --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
 try {
+  if (left() < 90000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   const lb = LB.length ? LB : ((await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', { signal: AbortSignal.timeout(90000) })).leaderboardRows || []);
   const mids = Object.keys(MIDS).length ? MIDS : await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
   const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
@@ -1152,6 +1173,7 @@ const SEC_CIKS = [
 ];
 const MATERIAL = /^(8-K|10-Q|10-K|S-1|424B|6-K|20-F|SC 13D|13D)/i;
 try {
+  if (left() < 45000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   for (const [cik, short] of SEC_CIKS) {
     let j;
     try { j = await jget('https://data.sec.gov/submissions/CIK' + cik + '.json', { headers: { 'User-Agent': 'cryptopulse-bot bullot@example.com' } }); }
@@ -1168,6 +1190,7 @@ try {
 
 // --- Liquidation risk: Morpho positions >= $10M within ~8% of liquidation ---
 try {
+  if (left() < 30000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   const q = { query: '{ marketPositions(first:200, orderBy: HealthFactor, orderDirection: Asc, where:{healthFactor_lte:1.08, healthFactor_gte:1.0}) { items { healthFactor state{ collateralUsd } user{ address } market{ collateralAsset{ symbol } loanAsset{ symbol } morphoBlue{ chain{ network } } } } } }' };
   const j = await post('https://blue-api.morpho.org/graphql', q);
   const items = ((j.data && j.data.marketPositions.items) || []).filter(i => i.state && i.state.collateralUsd >= 10e6 && i.healthFactor >= 1);
@@ -1285,5 +1308,16 @@ fs.writeFileSync('data/alert-state.json', JSON.stringify({
   upbit: [...seen.upbit].slice(-300),
   radar: st.radar || {}
 }));
+/* v135: relatório de saúde da passagem. É isto que faltava para se dar por uma paragem destas:
+   o daemon espelha-o no KV e o arquivo horário guarda-o no git, portanto vê-se da cloud. */
+try {
+  fs.writeFileSync('data/collector-health.json', JSON.stringify({
+    t: Date.now(), v: 1, ms: Date.now() - T_START, budgetMs: BUDGET_MS, reachedEnd: true,
+    coinalyzeKey: !!CZ_KEY, telegram: tgOn, solanaRpc: !!SOLANA_RPC,
+    wrote: ['oi-history.json','liq-totals.json','cg-mirror.json','upbit.json','kalshi.json','hl-wallets.json',
+            'hl-ls.json','hl-seen.json','liq-book.json','hl-pos.json','radar-history.json','alert-log.json','alert-state.json']
+      .filter(f => { try { return Date.now() - fs.statSync('data/' + f).mtimeMs < 10 * 60000; } catch (e) { return false; } })
+  }));
+} catch (e) { console.log('health write failed', e.message); }
 console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
 process.exit(0);   /* v129: sem isto, um handle aberto (WS) segura o processo e a passagem fica presa */

@@ -19,12 +19,28 @@ while : ; do
   rm -f data/.lighter.tmp
 
   touch .stamp
-  timeout -k 15 270 node collect.mjs || echo "collector saiu com erro/timeout nesta passagem — continuo"
+  T0=$(date +%s)
+  timeout -k 15 270 node collect.mjs
+  RC=$?
+  T1=$(date +%s)
+  # v135 (18-ago-2026): o `|| echo ... continuo` engolia isto em silencio. Entre 27-jul e 18-ago a
+  # passagem andou a ser cortada pelo tecto dos 270 s e ninguem deu por ela: o liq-totals, o
+  # radar-history, o alert-log e o alert-state ficaram tres semanas congelados. O codigo de saida
+  # passa a ficar escrito, e o ficheiro de saude vai sempre para o KV.
+  case "$RC" in
+    0)   echo "collector ok em $((T1-T0))s" ;;
+    124) echo "ALERTA: collector MORTO PELO TIMEOUT aos $((T1-T0))s — a cauda da passagem nao correu" ;;
+    *)   echo "ALERTA: collector saiu com codigo $RC aos $((T1-T0))s" ;;
+  esac
+  if [ "$RC" -ne 0 ]; then
+    printf '{"t":%s000,"v":1,"ms":%s,"reachedEnd":false,"exit":%s}' "$(date +%s)" "$(( (T1-T0)*1000 ))" "$RC" \
+      > data/collector-health.json
+  fi
 
   for p in data/*.json; do
     [ -f "$p" ] || continue
     case "$p" in data/liq-book-lighter.json) continue ;; esac   # é do coletor Lighter, não nosso
-    if [ "$p" -nt .stamp ] || [ "$p" = "data/oi-history.json" ] || [ "$p" = "data/hl-pos.json" ] || [ "$p" = "data/alert-log.json" ]; then
+    if [ "$p" -nt .stamp ] || [ "$p" = "data/oi-history.json" ] || [ "$p" = "data/hl-pos.json" ] || [ "$p" = "data/alert-log.json" ] || [ "$p" = "data/collector-health.json" ]; then
       k="${p#data/}"
       code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 -X PUT \
         "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE_ID}/values/${k}" \
