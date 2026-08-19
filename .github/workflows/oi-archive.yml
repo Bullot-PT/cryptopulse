@@ -21,7 +21,7 @@ jobs:
       - name: Descarregar do KV e commitar se mudou
         run: |
           set -u
-          FILES="oi-history.json hl-pos.json hl-ls.json hl-wallets.json hl-seen.json alert-log.json alert-state.json radar-history.json liq-book.json liq-totals.json upbit.json kalshi.json cg-mirror.json oi-signals.json market-ls.json"
+          FILES="oi-history.json hl-pos.json hl-ls.json hl-wallets.json hl-seen.json alert-log.json alert-state.json radar-history.json liq-book.json liq-totals.json upbit.json kalshi.json cg-mirror.json oi-signals.json market-ls.json collector-health.json oi-signal-log.json"
           mkdir -p /tmp/kv
           GOT=""
           for f in $FILES; do
@@ -53,3 +53,35 @@ jobs:
           done
           echo "push falhou após tentativas — a próxima hora arquiva"
           exit 0
+      # v135 (18-ago-2026): ninguém vigiava os vigias. Entre 27-jul e 18-ago quatro ficheiros ficaram
+      # congelados e este workflow limitou-se a dizer "salto X" numa linha de log que ninguém lê, hora
+      # após hora. Agora um ficheiro quente parado faz o JOB FALHAR — e um workflow agendado que falha
+      # manda email. É o alarme que faltava.
+      - name: Vigia de frescura (falha se um ficheiro quente estiver parado)
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import json, os, time, sys
+          LIM = {"oi-history.json":3, "hl-pos.json":3, "alert-log.json":3, "liq-book.json":3,
+                 "cg-mirror.json":3, "oi-signals.json":1, "market-ls.json":3, "collector-health.json":1,
+                 "radar-history.json":3, "liq-totals.json":3, "upbit.json":6, "kalshi.json":6,
+                 "hl-ls.json":6, "hl-wallets.json":12, "hl-seen.json":6}
+          now, bad, ok = time.time(), [], []
+          for f, h in sorted(LIM.items()):
+              p = "data/" + f
+              if not os.path.exists(p):
+                  bad.append(f + ": nao existe"); continue
+              try:
+                  t = json.load(open(p)).get("t")
+              except Exception as e:
+                  bad.append(f + ": json ilegivel (" + str(e) + ")"); continue
+              if not isinstance(t, (int, float)):
+                  ok.append(f + ": sem campo t (nao verificavel)"); continue
+              age = (now - t / 1000) / 3600
+              (ok if age <= h else bad).append("%s: %.1fh (limite %dh)" % (f, age, h))
+          print("\n".join(ok))
+          if bad:
+              print("\n*** PARADOS ***"); print("\n".join(bad))
+              sys.exit(1)
+          print("todos frescos")
+          EOF

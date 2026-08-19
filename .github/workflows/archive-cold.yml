@@ -1,0 +1,49 @@
+name: Arquivo frio (dados que os coletores deitam fora)
+# O collect.mjs corta o oi-history aos 8 dias, o radar-history aos 60 e o liq-totals aos 7.
+# Este job guarda um ficheiro por dia, escrito uma vez e nunca reescrito — é o histórico
+# próprio de que qualquer backtest nosso precisa. ~0,24 MB/dia comprimido (~87 MB/ano).
+# Corre às 00:25 UTC: a janela de 8 dias da fonte recupera sozinha até uma semana de falhas.
+on:
+  schedule:
+    - cron: '25 0 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: archive-cold
+  cancel-in-progress: false
+jobs:
+  cold:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (sha fixo)
+        with:
+          node-version: '22'
+      - name: Arquivar o dia que fechou
+        run: node archive-cold.mjs
+      - name: Commit
+        run: |
+          set -u
+          git config user.name "archive-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add archive/
+          git diff --cached --quiet && { echo "nada novo"; exit 0; }
+          git commit -m "arquivo frio [skip ci]" >/dev/null
+          # Nunca 'git pull --rebase' aqui: os coletores fazem push para o mesmo main de 5 em 5 min
+          # e um rebase interrompido deixa .git/rebase-merge no runner (lição de 25-jul-2026).
+          MINE=$(git rev-parse HEAD)
+          CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "push recusado — reconstruo em cima de origin/main (tentativa $i)"
+            git fetch origin main && git reset --hard FETCH_HEAD
+            for p in $CHANGED; do git checkout "$MINE" -- "$p" 2>/dev/null || true; done
+            git add archive/
+            git diff --cached --quiet && { echo "já arquivado por outra corrida"; exit 0; }
+            git commit -m "arquivo frio [skip ci]" >/dev/null
+            sleep $((i * 3))
+          done
+          echo "push falhou — amanhã recupera (a janela da fonte tem 8 dias)"
+          exit 0

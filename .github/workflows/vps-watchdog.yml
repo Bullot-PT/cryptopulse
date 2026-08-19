@@ -46,4 +46,26 @@ jobs:
           if [ "${TO:-0}" -eq 0 ] || [ "$AGE_OI" -gt 20 ]; then
             alerta "⚠️ CRYPTOMACHO: oi-history.json sem amostras há ${AGE_OI} min — a VPS (cryptomacho-oi) pode estar em baixo. Fallback: Actions → 'Collect Hyperliquid OI samples' → Enable workflow. Redeploy: 'VPS deploy oi-collector' → Run workflow."
           fi
+          # v135 (18-ago-2026): o vigia estava a olhar so para a CABECA da passagem. O oi-history e
+          # escrito na linha 160 do collect.mjs; o alert-log na 1301. Entre 27-jul e 18-ago a passagem
+          # foi cortada a meio pelo tecto dos 270 s: o oi-history continuou fresco, este vigia ficou
+          # verde, e o liq-totals, o radar-history, o alert-log e o alert-state estiveram tres semanas
+          # congelados sem uma unica queixa. Vigiar a CAUDA e o que fecha esse buraco.
+          TA=$(curl -s --max-time 20 "https://cryptomacho.io/data/alert-log.json" | python3 -c "import sys,json;print(json.load(sys.stdin).get('t',0))" 2>/dev/null || echo 0)
+          AGE_A=$(( (NOW - TA) / 60000 ))
+          echo "alert-log.json: idade ${AGE_A} min (t=${TA})"
+          if [ "${TA:-0}" -eq 0 ] || [ "$AGE_A" -gt 20 ]; then
+            alerta "⚠️ CRYPTOMACHO: alert-log.json parado há ${AGE_A} min — o collect.mjs esta a ser CORTADO antes do fim da passagem (tecto de 270 s no oi-daemon.sh). Ficam por escrever: liq-totals, radar-history, alert-log, alert-state. Ver data/collector-health.json e journalctl -u cryptomacho-oi."
+          fi
+          TH=$(curl -s --max-time 20 "https://cryptomacho.io/data/collector-health.json" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin); print(str(d.get('t',0))+' '+str(d.get('reachedEnd')))" 2>/dev/null || echo "0 None")
+          set -- $TH
+          AGE_H=$(( (NOW - ${1:-0}) / 60000 ))
+          echo "collector-health.json: idade ${AGE_H} min, reachedEnd=${2:-?}"
+          if [ "${1:-0}" -eq 0 ] || [ "$AGE_H" -gt 20 ]; then
+            alerta "⚠️ CRYPTOMACHO: collector-health.json parado há ${AGE_H} min — o coletor nao esta a reportar saude."
+          elif [ "${2:-}" = "False" ]; then
+            alerta "⚠️ CRYPTOMACHO: a ultima passagem do collect.mjs NAO chegou ao fim (reachedEnd=false). Ver data/collector-health.json."
+          fi
           [ "$FAIL" -eq 0 ] && echo "tudo fresco" || exit 1
