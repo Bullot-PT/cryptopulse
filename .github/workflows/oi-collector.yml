@@ -64,7 +64,7 @@ jobs:
       # Hyperliquid trade feed over a WebSocket to find wallets the leaderboard does not rank, and the
       # global WebSocket is only on by default from Node 22 — on an older runtime that discovery would
       # silently switch itself off and the site would quietly lose coverage of the smaller coins.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4 (sha fixo — a tag pode ser reescrita, o sha não)
         with:
           node-version: '22'
       - name: Sample every 5 minutes for one hour
