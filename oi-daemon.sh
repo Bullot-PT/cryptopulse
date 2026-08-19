@@ -20,7 +20,9 @@ while : ; do
 
   touch .stamp
   T0=$(date +%s)
-  timeout -k 15 270 node collect.mjs
+  # v139: tecto subido de 270 s para 288 s. A grelha e de 300 s, por isso 288 s ainda deixa a
+  # passagem seguinte comecar a horas, e da folga ao varrimento de carteiras HL (~250-268 s).
+  timeout -k 10 288 node collect.mjs
   RC=$?
   T1=$(date +%s)
   # v135 (18-ago-2026): o `|| echo ... continuo` engolia isto em silencio. Entre 27-jul e 18-ago a

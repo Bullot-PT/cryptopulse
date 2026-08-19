@@ -8,7 +8,7 @@ const now = Date.now();
    cada secção cara pergunta quanto tempo falta e salta-se a si própria se não couber, para as escritas
    do fim acontecerem SEMPRE. */
 const T_START = Date.now();
-const BUDGET_MS = +(process.env.PASS_BUDGET_MS || 240000);
+const BUDGET_MS = +(process.env.PASS_BUDGET_MS || 260000);   /* v139: tecto do daemon subiu para 288 s */
 const left = () => BUDGET_MS - (Date.now() - T_START);
 const napMs = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 const jget = (u, o) => fetch(u, o).then(r => r.json());
@@ -238,7 +238,9 @@ const czPromise = CZ_KEY ? (async () => {
     /* hourly pass: once per hour is enough (buckets only complete hourly) — full 7d only when starting empty */
     const doHourly = !out.hT || now - out.hT > 55 * 60 * 1000 || !Object.keys(out.agg).length;
     if (doHourly) {
-      const hFrom = (out.hT && Object.keys(out.agg).length) ? nowS - 3 * 3600 : nowS - 7 * 86400;
+      /* v139: se o balde mais recente ja tem mais de 6 h, refaz os 7 dias de uma vez — o intervalo
+         pedido nao muda o custo em creditos, e sem isto o historico nunca recupera de uma paragem. */
+      const hFrom = (Object.keys(out.agg).reduce((m, k) => Math.max(m, +k), 0) >= nowS - 6 * 3600) ? nowS - 3 * 3600 : nowS - 7 * 86400;
       const before = failed;
       const hourly = await fetchLiq('1hour', hFrom);
       if (failed === before && Object.keys(hourly.agg).length) { /* only replace when the pass was complete — never publish partial sums */
@@ -255,7 +257,10 @@ const czPromise = CZ_KEY ? (async () => {
     }
     /* minute pass: every run — feeds the live "1h 🌐" stat */
     const before2 = failed;
-    const minute = await fetchLiq('1min', nowS - 2 * 3600);
+    /* v139: o passe de minuto NUNCA na mesma passagem que o horario. Cada um custa 120 creditos =
+       ~155 s de espera pelo limite de 40/min da Coinalyze, e os dois juntos (310 s) nunca cabiam
+       na passagem. Era esta a razao de fundo por que o await do fim bloqueava. */
+    const minute = doHourly ? { agg: {}, coins: {} } : await fetchLiq('1min', nowS - 2 * 3600);
     if (failed === before2 && Object.keys(minute.agg).length) { out.aggMin = minute.agg; out.coinsMin = minute.coins; }
     else console.log('coinalyze: minute pass incomplete — keeping previous minute data');
     /* prune */
