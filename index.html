@@ -6,7 +6,7 @@
 <title>Cryptomacho — Live Market Feed</title>
 <meta name="description" content="Cryptomacho — live crypto forced-flow radar: real-time liquidations, cascade risk scoring, open interest, funding divergence and whale flows across Hyperliquid, Binance, Bybit, OKX and more.">
 <meta name="theme-color" content="#0b0e13">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-5CTJX1RPiwjHTcij8T4j2pqd4U0PBfAwk1iBV8hdoI4=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; worker-src blob:; manifest-src 'self'; media-src 'self'; script-src 'sha256-W8Ntlv904Ofn27T3/Ahe/pv1bzGD45r1QcbcjwcXvbc=' 'sha256-xEORl5Mw1HoLqBy+8E9iCDLnSl3SJcG0wbSJzWegwrU=' https://gc.zgo.at; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://raw.githubusercontent.com https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.bybit.com https://www.okx.com https://api.hyperliquid.xyz https://stats-data.hyperliquid.xyz https://api.upbit.com https://api.dexscreener.com https://defillama-datasets.llama.fi https://mainnet.zklighter.elliot.ai https://fapi.asterdex.com https://arbitrum-api.gmxinfra.io https://avalanche-api.gmxinfra.io https://gmx.squids.live https://indexer.dydx.trade https://blue-api.morpho.org https://api.morpho.org https://v3.euler.finance https://api.v3.aave.com https://api.aave.com https://api.kamino.finance https://hypurrscan.io https://gamma-api.polymarket.com https://clob.polymarket.com https://data-api.polymarket.com https://api.alternative.me https://api.telegram.org https://corsproxy.io https://efts.sec.gov https://www.sec.gov https://data.sec.gov https://cryptopulse.goatcounter.com https://gc.zgo.at wss://api.hyperliquid.xyz wss://stream.binance.com:9443 wss://stream.binance.com wss://fstream.binance.com wss://stream.bybit.com wss://ws.okx.com:8443 wss://ws.okx.com wss://ws.bitmex.com wss://www.deribit.com wss://indexer.dydx.trade; upgrade-insecure-requests">
 <link rel="canonical" href="https://cryptomacho.io/">
 <meta property="og:title" content="Cryptomacho — Live Market Feed">
 <meta property="og:description" content="Live crypto forced-flow radar: liquidations, cascade risk, funding and whale flows in real time.">
@@ -2380,10 +2380,14 @@ const oiSrcStore = {
   load() { try { return JSON.parse(localStorage.getItem(this.key)) || {}; } catch (e) { return this._m || {}; } },
   save(o) { this._m = o; try { localStorage.setItem(this.key, JSON.stringify(o)); } catch (e) {} }
 };
+/* v138: 15m/1h/4h liam SÓ o localStorage do browser. Como o separador não está aberto 24/7, quem
+   voltava ao site via 2-3 pontos (linha recta, H=L) e concluía — com razão — que "não guarda nada".
+   O histórico do servidor (data/oi-history.json, amostra de 5 min, 8 dias, sem buracos) já existia e
+   só era usado no 1D/7D. Agora todas as vistas o leem; o local só acrescenta resolução fina. */
 const OI_VIEWS = [
-  {k: "15m", ms: 15 * 60_000,        bucket: 45_000,       src: "f"},
-  {k: "1h",  ms: 60 * 60_000,        bucket: 55_000,       src: "f"},
-  {k: "4h",  ms: 4 * 3_600_000,      bucket: 3 * 60_000,   src: "f"},
+  {k: "15m", ms: 15 * 60_000,        bucket: 45_000,       src: "fr"},
+  {k: "1h",  ms: 60 * 60_000,        bucket: 55_000,       src: "fr"},
+  {k: "4h",  ms: 4 * 3_600_000,      bucket: 3 * 60_000,   src: "fr"},
   {k: "1D",  ms: 24 * 3_600_000,     bucket: 4 * 60_000,   src: "fr"},
   {k: "7D",  ms: 7 * 86_400_000,     bucket: 40 * 60_000,  src: "cr"}
 ];
@@ -2487,14 +2491,18 @@ async function getOiHistory() {
   return oiHist.data;
 }
 function remoteSrcVal(s, coin, src) {
-  const hl = s.coins && s.coins[coin];
-  const bb = s.bb && s.bb[coin];
-  const ok = s.ok && s.ok[coin];
-  if (src === "HL") return hl || 0;
-  if (src === "BB") return bb || 0;
-  if (src === "OK") return ok || 0;
-  if (src === "BN") return 0; /* not collectable server-side (geo) */
-  return (hl || 0) + (bb || 0) + (ok || 0);
+  const hl = (s.coins && s.coins[coin]) || 0;
+  const bb = (s.bb && s.bb[coin]) || 0;
+  const ok = (s.ok && s.ok[coin]) || 0;
+  const bn = (s.bn && s.bn[coin]) || 0;
+  if (src === "HL") return hl;
+  if (src === "BB") return bb;
+  if (src === "OK") return ok;
+  if (src === "BN") return bn;
+  /* v138: o agregado só sai de amostras que já trazem a Binance (campo bn, coletor v138).
+     Somar amostras antigas de 3 exchanges com as novas de 4 desenhava um degrau falso de ~40%. */
+  if (!s.bn) return 0;
+  return hl + bb + ok + bn;
 }
 async function renderPerpPop() {
   const r = hyperRows.find(x => x.coin === perpPopCoin);
@@ -2537,8 +2545,7 @@ async function renderPerpPop() {
       (r.fundingApr >= 0 ? "+" : "") + r.fundingApr.toFixed(0) + "% APR)</span></div>" +
     (series.length > 1 ? oiPopSVG(series) +
       '<div class="pp-hint">' + esc(SRC_LABELS[perpOiSrc]) + " OI · high / low marked · sampled 24/7</div>" :
-      '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history yet — it builds while the dashboard runs" +
-      (perpOiSrc === "BN" ? " (Binance history is browser-collected only)" : "") + ".</div>");
+      '<div class="empty" style="padding:20px 0">No ' + esc(SRC_LABELS[perpOiSrc]) + " history for this window yet — the 24/7 collector fills it in within the hour.</div>");
   pricePop.querySelectorAll(".tf-btn").forEach(b => b.addEventListener("click", ev => {
     ev.stopPropagation(); ev.preventDefault();
     clearTimeout(perpHideTimer); popCancelHide();

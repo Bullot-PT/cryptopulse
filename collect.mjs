@@ -1,16 +1,6 @@
 import fs from 'fs';
 
 const now = Date.now();
-/* v135 (18-ago-2026): ORÇAMENTO DE TEMPO. O oi-daemon.sh corre isto com `timeout -k 15 270`.
-   Desde a migração para a VPS (27-jul) a passagem passou a ser cortada a meio: tudo o que é escrito
-   depois do await do Coinalyze — liq-totals, radar-history, alert-log, alert-state — deixou de ser
-   escrito, e o `|| echo ... continuo` do daemon engolia a falha em silêncio. Nada aqui adivinha nada:
-   cada secção cara pergunta quanto tempo falta e salta-se a si própria se não couber, para as escritas
-   do fim acontecerem SEMPRE. */
-const T_START = Date.now();
-const BUDGET_MS = +(process.env.PASS_BUDGET_MS || 260000);   /* v139: tecto do daemon subiu para 288 s */
-const left = () => BUDGET_MS - (Date.now() - T_START);
-const napMs = ms => new Promise(r => setTimeout(r, Math.max(0, ms)));
 const jget = (u, o) => fetch(u, o).then(r => r.json());
 /* Hyperliquid serves roughly 600 info requests a minute per IP. Past that it answers 429 with a body
    that is not JSON, so the old one-shot version threw and the wallet was silently dropped from the pass —
@@ -79,6 +69,33 @@ try {
     if (v > 0) ok[b] = (ok[b] || 0) + Math.round(v);
   });
 } catch (e) { console.log('okx failed', e.message); }
+/* v138: OI da Binance POR MOEDA. Até aqui o histórico só guardava HL+Bybit+OKX, por isso a série
+   "Aggregate" do popup valia ~9B no BTC enquanto a linha do painel (que soma a Binance ao vivo no
+   browser) mostrava ~15.7B — nunca podiam bater certo — e a vista BN não tinha história nenhuma.
+   A VPS está na Alemanha, onde a fapi responde; se algum dia bloquear, o campo bn simplesmente
+   não é escrito e o cliente volta a não desenhar agregado (buraco honesto, nada inventado). */
+let bn = {};
+try {
+  const marks = {};
+  const pidx = await jget('https://fapi.binance.com/fapi/v1/premiumIndex');
+  (Array.isArray(pidx) ? pidx : []).forEach(p => {
+    const mp = parseFloat(p.markPrice);
+    if (p.symbol && mp > 0) marks[p.symbol] = mp;
+  });
+  const wanted = Object.keys(top).slice(0, 40)
+    .map(c => [c, (c.startsWith('k') ? '1000' + c.slice(1) : c) + 'USDT'])
+    .filter(([, sym]) => marks[sym]);
+  for (let i = 0; i < wanted.length; i += 10) {
+    await Promise.all(wanted.slice(i, i + 10).map(async ([c, sym]) => {
+      try {
+        const j = await jget('https://fapi.binance.com/fapi/v1/openInterest?symbol=' + sym);
+        const v = parseFloat(j && j.openInterest) * marks[sym];
+        if (v > 0) bn[c] = Math.round(v);
+      } catch (e2) {}
+    }));
+  }
+  console.log('binance OI:', Object.keys(bn).length, 'moedas de', wanted.length, 'pedidas');
+} catch (e) { console.log('binance failed', e.message); }
 let agg = 0, ex = {}, aggExact = false;
 try {
   const [gxr, spr] = await Promise.all([
@@ -163,6 +180,7 @@ try {
 const sample = { t: now, total: Math.round(total), coins: top };
 if (Object.keys(bb).length) sample.bb = topN(bb, 40);
 if (Object.keys(ok).length) sample.ok = topN(ok, 40);
+if (Object.keys(bn).length) sample.bn = topN(bn, 40);
 if (agg > 0) { sample.agg = Math.round(agg); sample.ex = topN(ex, 12); if (aggExact) sample.aggx = 1; }
 hist.samples.push(sample);
 hist.samples = hist.samples.filter(s => s.t > now - 8 * 86400 * 1000);
@@ -238,9 +256,7 @@ const czPromise = CZ_KEY ? (async () => {
     /* hourly pass: once per hour is enough (buckets only complete hourly) — full 7d only when starting empty */
     const doHourly = !out.hT || now - out.hT > 55 * 60 * 1000 || !Object.keys(out.agg).length;
     if (doHourly) {
-      /* v139: se o balde mais recente ja tem mais de 6 h, refaz os 7 dias de uma vez — o intervalo
-         pedido nao muda o custo em creditos, e sem isto o historico nunca recupera de uma paragem. */
-      const hFrom = (Object.keys(out.agg).reduce((m, k) => Math.max(m, +k), 0) >= nowS - 6 * 3600) ? nowS - 3 * 3600 : nowS - 7 * 86400;
+      const hFrom = (out.hT && Object.keys(out.agg).length) ? nowS - 3 * 3600 : nowS - 7 * 86400;
       const before = failed;
       const hourly = await fetchLiq('1hour', hFrom);
       if (failed === before && Object.keys(hourly.agg).length) { /* only replace when the pass was complete — never publish partial sums */
@@ -257,10 +273,7 @@ const czPromise = CZ_KEY ? (async () => {
     }
     /* minute pass: every run — feeds the live "1h 🌐" stat */
     const before2 = failed;
-    /* v139: o passe de minuto NUNCA na mesma passagem que o horario. Cada um custa 120 creditos =
-       ~155 s de espera pelo limite de 40/min da Coinalyze, e os dois juntos (310 s) nunca cabiam
-       na passagem. Era esta a razao de fundo por que o await do fim bloqueava. */
-    const minute = doHourly ? { agg: {}, coins: {} } : await fetchLiq('1min', nowS - 2 * 3600);
+    const minute = await fetchLiq('1min', nowS - 2 * 3600);
     if (failed === before2 && Object.keys(minute.agg).length) { out.aggMin = minute.agg; out.coinsMin = minute.coins; }
     else console.log('coinalyze: minute pass incomplete — keeping previous minute data');
     /* prune */
@@ -1096,17 +1109,7 @@ try {
 } catch (e) { console.log('gmx book failed', e.message); }
 
 // ---------------- Coinalyze totals: kicked off earlier (concurrent) — wait for it to finish here ----------------
-/* v135: o Coinalyze paga 31 s por lote. Arranca cedo para as esperas custarem zero, mas se a parte
-   de cima da passagem for rápida este await bloqueia mesmo — foi o que passou a acontecer na VPS.
-   Espera-se por ele o que sobrar do orçamento menos a reserva das secções seguintes; se não acabar,
-   segue-se em frente e o liq-totals fica com os dados da passagem anterior (é o que o próprio
-   coinalyze já faz quando um lote falha). */
-if (czPromise) {
-  const wait = Math.max(5000, left() - 150000);
-  let done = false; czPromise.then(() => { done = true; });
-  await Promise.race([czPromise, napMs(wait)]);
-  if (!done) console.log('coinalyze: ainda a correr ao fim de ' + Math.round(wait / 1000) + 's — sigo sem esperar (liq-totals fica da passagem anterior)');
-} else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
+if (czPromise) await czPromise; else console.log('coinalyze skipped (no COINALYZE_KEY secret yet)');
 
 // ================= TELEGRAM ALERTS =================
 const TG_TOKEN = process.env.TELEGRAM_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT;
@@ -1137,7 +1140,6 @@ upbitAlerts.forEach(a => consider('upbit', a.key, a.msg));
 
 // --- Whale liquidation risk: >= $25M within 10% of liquidation on Hyperliquid ---
 try {
-  if (left() < 90000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   const lb = LB.length ? LB : ((await jget('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', { signal: AbortSignal.timeout(90000) })).leaderboardRows || []);
   const mids = Object.keys(MIDS).length ? MIDS : await post('https://api.hyperliquid.xyz/info', { type: 'allMids' });
   const top60 = lb.map(r => r).sort((a, b) => parseFloat(b.accountValue) - parseFloat(a.accountValue)).slice(0, 60);
@@ -1178,7 +1180,6 @@ const SEC_CIKS = [
 ];
 const MATERIAL = /^(8-K|10-Q|10-K|S-1|424B|6-K|20-F|SC 13D|13D)/i;
 try {
-  if (left() < 45000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   for (const [cik, short] of SEC_CIKS) {
     let j;
     try { j = await jget('https://data.sec.gov/submissions/CIK' + cik + '.json', { headers: { 'User-Agent': 'cryptopulse-bot bullot@example.com' } }); }
@@ -1195,7 +1196,6 @@ try {
 
 // --- Liquidation risk: Morpho positions >= $10M within ~8% of liquidation ---
 try {
-  if (left() < 30000) throw new Error('sem orcamento de tempo nesta passagem — seccao saltada');
   const q = { query: '{ marketPositions(first:200, orderBy: HealthFactor, orderDirection: Asc, where:{healthFactor_lte:1.08, healthFactor_gte:1.0}) { items { healthFactor state{ collateralUsd } user{ address } market{ collateralAsset{ symbol } loanAsset{ symbol } morphoBlue{ chain{ network } } } } } }' };
   const j = await post('https://blue-api.morpho.org/graphql', q);
   const items = ((j.data && j.data.marketPositions.items) || []).filter(i => i.state && i.state.collateralUsd >= 10e6 && i.healthFactor >= 1);
@@ -1313,16 +1313,5 @@ fs.writeFileSync('data/alert-state.json', JSON.stringify({
   upbit: [...seen.upbit].slice(-300),
   radar: st.radar || {}
 }));
-/* v135: relatório de saúde da passagem. É isto que faltava para se dar por uma paragem destas:
-   o daemon espelha-o no KV e o arquivo horário guarda-o no git, portanto vê-se da cloud. */
-try {
-  fs.writeFileSync('data/collector-health.json', JSON.stringify({
-    t: Date.now(), v: 1, ms: Date.now() - T_START, budgetMs: BUDGET_MS, reachedEnd: true,
-    coinalyzeKey: !!CZ_KEY, telegram: tgOn, solanaRpc: !!SOLANA_RPC,
-    wrote: ['oi-history.json','liq-totals.json','cg-mirror.json','upbit.json','kalshi.json','hl-wallets.json',
-            'hl-ls.json','hl-seen.json','liq-book.json','hl-pos.json','radar-history.json','alert-log.json','alert-state.json']
-      .filter(f => { try { return Date.now() - fs.statSync('data/' + f).mtimeMs < 10 * 60000; } catch (e) { return false; } })
-  }));
-} catch (e) { console.log('health write failed', e.message); }
 console.log('alerts:', tgOn ? (firstRun ? 'seeded silently (first run)' : 'sent ' + Math.min(queue.length, 12)) : 'Telegram not configured (no secrets)');
 process.exit(0);   /* v129: sem isto, um handle aberto (WS) segura o processo e a passagem fica presa */
