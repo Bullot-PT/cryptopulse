@@ -1,0 +1,121 @@
+name: VPS health check (leitura, seguro)
+# Diagnostico completo da VPS: servicos, logs, frescura dos ficheiros de data/,
+# base SQLite dos backtests, conectividade as exchanges e backups R2.
+# NAO altera nada — so le. Escreve o relatorio em ops/vps-health.md para
+# poder ser lido de qualquer sessao via raw.githubusercontent.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vps-health
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: [self-hosted, vps]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (sha fixo)
+
+      - name: Recolher relatorio
+        run: |
+          set +e
+          R=/tmp/vps-health.md
+          {
+          echo "# VPS health — $(date -u '+%Y-%m-%d %H:%M:%SZ')"
+          echo
+          echo '## Maquina'
+          echo '```'
+          uptime; echo; free -h; echo; df -h / /opt 2>/dev/null | sort -u
+          echo; echo "kernel: $(uname -r)  node: $(node -v 2>/dev/null)"
+          echo '```'
+          echo
+          echo '## Servicos systemd'
+          echo '```'
+          for s in cryptomacho-book cryptomacho-oi cryptomacho-signal regime-rider actions.runner.Bullot-PT-cryptopulse.cryptomacho-vps; do
+            st=$(systemctl is-active $s 2>/dev/null)
+            nr=$(systemctl show $s -p NRestarts --value 2>/dev/null)
+            sn=$(systemctl show $s -p ActiveEnterTimestamp --value 2>/dev/null)
+            mem=$(systemctl show $s -p MemoryCurrent --value 2>/dev/null)
+            printf '%-58s %-10s restarts=%-6s desde=%s mem=%s\n' "$s" "$st" "$nr" "$sn" "$mem"
+          done
+          echo; echo '-- timers --'; systemctl list-timers --all --no-pager | head -20
+          echo '```'
+          echo
+          echo '## Ficheiros data/ na VPS (mtime = ultima escrita real)'
+          echo '### /opt/cryptomacho/oi/data'
+          echo '```'
+          ls -la --time-style=+%Y-%m-%d_%H:%M /opt/cryptomacho/oi/data 2>/dev/null
+          echo '```'
+          echo '### /opt/cryptomacho (book) '
+          echo '```'
+          ls -la --time-style=+%Y-%m-%d_%H:%M /opt/cryptomacho 2>/dev/null | head -30
+          ls -la --time-style=+%Y-%m-%d_%H:%M /opt/cryptomacho/book/data 2>/dev/null | head -20
+          echo '```'
+          echo
+          echo '## journalctl — cryptomacho-oi (200 linhas)'
+          echo '```'
+          sudo journalctl -u cryptomacho-oi -n 200 --no-pager 2>/dev/null
+          echo '```'
+          echo
+          echo '## journalctl — cryptomacho-book (60)'
+          echo '```'
+          sudo journalctl -u cryptomacho-book -n 60 --no-pager 2>/dev/null
+          echo '```'
+          echo
+          echo '## journalctl — cryptomacho-signal (60)'
+          echo '```'
+          sudo journalctl -u cryptomacho-signal -n 60 --no-pager 2>/dev/null
+          echo '```'
+          echo
+          echo '## Base SQLite (backtests)'
+          echo '```'
+          command -v sqlite3 >/dev/null || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y sqlite3 >/dev/null 2>&1
+          DB=$(ls -1 /opt/cryptomacho/*.db /opt/cryptomacho/*/*.db 2>/dev/null | head -5)
+          echo "ficheiros .db: $DB"
+          for d in $DB; do
+            echo "--- $d ($(du -h $d | cut -f1)) ---"
+            sqlite3 "$d" ".tables"
+            for t in $(sqlite3 "$d" ".tables"); do
+              echo -n "  $t: "; sqlite3 "$d" "select count(*) from $t;"
+            done
+            sqlite3 "$d" "select 'book_frames span: '||datetime(min(t)/1000,'unixepoch')||' -> '||datetime(max(t)/1000,'unixepoch')||'  coins='||count(distinct coin) from book_frames;" 2>/dev/null
+          done
+          echo '```'
+          echo
+          echo '## Conectividade as exchanges (a partir da VPS)'
+          echo '```'
+          for u in "https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT" \
+                   "https://fapi.binance.com/fapi/v1/premiumIndex" \
+                   "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT" \
+                   "https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId=BTC-USDT-SWAP" \
+                   "https://api.hyperliquid.xyz/info" \
+                   "https://api.coinalyze.net/v1/exchanges" \
+                   "https://api.coingecko.com/api/v3/ping" ; do
+            code=$(curl -s -o /dev/null -m 15 -w '%{http_code} %{time_total}s' "$u")
+            printf '%-72s %s\n' "$(echo $u | cut -c1-72)" "$code"
+          done
+          echo '```'
+          echo
+          echo '## Backups R2 (timer + ultimo)'
+          echo '```'
+          systemctl list-timers cryptomacho-backup.timer --all --no-pager 2>/dev/null
+          sudo journalctl -u cryptomacho-backup -n 25 --no-pager 2>/dev/null
+          echo '```'
+          } > $R 2>&1
+          cat $R
+
+      - name: Publicar ops/vps-health.md
+        run: |
+          set -eu
+          mkdir -p ops
+          cp /tmp/vps-health.md ops/vps-health.md
+          git config user.name "vps-health"
+          git config user.email "actions@users.noreply.github.com"
+          git add ops/vps-health.md
+          git commit -m "ops: relatorio de saude da VPS" || exit 0
+          git pull --rebase --autostash || true
+          git push
